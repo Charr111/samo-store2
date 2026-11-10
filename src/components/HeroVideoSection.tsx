@@ -62,7 +62,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   const showImageBanner = mediaType === 'image' || videoFailed;
 
   return (
-    <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] bg-zinc-950 overflow-hidden border-b border-zinc-950">
+    <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
       {/* Background Video or Admin-Selected Image Banner */}
       {!showImageBanner ? (
         <video
@@ -91,7 +91,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
               setCustomVideoFailed(true);
             }
           }}
-          className={`h-full w-full object-cover opacity-90 ${
+          className={`pointer-events-none h-full w-full object-cover opacity-90 ${
             isDefaultClip ? 'object-[50%_75%] scale-[1.24] origin-bottom' : 'object-center'
           }`}
         >

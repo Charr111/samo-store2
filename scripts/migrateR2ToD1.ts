@@ -13,7 +13,7 @@ import {
 } from '../server/d1';
 
 const R2_CONFIG = {
-  accountId: process.env.R2_ACCOUNT_ID || 'a7aeacd3a375ad4e1d7e12810ccbdd15',
+  accountId: process.env.R2_ACCOUNT_ID || '',
   accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   bucketName: process.env.R2_BUCKET_NAME || 'samo-images',

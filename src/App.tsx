@@ -787,12 +787,17 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Cloudflare R2 Bucket Catalog Sync (/api/catalog -> state/catalog.json in R2)
+  // Cloudflare D1 / R2 Catalog Sync (/api/catalog)
   useEffect(() => {
     let active = true;
+    let lastServerUpdatedAt = 0;
 
     const pullServerCatalog = async () => {
-      if (pendingLocalMutations > 0 || Date.now() - lastLocalMutationMs < 4500) {
+      if (
+        pendingLocalMutations > 0 ||
+        Date.now() - lastLocalMutationMs < 4500 ||
+        (typeof window !== 'undefined' && window.scrollY < 0)
+      ) {
         return;
       }
       try {
@@ -804,12 +809,13 @@ export default function App() {
           !data ||
           typeof data !== 'object' ||
           pendingLocalMutations > 0 ||
-          Date.now() - lastLocalMutationMs < 4500
+          Date.now() - lastLocalMutationMs < 4500 ||
+          (typeof window !== 'undefined' && window.scrollY < 0)
         ) {
           return;
         }
 
-        // If R2 bucket state/catalog.json has not been seeded yet, push current catalog state to R2
+        // If catalog state has not been seeded yet, push current catalog state
         if (!data.updatedAt && (!Array.isArray(data.products) || data.products.length === 0)) {
           pushServerCatalogPatch({
             products,
@@ -830,6 +836,18 @@ export default function App() {
             seoConfig,
           });
           return;
+        }
+
+        // Skip redundant full-tree re-renders if server state has not changed
+        if (
+          typeof data.updatedAt === 'number' &&
+          data.updatedAt > 0 &&
+          data.updatedAt === lastServerUpdatedAt
+        ) {
+          return;
+        }
+        if (typeof data.updatedAt === 'number' && data.updatedAt > 0) {
+          lastServerUpdatedAt = data.updatedAt;
         }
 
         const remoteDeletedIds: string[] = Array.isArray(data.deletedProductIds)
