@@ -21,9 +21,12 @@ import {
   SizeType,
 } from '../types/samo';
 import {
+  formatGarmentCodeRef,
   getColorSwatchHex,
   getEffectiveProductPrice,
   getSizeQuantity,
+  resolvePieceGarmentCode,
+  resolveProductGarmentCode,
   sumSizeQuantities,
 } from '../utils/catalogLogic';
 import {
@@ -35,6 +38,7 @@ import { SizeGuideModal } from './SizeGuideModal';
 
 interface ProductModalProps {
   product: ProductItem | null;
+  allProducts?: ProductItem[];
   categories?: CategoryItem[];
   sizeGuideConfig?: SizeGuideConfig;
   onClose: () => void;
@@ -63,6 +67,7 @@ interface ProductModalProps {
 
 export const ProductModal: React.FC<ProductModalProps> = ({
   product,
+  allProducts,
   categories,
   sizeGuideConfig,
   onClose,
@@ -320,6 +325,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           activeSubSizes.includes(selectedSetPieceSizes[idx])
             ? selectedSetPieceSizes[idx]
             : activeSubSizes[0] || 'M';
+        const pieceCode = resolvePieceGarmentCode(
+          sub,
+          activeSubColVar?.colorName,
+          allProducts
+        );
         return {
           productId: sub.productId,
           productName: sub.productName,
@@ -327,6 +337,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             sub.pieceLabel || (idx === 0 ? 'Piece 1' : `Piece ${idx + 1}`),
           selectedSize: chosen,
           selectedColor: activeSubColVar?.colorName,
+          garmentCode: pieceCode,
         };
       }
     );
@@ -378,6 +389,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   }
 
   const pricing = getEffectiveProductPrice(product);
+  const resolvedRawGarmentCode = resolveProductGarmentCode(product, {
+    selectedColor: activeVariant?.colorName,
+    selectedSetColors: selectedSetPieceColors,
+    selectedSetSizes: resolvedSetSizesPayload,
+    allProducts,
+  });
+  const formattedGarmentRef = formatGarmentCodeRef(resolvedRawGarmentCode);
 
   // Combine up to 4 image URLs for the selected color (or product gallery fallback)
   const primaryImageForSelection =
@@ -622,8 +640,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           className="md:col-span-5 p-6 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-8 flex flex-col justify-between bg-white md:max-h-[88vh] md:overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
           <div className="space-y-5">
-            {/* Unboxed Clean Metadata Header */}
-            <div>
+            {/* Unboxed Clean Metadata Header (Optimized spacing for Product Name, Garment Ref, and Price on mobile & desktop) */}
+            <div className="pb-1">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">
                 <span>{product.department}</span>
                 <span aria-hidden="true">·</span>
@@ -633,11 +651,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
               <h2
                 id="sole-product-modal-title"
-                className="font-display text-xl md:text-2xl font-extrabold tracking-[0.06em] uppercase text-zinc-950 leading-snug"
+                className="font-display text-lg sm:text-xl md:text-2xl font-extrabold tracking-[0.06em] uppercase text-zinc-950 leading-snug"
               >
                 {product.name}
               </h2>
-              <div className="mt-2 flex items-center justify-between">
+              {formattedGarmentRef && (
+                <p
+                  data-testid="product-modal-garment-code"
+                  className="mt-2 sm:mt-2.5 font-mono-tabular text-[11px] sm:text-xs font-medium tracking-[0.06em] text-zinc-500"
+                >
+                  {formattedGarmentRef}
+                </p>
+              )}
+              <div className="mt-2.5 sm:mt-3 flex items-center justify-between">
                 <div className="flex items-center gap-2.5 font-mono-tabular">
                   <span className="text-lg font-bold text-zinc-950">
                     ${pricing.effectivePrice.toLocaleString()}
@@ -769,6 +795,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   const isPieceChosenOut = chosenQty <= 0;
                   const isOpen = openSetDrawers[idx] ?? true;
 
+                  const pieceGarmentRef = formatGarmentCodeRef(
+                    resolvePieceGarmentCode(
+                      subItem,
+                      activeSubColVar?.colorName,
+                      allProducts
+                    )
+                  );
+
                   return (
                     <div
                       key={`${subItem.productId}-${idx}`}
@@ -786,13 +820,20 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         className="w-full px-3.5 py-2.5 flex items-center justify-between gap-2 text-left bg-white hover:bg-zinc-50 transition-colors cursor-pointer"
                       >
                         <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">
-                            {subItem.pieceLabel ||
-                              (idx === 0
-                                ? 'Top / Shirt'
-                                : idx === 1
-                                ? 'Trousers / Bottom'
-                                : 'Third Piece')}
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">
+                            <span>
+                              {subItem.pieceLabel ||
+                                (idx === 0
+                                  ? 'Top / Shirt'
+                                  : idx === 1
+                                  ? 'Trousers / Bottom'
+                                  : 'Third Piece')}
+                            </span>
+                            {pieceGarmentRef && (
+                              <span className="font-mono-tabular font-medium text-zinc-400 normal-case tracking-normal">
+                                · {pieceGarmentRef}
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs font-bold uppercase tracking-wider text-zinc-950 truncate mt-0.5">
                             {subItem.productName}

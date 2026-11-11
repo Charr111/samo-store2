@@ -1,6 +1,12 @@
 export type Department = 'women' | 'kids';
 
-export type SizeType = 'letter' | 'numeric' | 'months' | 'years' | 'cm';
+export type SizeType =
+  | 'letter'
+  | 'dual_letter'
+  | 'numeric'
+  | 'months'
+  | 'years'
+  | 'cm';
 
 export type StyleType =
   | 'Classic'
@@ -57,6 +63,7 @@ export interface SizeGuideConfig {
 export interface ProductColorVariant {
   colorName: string;
   colorHex?: string;
+  garmentCode?: string;
   imageUrl: string;
   galleryUrls?: string[];
   sizeType: SizeType;
@@ -68,6 +75,7 @@ export interface FullSetSubItem {
   productId: string;
   productName: string;
   pieceLabel?: string;
+  garmentCode?: string;
   sizeType: SizeType;
   sizes: string[];
   sizeQuantities: Record<string, number>;
@@ -81,11 +89,13 @@ export interface SelectedSetPieceSize {
   pieceLabel?: string;
   selectedSize: string;
   selectedColor?: string;
+  garmentCode?: string;
 }
 
 export interface ProductItem {
   id: string;
   name: string;
+  garmentCode?: string;
   department: Department;
   category: string;
   style: StyleType;
@@ -132,6 +142,7 @@ export interface CartItem {
   selectedSize: string;
   selectedColorImage?: string;
   selectedSetSizes?: SelectedSetPieceSize[];
+  garmentCode?: string;
   quantity: number;
 }
 
@@ -145,6 +156,7 @@ export interface OrderedLineItem {
   selectedColor?: string;
   selectedSize?: string;
   selectedSetSizes?: SelectedSetPieceSize[];
+  garmentCode?: string;
   quantity: number;
 }
 

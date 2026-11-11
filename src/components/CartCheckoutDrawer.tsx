@@ -10,9 +10,11 @@ import {
 } from '../types/samo';
 import {
   calculateOrderTotals,
+  formatGarmentCodeRef,
   getComplementaryUpsellProducts,
   getEffectiveProductPrice,
   getSizeQuantity,
+  resolveProductGarmentCode,
 } from '../utils/catalogLogic';
 import { ProductImage } from './ProductImage';
 
@@ -166,13 +168,24 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       const summary = cartItems
         .map((ci) => {
           const unitPrice = getEffectiveProductPrice(ci.product).effectivePrice;
+          const resolvedCode =
+            ci.garmentCode ||
+            resolveProductGarmentCode(ci.product, {
+              selectedColor: ci.selectedColor,
+              selectedSetSizes: ci.selectedSetSizes,
+              allProducts: products,
+            });
+          const refLabel = formatGarmentCodeRef(resolvedCode);
+          const refPart = refLabel ? `${refLabel} | ` : '';
           const colorPart = ci.selectedColor ? `Color: ${ci.selectedColor} | ` : '';
           const setPiecesPart =
             Array.isArray(ci.selectedSetSizes) && ci.selectedSetSizes.length > 0
               ? `Set Pieces: ${ci.selectedSetSizes
                   .map(
                     (p) =>
-                      `${p.productName} (${p.selectedColor ? `${p.selectedColor} · ` : ''}${p.selectedSize})`
+                      `${p.productName}${
+                        p.garmentCode ? ` [${formatGarmentCodeRef(p.garmentCode)}]` : ''
+                      } (${p.selectedColor ? `${p.selectedColor} · ` : ''}${p.selectedSize})`
                   )
                   .join(' + ')} | `
               : '';
@@ -180,7 +193,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
             Array.isArray(ci.product.materials) && ci.product.materials.length > 0
               ? ` | Materials: ${ci.product.materials.join(', ')}`
               : '';
-          return `${ci.quantity}x ${ci.product.name} (${colorPart}${setPiecesPart}Size: ${
+          return `${ci.quantity}x ${ci.product.name} (${refPart}${colorPart}${setPiecesPart}Size: ${
             ci.selectedSize
           }${materialsPart}) — $${(
             unitPrice * ci.quantity
@@ -213,14 +226,24 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
           : lead.selectedSize
         ).slice(0, 40),
         primaryProductImage: (lead.selectedColorImage || lead.product.imageUrl).slice(0, 600),
-        orderedItems: cartItems.map((ci) => ({
-          productId: ci.product.id,
-          productName: ci.product.name,
-          selectedColor: ci.selectedColor,
-          selectedSize: ci.selectedSize,
-          selectedSetSizes: ci.selectedSetSizes,
-          quantity: ci.quantity,
-        })),
+        orderedItems: cartItems.map((ci) => {
+          const resolvedCode =
+            ci.garmentCode ||
+            resolveProductGarmentCode(ci.product, {
+              selectedColor: ci.selectedColor,
+              selectedSetSizes: ci.selectedSetSizes,
+              allProducts: products,
+            });
+          return {
+            productId: ci.product.id,
+            productName: ci.product.name,
+            selectedColor: ci.selectedColor,
+            selectedSize: ci.selectedSize,
+            selectedSetSizes: ci.selectedSetSizes,
+            garmentCode: resolvedCode,
+            quantity: ci.quantity,
+          };
+        }),
       });
 
       setConfirmedOrder(created);
@@ -284,6 +307,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   <div className="divide-y divide-zinc-200">
                     {cartItems.map((item) => {
                       const pricing = getEffectiveProductPrice(item.product);
+                      const rawGarmentCode =
+                        item.garmentCode ||
+                        resolveProductGarmentCode(item.product, {
+                          selectedColor: item.selectedColor,
+                          selectedSetSizes: item.selectedSetSizes,
+                          allProducts: products,
+                        });
+                      const itemGarmentRef = formatGarmentCodeRef(rawGarmentCode);
                       return (
                         <div
                           key={`${item.product.id}-${item.selectedColor || 'default'}-${item.selectedSize}`}
@@ -302,9 +333,19 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                           <div className="flex-1 flex flex-col justify-between">
                             <div>
                               <div className="flex items-start justify-between gap-2">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-950">
-                                  {item.product.name}
-                                </h3>
+                                <div className="min-w-0">
+                                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-950">
+                                    {item.product.name}
+                                  </h3>
+                                  {itemGarmentRef && (
+                                    <p
+                                      data-testid="cart-item-garment-code"
+                                      className="mt-0.5 font-mono-tabular text-[10px] font-medium tracking-[0.06em] text-zinc-500"
+                                    >
+                                      {itemGarmentRef}
+                                    </p>
+                                  )}
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -315,7 +356,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                     )
                                   }
                                   aria-label={`Remove ${item.product.name}`}
-                                  className="text-zinc-400 hover:text-zinc-950 cursor-pointer"
+                                  className="text-zinc-400 hover:text-zinc-950 cursor-pointer shrink-0"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -664,7 +705,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
           )}
 
           {step === 'confirmed' && confirmedOrder && (
-            <div className="py-8 space-y-6">
+            <div className="py-6 space-y-5">
               <div className="flex items-center gap-3 text-emerald-800">
                 <CheckCircle2 className="w-7 h-7 shrink-0" />
                 <div>
@@ -676,6 +717,60 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   </h3>
                 </div>
               </div>
+
+              {/* Ordered Garments & Reference Codes Breakdown */}
+              {Array.isArray(confirmedOrder.orderedItems) &&
+                confirmedOrder.orderedItems.length > 0 && (
+                  <div className="border border-zinc-200 bg-white divide-y divide-zinc-200">
+                    <div className="px-3.5 py-2 bg-zinc-950 text-white text-[10px] font-bold uppercase tracking-[0.14em] flex items-center justify-between">
+                      <span>Ordered Garments</span>
+                      <span>Garment Reference</span>
+                    </div>
+                    {confirmedOrder.orderedItems.map((lineItem, idx) => {
+                      const matchedProd = products.find(
+                        (p) => p.id === lineItem.productId
+                      );
+                      const resolvedCode =
+                        lineItem.garmentCode ||
+                        (matchedProd
+                          ? resolveProductGarmentCode(matchedProd, {
+                              selectedColor: lineItem.selectedColor,
+                              selectedSetSizes: lineItem.selectedSetSizes,
+                              allProducts: products,
+                            })
+                          : undefined);
+                      const formattedRef = formatGarmentCodeRef(resolvedCode);
+                      return (
+                        <div
+                          key={`${lineItem.productId}-${idx}`}
+                          className="p-3.5 space-y-1 text-xs"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-bold uppercase tracking-wider text-zinc-950">
+                              {lineItem.quantity}x {lineItem.productName}
+                            </span>
+                            {formattedRef && (
+                              <span
+                                data-testid="confirmed-order-garment-code"
+                                className="px-2 py-0.5 bg-zinc-100 border border-zinc-300 font-mono-tabular text-[11px] font-semibold text-zinc-800 shrink-0"
+                              >
+                                {formattedRef}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-zinc-600 uppercase tracking-wider">
+                            {lineItem.selectedColor && (
+                              <>
+                                Color: <strong className="text-zinc-900">{lineItem.selectedColor}</strong> ·{' '}
+                              </>
+                            )}
+                            Size: <strong className="text-zinc-900">{lineItem.selectedSize}</strong>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
               <div className="p-4 bg-zinc-50 border border-zinc-200 space-y-2.5 text-xs">
                 <div className="flex justify-between">

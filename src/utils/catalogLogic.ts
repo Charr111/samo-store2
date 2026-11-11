@@ -5,12 +5,14 @@ import {
   DeliveryMethod,
   Department,
   DiscountType,
+  FullSetSubItem,
   NewsletterPopupConfig,
   OrderItem,
   ProductColorVariant,
   ProductItem,
   PromoCodeItem,
   RoutePath,
+  SelectedSetPieceSize,
   SiteBannersConfig,
   SizeType,
 } from '../types/samo';
@@ -37,6 +39,7 @@ export const PREBUILT_COLORS: readonly string[] = [
 ];
 
 export const LETTER_SIZES: readonly string[] = ['XS', 'S', 'M', 'L', 'XL'];
+export const DUAL_LETTER_SIZES: readonly string[] = ['S/M', 'M/L', 'L/XL'];
 export const NUMERIC_SIZES: readonly string[] = ['34', '36', '38', '40', '42', '44'];
 export const MONTHS_SIZES: readonly string[] = [
   '3-6 Months',
@@ -483,6 +486,13 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
     return (aliases[upper] || upper).slice(0, 40);
   }
 
+  if (sizeType === 'dual_letter') {
+    return trimmed
+      .toUpperCase()
+      .replace(/\s*[-/]\s*/g, '/')
+      .slice(0, 40);
+  }
+
   if (sizeType === 'numeric') {
     const numMatch = trimmed.match(/\d+/);
     return numMatch ? numMatch[0].slice(0, 10) : trimmed.slice(0, 40);
@@ -526,6 +536,7 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
  */
 export function getDefaultSizesForType(sizeType: SizeType): string[] {
   if (sizeType === 'letter') return [...LETTER_SIZES];
+  if (sizeType === 'dual_letter') return [...DUAL_LETTER_SIZES];
   if (sizeType === 'numeric') return ['36', '38', '40', '42'];
   if (sizeType === 'months') return [...MONTHS_SIZES];
   if (sizeType === 'years') return [...YEARS_SIZES];
@@ -765,10 +776,16 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
           }));
 
           const primaryVar = syncedVariants[0];
+          const syncedPieceCode =
+            cleanGarmentCode(primaryVar.garmentCode) ||
+            cleanGarmentCode(linked.garmentCode) ||
+            cleanGarmentCode(subItem.garmentCode) ||
+            undefined;
           return {
             ...subItem,
             productId: linked.id,
             productName: subItem.productName || linked.name,
+            garmentCode: syncedPieceCode,
             sizeType: primaryVar.sizeType,
             sizes: [...primaryVar.sizes],
             sizeQuantities: buildSizeQuantitiesMap(
@@ -796,10 +813,15 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
             syncedQuantities[sz] = baseQuantities[sz] ?? 5;
           }
         }
+        const syncedPieceCode =
+          cleanGarmentCode(linked.garmentCode) ||
+          cleanGarmentCode(subItem.garmentCode) ||
+          undefined;
         return {
           ...subItem,
           productId: linked.id,
           productName: subItem.productName || linked.name,
+          garmentCode: syncedPieceCode,
           sizeType: linked.sizeType || subItem.sizeType,
           sizes,
           sizeQuantities: syncedQuantities,
@@ -832,9 +854,18 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
       pieceTotals.length > 0 ? Math.min(...pieceTotals) : 0;
     const allPiecesHaveStock = pieceTotals.every((t) => t > 0);
 
+    const combinedSetGarmentCodes = syncedSetItems
+      .map((si) => cleanGarmentCode(si.garmentCode))
+      .filter(Boolean);
+    const resolvedFullSetGarmentCode =
+      combinedSetGarmentCodes.length > 0
+        ? combinedSetGarmentCodes.join('+')
+        : cleanGarmentCode(prod.garmentCode) || undefined;
+
     return {
       ...prod,
       isFullSet: true,
+      garmentCode: resolvedFullSetGarmentCode,
       setItems: syncedSetItems,
       sizeType: primaryPiece?.sizeType || prod.sizeType,
       sizes: primaryPiece?.sizes || prod.sizes,
@@ -843,6 +874,153 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
       inStock: prod.inStock === false ? false : allPiecesHaveStock,
     };
   });
+}
+
+/**
+ * Strips any duplicate leading "Ref." or "Ref:" prefix and trims whitespace from a garment code.
+ */
+export function cleanGarmentCode(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    .trim()
+    .replace(/^(?:ref\.?\s*:?\s*)+/i, '')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Formats a garment code (single like "W-2278" or combined Full Set like "F-2364+W-5637")
+ * into the canonical display reference string: "Ref. W-2278" or "Ref. F-2364+W-5637".
+ * Returns empty string if no garment code is present.
+ */
+export function formatGarmentCodeRef(raw?: string | null): string {
+  const cleaned = cleanGarmentCode(raw);
+  if (!cleaned) return '';
+  return `Ref. ${cleaned}`;
+}
+
+/**
+ * Resolves the garment code for a single Full Set piece, checking the active color variant first,
+ * then the piece's own garmentCode, then the linked standalone product's garmentCode.
+ */
+export function resolvePieceGarmentCode(
+  subItem: FullSetSubItem,
+  selectedColor?: string,
+  allProducts?: ProductItem[]
+): string | undefined {
+  const linkedProd =
+    allProducts && subItem.productId
+      ? allProducts.find((p) => p.id === subItem.productId)
+      : undefined;
+
+  const targetColor = (
+    selectedColor ||
+    subItem.selectedColors?.[0] ||
+    subItem.colorVariants?.[0]?.colorName ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+  if (targetColor) {
+    const matchedSubVar = subItem.colorVariants?.find(
+      (v) => v.colorName.trim().toLowerCase() === targetColor
+    );
+    if (matchedSubVar && cleanGarmentCode(matchedSubVar.garmentCode)) {
+      return cleanGarmentCode(matchedSubVar.garmentCode);
+    }
+    const matchedLinkedVar = linkedProd?.colorVariants?.find(
+      (v) => v.colorName.trim().toLowerCase() === targetColor
+    );
+    if (matchedLinkedVar && cleanGarmentCode(matchedLinkedVar.garmentCode)) {
+      return cleanGarmentCode(matchedLinkedVar.garmentCode);
+    }
+  }
+
+  const fromSub = cleanGarmentCode(subItem.garmentCode);
+  if (fromSub) return fromSub;
+
+  const fromLinked = cleanGarmentCode(linkedProd?.garmentCode);
+  if (fromLinked) return fromLinked;
+
+  return undefined;
+}
+
+/**
+ * Resolves the effective garment code for a product (single product, color variant override,
+ * or Full Set combined reference like "2034+6534" or "F-2364+W-5637").
+ */
+export function resolveProductGarmentCode(
+  product: Pick<
+    ProductItem,
+    'garmentCode' | 'hasColors' | 'colorVariants' | 'isFullSet' | 'setItems'
+  >,
+  options?: {
+    selectedColor?: string;
+    selectedSetColors?: Record<number, string>;
+    selectedSetSizes?: SelectedSetPieceSize[];
+    allProducts?: ProductItem[];
+  }
+): string | undefined {
+  if (
+    product.isFullSet &&
+    Array.isArray(product.setItems) &&
+    product.setItems.length > 0
+  ) {
+    const pieceCodes: string[] = [];
+    product.setItems.forEach((subItem, idx) => {
+      const explicitPieceSelection = options?.selectedSetSizes?.[idx];
+      if (
+        explicitPieceSelection &&
+        cleanGarmentCode(explicitPieceSelection.garmentCode)
+      ) {
+        pieceCodes.push(cleanGarmentCode(explicitPieceSelection.garmentCode));
+        return;
+      }
+      const chosenColor =
+        explicitPieceSelection?.selectedColor ||
+        options?.selectedSetColors?.[idx] ||
+        subItem.selectedColors?.[0] ||
+        subItem.colorVariants?.[0]?.colorName;
+      const resolvedPiece = resolvePieceGarmentCode(
+        subItem,
+        chosenColor,
+        options?.allProducts
+      );
+      if (resolvedPiece) {
+        pieceCodes.push(resolvedPiece);
+      }
+    });
+
+    if (pieceCodes.length > 0) {
+      return pieceCodes.join('+');
+    }
+    const fallbackSetCode = cleanGarmentCode(product.garmentCode);
+    return fallbackSetCode || undefined;
+  }
+
+  if (
+    product.hasColors &&
+    Array.isArray(product.colorVariants) &&
+    product.colorVariants.length > 0
+  ) {
+    const targetColor = (
+      options?.selectedColor ||
+      product.colorVariants[0]?.colorName ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+    const matchedVariant = product.colorVariants.find(
+      (v) => v.colorName.trim().toLowerCase() === targetColor
+    );
+    if (matchedVariant && cleanGarmentCode(matchedVariant.garmentCode)) {
+      return cleanGarmentCode(matchedVariant.garmentCode);
+    }
+  }
+
+  const baseCode = cleanGarmentCode(product.garmentCode);
+  return baseCode || undefined;
 }
 
 /**
@@ -1497,8 +1675,12 @@ export function filterCatalogProducts(
     }
     if (q) {
       const colorNames = (item.colorVariants || []).map((v) => v.colorName);
+      const colorGarmentCodes = (item.colorVariants || [])
+        .map((v) => v.garmentCode || '')
+        .filter(Boolean);
       const haystack = [
         item.name,
+        item.garmentCode || '',
         item.category,
         itemCatNormalized,
         item.department,
@@ -1507,6 +1689,7 @@ export function filterCatalogProducts(
         ...(item.materials || []),
         ...item.sizes,
         ...colorNames,
+        ...colorGarmentCodes,
       ]
         .join(' ')
         .toLowerCase();

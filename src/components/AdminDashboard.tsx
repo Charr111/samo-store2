@@ -70,10 +70,13 @@ import {
   buildDefaultSiteBanners,
   buildEditorialProductDescription,
   buildSizeQuantitiesMap,
+  cleanGarmentCode,
   CM_SIZES,
   createSafeSlug,
   DEFAULT_NEWSLETTER_POPUP_CONFIG,
+  DUAL_LETTER_SIZES,
   filterOrdersByQuery,
+  formatGarmentCodeRef,
   getCategoryBannerKey,
   getColorSwatchHex,
   getCategoriesByDepartment,
@@ -88,6 +91,8 @@ import {
   normalizeKidsCategoryName,
   normalizeSizeEntry,
   NUMERIC_SIZES,
+  resolvePieceGarmentCode,
+  resolveProductGarmentCode,
   sumSizeQuantities,
   SUPER_ADMIN_EMAILS,
   syncProductFromColorVariants,
@@ -284,6 +289,7 @@ const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
 interface DraftColorConfig {
   colorName: string;
   colorHex?: string;
+  garmentCode?: string;
   imageUrl: string;
   galleryUrls?: string[];
   sizeType: SizeType;
@@ -556,6 +562,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editProdPriceInputs, setEditProdPriceInputs] = useState<
     Record<string, string>
   >({});
+  const [editProdGarmentInputs, setEditProdGarmentInputs] = useState<
+    Record<string, string>
+  >({});
+  const [editVariantGarmentInputs, setEditVariantGarmentInputs] = useState<
+    Record<string, string>
+  >({});
   const [editProdDiscountInputs, setEditProdDiscountInputs] = useState<
     Record<string, string>
   >({});
@@ -575,6 +587,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Create Product Form State
   const [itemName, setItemName] = useState('');
+  const [itemGarmentCode, setItemGarmentCode] = useState('');
   const [itemDept, setItemDept] = useState<Department>('women');
   const [itemCategory, setItemCategory] = useState('Jacket');
   const [itemStyle, setItemStyle] = useState<StyleType>('Fine Leather');
@@ -659,7 +672,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [setPiece3Colors, setSetPiece3Colors] = useState<string[]>([]);
   const [setPiece3Category, setSetPiece3Category] = useState<string>('');
 
-  // Custom Months & Years Presets Added by Admin
+  // Custom Dual-Letter, Months & Years Presets Added by Admin
+  const [customDualLetterSizes, setCustomDualLetterSizes] = useState<string[]>(
+    []
+  );
   const [customMonthsSizes, setCustomMonthsSizes] = useState<string[]>([]);
   const [customYearsSizes, setCustomYearsSizes] = useState<string[]>([]);
 
@@ -845,6 +861,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const getPresetsForSizeType = (st: SizeType): string[] => {
     if (st === 'letter') return [...LETTER_SIZES];
+    if (st === 'dual_letter') {
+      return Array.from(
+        new Set([...DUAL_LETTER_SIZES, ...customDualLetterSizes])
+      );
+    }
     if (st === 'numeric') return [...NUMERIC_SIZES];
     if (st === 'months') {
       return Array.from(new Set([...MONTHS_SIZES, ...customMonthsSizes]));
@@ -856,7 +877,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const registerCustomSizePreset = (st: SizeType, normalizedSize: string) => {
-    if (st === 'months') {
+    if (st === 'dual_letter') {
+      setCustomDualLetterSizes((prev) =>
+        prev.includes(normalizedSize) ||
+        DUAL_LETTER_SIZES.includes(normalizedSize)
+          ? prev
+          : [...prev, normalizedSize]
+      );
+    } else if (st === 'months') {
       setCustomMonthsSizes((prev) =>
         prev.includes(normalizedSize) || MONTHS_SIZES.includes(normalizedSize)
           ? prev
@@ -1227,6 +1255,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           return {
             productId: linked.id,
             productName: linked.name,
+            garmentCode:
+              cleanGarmentCode(leadVar.garmentCode) ||
+              cleanGarmentCode(linked.garmentCode) ||
+              undefined,
             pieceLabel: fallbackLabel.trim() || linked.category || 'Piece',
             sizeType: leadVar.sizeType || linked.sizeType,
             sizes: leadSizes,
@@ -1248,6 +1280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return {
           productId: linked.id,
           productName: linked.name,
+          garmentCode: cleanGarmentCode(linked.garmentCode) || undefined,
           pieceLabel: fallbackLabel.trim() || linked.category || 'Piece',
           sizeType: linked.sizeType,
           sizes: pSizes,
@@ -1303,8 +1336,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               (u) => Boolean(u) && u !== primaryImage
             );
 
+      const combinedSetGarmentCode =
+        setItemsPayload
+          .map((s) => cleanGarmentCode(s.garmentCode))
+          .filter(Boolean)
+          .join('+') ||
+        cleanGarmentCode(itemGarmentCode) ||
+        undefined;
+
       await onAddProduct({
         name: cleanName.toUpperCase(),
+        garmentCode: combinedSetGarmentCode,
         department: itemDept,
         category: itemCategory,
         style: itemStyle,
@@ -1331,6 +1373,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
 
       setItemName('');
+      setItemGarmentCode('');
       setItemUrl('');
       setItemUrl2('');
       setItemUrl3('');
@@ -1381,6 +1424,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             dc.colorHex ||
             customColorHexMap[dc.colorName.toLowerCase()] ||
             getColorSwatchHex(dc.colorName),
+          garmentCode: cleanGarmentCode(dc.garmentCode) || undefined,
           imageUrl: variantImg,
           galleryUrls: variantGallery,
           sizeType: dc.sizeType,
@@ -1398,6 +1442,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       await onAddProduct({
         name: cleanName.toUpperCase(),
+        garmentCode: cleanGarmentCode(itemGarmentCode) || undefined,
         department: itemDept,
         category: itemCategory,
         style: itemStyle,
@@ -1438,6 +1483,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       await onAddProduct({
         name: cleanName.toUpperCase(),
+        garmentCode: cleanGarmentCode(itemGarmentCode) || undefined,
         department: itemDept,
         category: itemCategory,
         style: itemStyle,
@@ -1466,6 +1512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     setItemName('');
+    setItemGarmentCode('');
     setItemUrl('');
     setItemUrl2('');
     setItemUrl3('');
@@ -2327,6 +2374,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {prod.name}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400 mt-0.5">
+              {(() => {
+                const rowRef = formatGarmentCodeRef(
+                  resolveProductGarmentCode(prod, { allProducts: products })
+                );
+                return rowRef ? (
+                  <>
+                    <span className="font-mono-tabular text-zinc-300 font-medium">
+                      {rowRef}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                ) : null;
+              })()}
               <span className="capitalize">{prod.department}</span>
               <span aria-hidden="true">·</span>
               <span>{prod.category}</span>
@@ -4957,6 +5017,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {order.primaryProductSize}
                           </span>
                         </div>
+                        {Array.isArray(order.orderedItems) &&
+                          order.orderedItems.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {order.orderedItems.map((oi, oiIdx) => {
+                                const matchedP = products.find(
+                                  (p) => p.id === oi.productId
+                                );
+                                const rawRef =
+                                  oi.garmentCode ||
+                                  (matchedP
+                                    ? resolveProductGarmentCode(matchedP, {
+                                        selectedColor: oi.selectedColor,
+                                        selectedSetSizes: oi.selectedSetSizes,
+                                        allProducts: products,
+                                      })
+                                    : undefined);
+                                const formatted = formatGarmentCodeRef(rawRef);
+                                if (!formatted) return null;
+                                return (
+                                  <span
+                                    key={`${oi.productId}-${oiIdx}`}
+                                    className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono-tabular text-[10px] font-semibold text-zinc-200"
+                                  >
+                                    {formatted}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         <div className="text-[11px] text-zinc-400 leading-relaxed break-words">
                           {order.itemsSummary}
                         </div>
@@ -7069,7 +7158,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Product Name, Price, Category &amp; Details:
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div className="sm:col-span-2">
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
                           Product Name *
@@ -7085,6 +7174,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           aria-label="Edit Product Name"
                           placeholder="Product Name"
                           className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Garment (Ref Code)
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            editProdGarmentInputs[prod.id] !== undefined
+                              ? editProdGarmentInputs[prod.id]
+                              : prod.garmentCode || ''
+                          }
+                          onChange={(e) => {
+                            const rawVal = e.target.value;
+                            setEditProdGarmentInputs((prev) => ({
+                              ...prev,
+                              [prod.id]: rawVal,
+                            }));
+                            onUpdateProductMeta(prod.id, {
+                              garmentCode: cleanGarmentCode(rawVal),
+                            });
+                          }}
+                          onBlur={() => {
+                            const currentVal = editProdGarmentInputs[prod.id];
+                            if (currentVal !== undefined) {
+                              const cleaned = cleanGarmentCode(currentVal);
+                              setEditProdGarmentInputs((prev) => ({
+                                ...prev,
+                                [prod.id]: cleaned,
+                              }));
+                              onUpdateProductMeta(prod.id, {
+                                garmentCode: cleaned,
+                              });
+                            }
+                          }}
+                          aria-label="Edit Product Garment Code"
+                          placeholder="e.g. W-2278 or F-6752"
+                          className="w-full px-2.5 py-1.5 text-xs font-mono-tabular font-bold uppercase bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                         />
                       </div>
 
@@ -7441,6 +7570,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             item.
                           </p>
                         </div>
+                        {resolveProductGarmentCode(prod, { allProducts: products }) && (
+                          <span className="px-2.5 py-1 bg-zinc-950 text-white text-[10px] font-mono-tabular font-bold uppercase tracking-wider">
+                            {formatGarmentCodeRef(
+                              resolveProductGarmentCode(prod, { allProducts: products })
+                            )}
+                          </span>
+                        )}
                       </div>
 
                       {(Array.isArray(prod.setItems) &&
@@ -7557,6 +7693,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           const updatedSub: FullSetSubItem = {
                             productId: nextProd.id,
                             productName: nextProd.name,
+                            garmentCode:
+                              cleanGarmentCode(leadVar?.garmentCode) ||
+                              cleanGarmentCode(nextProd.garmentCode) ||
+                              undefined,
                             pieceLabel:
                               nextLabel.trim() ||
                               nextProd.category ||
@@ -7578,14 +7718,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                           const nextSetItems = [...currentSetItems];
                           nextSetItems[pieceIdx] = updatedSub;
+                          const combinedGarmentCode =
+                            nextSetItems
+                              .map((s) =>
+                                resolvePieceGarmentCode(s, undefined, products)
+                              )
+                              .filter(Boolean)
+                              .join('+') || prod.garmentCode;
                           onUpdateProductMeta(prod.id, {
                             isFullSet: true,
+                            garmentCode: combinedGarmentCode,
                             materials: [],
                             hasColors: false,
                             colorVariants: [],
                             setItems: nextSetItems,
                           });
                         };
+
+                        const pieceGarmentRef = formatGarmentCodeRef(
+                          resolvePieceGarmentCode(piece, undefined, products) ||
+                            linkedProd?.garmentCode
+                        );
 
                         return (
                           <div
@@ -7601,7 +7754,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   ? 'Trousers / Skirt / Bottom'
                                   : 'Optional 3rd Piece'}
                               </span>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {pieceGarmentRef && (
+                                  <span className="px-2 py-0.5 bg-zinc-100 border border-zinc-300 text-zinc-800 text-[10px] font-mono-tabular font-bold uppercase">
+                                    {pieceGarmentRef}
+                                  </span>
+                                )}
                                 {linkedProd && (
                                   <span className="text-[10px] font-mono-tabular text-zinc-500 uppercase">
                                     Category: {linkedProd.category}
@@ -7715,7 +7873,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       {pieceProdsForCat.length > 0 ? (
                                         pieceProdsForCat.map((sp) => (
                                           <option key={sp.id} value={sp.id}>
-                                            {sp.name} (${sp.price})
+                                            {sp.name}
+                                            {sp.garmentCode
+                                              ? ` (${formatGarmentCodeRef(sp.garmentCode)})`
+                                              : ''}{' '}
+                                            (${sp.price})
                                           </option>
                                         ))
                                       ) : (
@@ -8132,6 +8294,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     ({hex})
                                   </span>
                                 </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 whitespace-nowrap">
+                                    Garment:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={
+                                      editVariantGarmentInputs[sizeInputKey] !==
+                                      undefined
+                                        ? editVariantGarmentInputs[sizeInputKey]
+                                        : variant.garmentCode || ''
+                                    }
+                                    onChange={(e) => {
+                                      const rawVal = e.target.value;
+                                      setEditVariantGarmentInputs((prev) => ({
+                                        ...prev,
+                                        [sizeInputKey]: rawVal,
+                                      }));
+                                      handleCatalogVariantChange(
+                                        prod,
+                                        variant.colorName,
+                                        (v) => ({
+                                          ...v,
+                                          garmentCode: cleanGarmentCode(rawVal),
+                                        })
+                                      );
+                                    }}
+                                    onBlur={() => {
+                                      const currentVal =
+                                        editVariantGarmentInputs[sizeInputKey];
+                                      if (currentVal !== undefined) {
+                                        const cleaned =
+                                          cleanGarmentCode(currentVal);
+                                        setEditVariantGarmentInputs((prev) => ({
+                                          ...prev,
+                                          [sizeInputKey]: cleaned,
+                                        }));
+                                        handleCatalogVariantChange(
+                                          prod,
+                                          variant.colorName,
+                                          (v) => ({
+                                            ...v,
+                                            garmentCode: cleaned,
+                                          })
+                                        );
+                                      }
+                                    }}
+                                    placeholder={
+                                      prod.garmentCode
+                                        ? `Default: ${prod.garmentCode}`
+                                        : 'Optional (e.g. W-2278)'
+                                    }
+                                    aria-label={`Garment code for color ${variant.colorName}`}
+                                    className="w-36 sm:w-44 px-2 py-1 text-[11px] font-mono-tabular uppercase bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                                  />
+                                </div>
                               </div>
 
                               {/* 4 Upload Photos for this Color */}
@@ -8336,7 +8555,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   Size Type for {variant.colorName} (Choose
                                   Letter, Number, Months, or Years):
                                 </span>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                                   {(
                                     [
                                       {
@@ -8344,16 +8563,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         label: '1. Letter (XS–XL)',
                                       },
                                       {
+                                        id: 'dual_letter',
+                                        label: '2. S/M, M/L, L/XL',
+                                      },
+                                      {
                                         id: 'numeric',
-                                        label: '2. Number (36, 38...)',
+                                        label: '3. Number (36, 38...)',
                                       },
                                       {
                                         id: 'months',
-                                        label: '3. Months (Baby)',
+                                        label: '4. Months (Baby)',
                                       },
                                       {
                                         id: 'years',
-                                        label: '4. Years (Kids)',
+                                        label: '5. Years (Kids)',
                                       },
                                     ] as { id: SizeType; label: string }[]
                                   ).map((st) => (
@@ -8545,6 +8768,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         ? 'Custom Months (e.g. 0-3 Months)'
                                         : variant.sizeType === 'years'
                                         ? 'Custom Years (e.g. 10-11 Years)'
+                                        : variant.sizeType === 'dual_letter'
+                                        ? 'Custom size (e.g. XS/S, XL/XXL)'
                                         : 'Custom size (e.g. 36, XXL)'
                                     }
                                     className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] border border-zinc-300"
@@ -8605,14 +8830,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {prod.sizeType}):
                       </span>
 
-                      {/* 4 Size Type Buttons for Single-Color Product */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {/* 5 Size Type Buttons for Single-Color Product */}
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                         {(
                           [
                             { id: 'letter', label: '1. Letter (XS–XL)' },
-                            { id: 'numeric', label: '2. Number (36, 38...)' },
-                            { id: 'months', label: '3. Months (Baby)' },
-                            { id: 'years', label: '4. Years (Kids)' },
+                            { id: 'dual_letter', label: '2. S/M, M/L, L/XL' },
+                            { id: 'numeric', label: '3. Number (36, 38...)' },
+                            { id: 'months', label: '4. Months (Baby)' },
+                            { id: 'years', label: '5. Years (Kids)' },
                           ] as { id: SizeType; label: string }[]
                         ).map((st) => (
                           <button
@@ -8757,6 +8983,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 ? 'Custom Months (e.g. 0-3 Months)'
                                 : prod.sizeType === 'years'
                                 ? 'Custom Years (e.g. 10-11 Years)'
+                                : prod.sizeType === 'dual_letter'
+                                ? 'Custom size (e.g. XS/S, XL/XXL)'
                                 : 'Custom size (e.g. 36, XXL)'
                             }
                             className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] bg-white border border-zinc-300"
@@ -9086,7 +9314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleCreateProductSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-900 mb-1">
                     Product Name *
@@ -9098,6 +9326,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setItemName(e.target.value)}
                     placeholder="E.g. HOURGLASS SUEDE BIKER JACKET"
                     className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-900 mb-1">
+                    Garment (Ref Code)
+                  </label>
+                  <input
+                    type="text"
+                    value={itemGarmentCode}
+                    onChange={(e) => setItemGarmentCode(e.target.value)}
+                    placeholder="e.g. W-2278 or F-6752"
+                    aria-label="New Product Garment Code"
+                    className="w-full px-3 py-2 text-xs font-mono-tabular border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -9519,12 +9760,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     return (
                       <div className="p-3.5 bg-white border border-zinc-300 space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
                           <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
                             1. Select First Item (e.g. Shirt / Top / Jacket)
                           </span>
                           {prod1 && (
                             <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                              {prod1.garmentCode
+                                ? `${formatGarmentCodeRef(prod1.garmentCode)} · `
+                                : ''}
                               Category: {prod1.category} · Sizes:{' '}
                               {prod1.sizes.join(', ')}
                             </span>
@@ -9579,7 +9823,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {p1ProductsForCat.length > 0 ? (
                                 p1ProductsForCat.map((sp) => (
                                   <option key={sp.id} value={sp.id}>
-                                    {sp.name} (${sp.price})
+                                    {sp.name}
+                                    {sp.garmentCode
+                                      ? ` (${formatGarmentCodeRef(sp.garmentCode)})`
+                                      : ''}{' '}
+                                    (${sp.price})
                                   </option>
                                 ))
                               ) : (
@@ -9724,13 +9972,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     return (
                       <div className="p-3.5 bg-white border border-zinc-300 space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
                           <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
                             2. Select Second Item (e.g. Trousers / Pants /
                             Skirt)
                           </span>
                           {prod2 && (
                             <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                              {prod2.garmentCode
+                                ? `${formatGarmentCodeRef(prod2.garmentCode)} · `
+                                : ''}
                               Category: {prod2.category} · Sizes:{' '}
                               {prod2.sizes.join(', ')}
                             </span>
@@ -9785,7 +10036,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {p2ProductsForCat.length > 0 ? (
                                 p2ProductsForCat.map((sp) => (
                                   <option key={sp.id} value={sp.id}>
-                                    {sp.name} (${sp.price})
+                                    {sp.name}
+                                    {sp.garmentCode
+                                      ? ` (${formatGarmentCodeRef(sp.garmentCode)})`
+                                      : ''}{' '}
+                                    (${sp.price})
                                   </option>
                                 ))
                               ) : (
@@ -10330,13 +10585,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   ({hex})
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleDraftColor(dc.colorName)}
-                                className="text-[10px] font-bold uppercase text-red-600 hover:underline cursor-pointer"
-                              >
-                                Remove Color
-                              </button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 whitespace-nowrap">
+                                    Garment:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={dc.garmentCode || ''}
+                                    onChange={(e) =>
+                                      updateDraftColorField(
+                                        dc.colorName,
+                                        (prev) => ({
+                                          ...prev,
+                                          garmentCode: e.target.value,
+                                        })
+                                      )
+                                    }
+                                    placeholder={
+                                      itemGarmentCode.trim()
+                                        ? `Default: ${cleanGarmentCode(
+                                            itemGarmentCode
+                                          )}`
+                                        : 'Optional color code'
+                                    }
+                                    aria-label={`Garment code for new color ${dc.colorName}`}
+                                    className="w-36 sm:w-40 px-2 py-1 text-[11px] font-mono-tabular bg-white border border-zinc-300"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDraftColor(dc.colorName)}
+                                  className="text-[10px] font-bold uppercase text-red-600 hover:underline cursor-pointer"
+                                >
+                                  Remove Color
+                                </button>
+                              </div>
                             </div>
 
                             {/* 4 PHOTO UPLOAD SLOTS FOR THIS COLOR */}
@@ -10528,13 +10812,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ))}
                             </div>
 
-                            {/* 4 SIZE TYPE OPTIONS FOR THIS COLOR (Letter / Number / Months / Years) */}
+                            {/* 5 SIZE TYPE OPTIONS FOR THIS COLOR (Letter / S/M, M/L, L/XL / Number / Months / Years) */}
                             <div className="space-y-2.5">
                               <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-900">
                                 Size Type &amp; Sizes for {dc.colorName} (Choose
-                                Letter, Number, Months, or Years):
+                                Letter, S/M–L/XL, Number, Months, or Years):
                               </span>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -10563,6 +10847,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       dc.colorName,
                                       (prev) => ({
                                         ...prev,
+                                        sizeType: 'dual_letter',
+                                        sizes:
+                                          getPresetsForSizeType('dual_letter'),
+                                        rawQuantities: {},
+                                      })
+                                    )
+                                  }
+                                  className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                                    dc.sizeType === 'dual_letter'
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  2. S/M, M/L, L/XL
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
                                         sizeType: 'numeric',
                                         sizes: [...NUMERIC_SIZES],
                                         rawQuantities: {},
@@ -10575,7 +10881,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       : 'bg-white text-zinc-700 border-zinc-300'
                                   }`}
                                 >
-                                  2. Number (36, 38...)
+                                  3. Number (36, 38...)
                                 </button>
                                 <button
                                   type="button"
@@ -10596,7 +10902,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       : 'bg-white text-zinc-700 border-zinc-300'
                                   }`}
                                 >
-                                  3. Months (Baby)
+                                  4. Months (Baby)
                                 </button>
                                 <button
                                   type="button"
@@ -10617,7 +10923,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       : 'bg-white text-zinc-700 border-zinc-300'
                                   }`}
                                 >
-                                  4. Years (Kids)
+                                  5. Years (Kids)
                                 </button>
                               </div>
 
@@ -10679,6 +10985,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       ? 'Add new Years size (e.g. 10-11 Years, 12-13 Years)'
                                       : dc.sizeType === 'numeric'
                                       ? 'Add custom numeric size (e.g. 36, 46)'
+                                      : dc.sizeType === 'dual_letter'
+                                      ? 'Add custom size (e.g. XS/S, XL/XXL)'
                                       : 'Add custom size (e.g. XXL, One Size)'
                                   }
                                   className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
@@ -10783,7 +11091,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     per size) *
                   </label>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <button
                       type="button"
                       onClick={() => handleSizeTypeChange('letter')}
@@ -10797,6 +11105,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={() => handleSizeTypeChange('dual_letter')}
+                      className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                        itemSizeType === 'dual_letter'
+                          ? 'bg-zinc-950 text-white border-zinc-950'
+                          : 'bg-white text-zinc-700 border-zinc-300'
+                      }`}
+                    >
+                      2. S/M, M/L, L/XL
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleSizeTypeChange('numeric')}
                       className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
                         itemSizeType === 'numeric'
@@ -10804,7 +11123,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           : 'bg-white text-zinc-700 border-zinc-300'
                       }`}
                     >
-                      2. Number (36, 38...)
+                      3. Number (36, 38...)
                     </button>
                     <button
                       type="button"
@@ -10815,7 +11134,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           : 'bg-white text-zinc-700 border-zinc-300'
                       }`}
                     >
-                      3. Months (Baby)
+                      4. Months (Baby)
                     </button>
                     <button
                       type="button"
@@ -10826,7 +11145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           : 'bg-white text-zinc-700 border-zinc-300'
                       }`}
                     >
-                      4. Years (Kids)
+                      5. Years (Kids)
                     </button>
                   </div>
 
@@ -10851,7 +11170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })}
                   </div>
 
-                  {/* Add Custom Size Input for Single-Color Product (Months, Years, Numeric, Letter) */}
+                  {/* Add Custom Size Input for Single-Color Product (Months, Years, Numeric, S/M–L/XL, Letter) */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                     <input
                       type="text"
@@ -10864,6 +11183,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           ? 'Add new Years size (e.g. 10-11 Years, 12-13 Years)'
                           : itemSizeType === 'numeric'
                           ? 'Add custom numeric size (e.g. 36, 46)'
+                          : itemSizeType === 'dual_letter'
+                          ? 'Add custom size (e.g. XS/S, XL/XXL)'
                           : 'Add custom size (e.g. XXL, One Size)'
                       }
                       aria-label="Add custom size for product"

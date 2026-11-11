@@ -673,12 +673,22 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
 });
 
 import {
+  DUAL_LETTER_SIZES,
   getDefaultSizesForType,
   MONTHS_SIZES,
   YEARS_SIZES,
 } from './catalogLogic';
 
-test('Months and Years size types provide 4 prebuilt sizes each and normalize custom sizes', () => {
+test('Dual-Letter (S/M, M/L, L/XL), Months, and Years size types provide prebuilt sizes and normalize custom sizes', () => {
+  assert.deepEqual(DUAL_LETTER_SIZES, ['S/M', 'M/L', 'L/XL']);
+  assert.deepEqual(getDefaultSizesForType('dual_letter'), [
+    'S/M',
+    'M/L',
+    'L/XL',
+  ]);
+  assert.equal(normalizeSizeEntry('xs / s', 'dual_letter'), 'XS/S');
+  assert.equal(normalizeSizeEntry('xl-xxl', 'dual_letter'), 'XL/XXL');
+
   assert.equal(MONTHS_SIZES.length, 4);
   assert.deepEqual(getDefaultSizesForType('months'), [
     '3-6 Months',
@@ -1448,5 +1458,166 @@ test('parseCatalogUrlState parses category URLs and direct product popup modal U
   assert.equal(giftsState.route, '/gifts');
 });
 
+import {
+  cleanGarmentCode,
+  formatGarmentCodeRef,
+  resolvePieceGarmentCode,
+  resolveProductGarmentCode,
+} from './catalogLogic';
 
+test('Garment Code helpers format Ref. codes, support optional per-color serial overrides, and combine Full Set references (e.g. Ref. F-2364+W-5637)', () => {
+  assert.equal(cleanGarmentCode('  Ref. w-2278 '), 'W-2278');
+  assert.equal(cleanGarmentCode('REF: f-6752'), 'F-6752');
+  assert.equal(formatGarmentCodeRef('W-2278'), 'Ref. W-2278');
+  assert.equal(formatGarmentCodeRef('Ref. F-6752'), 'Ref. F-6752');
+  assert.equal(formatGarmentCodeRef(''), '');
 
+  const shirtWithColorCodes: ProductItem = {
+    id: 'shirt-gc-1',
+    name: 'SILK ATELIER SHIRT',
+    garmentCode: 'F-2364',
+    department: 'women',
+    category: 'Shirts',
+    style: 'Classic',
+    price: 820,
+    quantity: 10,
+    sizeQuantities: { S: 5, M: 5 },
+    hasColors: true,
+    colorVariants: [
+      {
+        colorName: 'White',
+        imageUrl: 'white.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 5, M: 5 },
+        // No color garmentCode -> falls back to product's F-2364
+      },
+      {
+        colorName: 'Black',
+        garmentCode: 'F-2364-BLK',
+        imageUrl: 'black.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 5, M: 5 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'white.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Silk'],
+    description: 'Shirt',
+    inStock: true,
+    featured: true,
+  };
+
+  const trousersWithCode: ProductItem = {
+    id: 'trousers-gc-2',
+    name: 'PLEATED WOOL TROUSERS',
+    garmentCode: 'W-5637',
+    department: 'women',
+    category: 'Trousers',
+    style: 'Classic',
+    price: 940,
+    quantity: 10,
+    sizeQuantities: { '36': 5, '38': 5 },
+    isNewArrival: true,
+    imageUrl: 'trousers.jpg',
+    galleryUrls: [],
+    sizeType: 'numeric',
+    sizes: ['36', '38'],
+    materials: ['Wool'],
+    description: 'Trousers',
+    inStock: true,
+    featured: true,
+  };
+
+  // Single product: White falls back to product code F-2364; Black uses color override F-2364-BLK
+  assert.equal(
+    resolveProductGarmentCode(shirtWithColorCodes, { selectedColor: 'White' }),
+    'F-2364'
+  );
+  assert.equal(
+    resolveProductGarmentCode(shirtWithColorCodes, { selectedColor: 'Black' }),
+    'F-2364-BLK'
+  );
+
+  // Full Set combining the two products -> F-2364+W-5637 (or F-2364-BLK+W-5637 when Black is chosen)
+  const fullSetItem: ProductItem = {
+    id: 'fullset-gc-1',
+    name: 'ATELIER SILK & WOOL FULL SET',
+    department: 'women',
+    category: 'Full Set',
+    style: 'Classic',
+    price: 1650,
+    quantity: 10,
+    sizeQuantities: { S: 5, M: 5 },
+    isFullSet: true,
+    setItems: [
+      {
+        productId: 'shirt-gc-1',
+        productName: 'SILK ATELIER SHIRT',
+        pieceLabel: 'Shirt',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 5, M: 5 },
+        selectedColors: ['White', 'Black'],
+      },
+      {
+        productId: 'trousers-gc-2',
+        productName: 'PLEATED WOOL TROUSERS',
+        pieceLabel: 'Trousers',
+        sizeType: 'numeric',
+        sizes: ['36', '38'],
+        sizeQuantities: { '36': 5, '38': 5 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'set.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: [],
+    description: 'Set',
+    inStock: true,
+    featured: true,
+  };
+
+  const syncedCatalog = syncFullSetsWithCatalog([
+    shirtWithColorCodes,
+    trousersWithCode,
+    fullSetItem,
+  ]);
+  const syncedFullSet = syncedCatalog.find((p) => p.id === 'fullset-gc-1')!;
+  assert.equal(syncedFullSet.garmentCode, 'F-2364+W-5637');
+  assert.equal(
+    formatGarmentCodeRef(
+      resolveProductGarmentCode(syncedFullSet, { allProducts: syncedCatalog })
+    ),
+    'Ref. F-2364+W-5637'
+  );
+
+  // When customer selects Black on Piece 1 inside Full Set -> Ref. F-2364-BLK+W-5637
+  const withBlackPiece = resolveProductGarmentCode(syncedFullSet, {
+    allProducts: syncedCatalog,
+    selectedSetSizes: [
+      {
+        productId: 'shirt-gc-1',
+        productName: 'SILK ATELIER SHIRT',
+        selectedSize: 'S',
+        selectedColor: 'Black',
+      },
+      {
+        productId: 'trousers-gc-2',
+        productName: 'PLEATED WOOL TROUSERS',
+        selectedSize: '36',
+      },
+    ],
+  });
+  assert.equal(formatGarmentCodeRef(withBlackPiece), 'Ref. F-2364-BLK+W-5637');
+  assert.equal(
+    resolvePieceGarmentCode(syncedFullSet.setItems![0], 'Black', syncedCatalog),
+    'F-2364-BLK'
+  );
+});

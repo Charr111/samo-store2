@@ -65,6 +65,7 @@ import {
   parseCatalogUrlState,
   parsePathnameToRoute,
   renumberDepartmentCategoriesSequentially,
+  resolveProductGarmentCode,
   restoreStockForCanceledOrder,
   sumSizeQuantities,
   syncFullSetsWithCatalog,
@@ -104,6 +105,7 @@ import { CartCheckoutDrawer } from './components/CartCheckoutDrawer';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AiStylistModal } from './components/AiStylistModal';
 import { NewsletterPopupModal } from './components/NewsletterPopupModal';
+import { FaqSection } from './components/FaqSection';
 
 const STORAGE_KEYS = {
   categories: 'samo_categories_v2',
@@ -250,6 +252,10 @@ function normalizeStoredProducts(
     const seedFallback = INITIAL_PRODUCTS.find((sp) => sp.id === item.id);
     map.set(item.id, {
       ...item,
+      garmentCode:
+        item.garmentCode !== undefined
+          ? item.garmentCode
+          : seedFallback?.garmentCode,
       category: normalizedCat,
       galleryUrls: Array.isArray(item.galleryUrls)
         ? item.galleryUrls
@@ -1083,6 +1089,11 @@ export default function App() {
         };
         return updated;
       }
+      const resolvedGarmentCode = resolveProductGarmentCode(product, {
+        selectedColor,
+        selectedSetSizes,
+        allProducts: products,
+      });
       return [
         ...prev,
         {
@@ -1091,6 +1102,7 @@ export default function App() {
           selectedSetSizes,
           selectedColor,
           selectedColorImage,
+          garmentCode: resolvedGarmentCode || undefined,
           quantity: 1,
         },
       ];
@@ -3097,6 +3109,7 @@ export default function App() {
       {/* SOLE ITEM POP-UP MODAL */}
       <ProductModal
         product={activeProductModal}
+        allProducts={products}
         categories={categories}
         sizeGuideConfig={sizeGuideConfig}
         onClose={handleCloseProductModal}
@@ -3137,6 +3150,9 @@ export default function App() {
         onClose={() => setIsNewsletterPopupOpen(false)}
         onSubscribe={handleSubscribePopupNewsletter}
       />
+
+      {/* MINIMAL ARCHITECTURAL FAQ SECTION RIGHT ABOVE THE FOOTER */}
+      <FaqSection />
 
       {/* BALENCIAGA-INSPIRED ARCHITECTURAL MULTI-COLUMN FOOTER */}
       <footer className="bg-[#D4D4D4] text-zinc-950 border-t border-zinc-950 text-xs">

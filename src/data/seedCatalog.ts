@@ -130,6 +130,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-jacket-01',
     name: 'AVENUE HEAVY COW LEATHER BIKER JACKET',
+    garmentCode: 'W-2278',
     department: 'women',
     category: 'Jacket',
     style: 'Fine Leather',
@@ -179,6 +180,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-trench-01',
     name: 'RODEO OVERSIZED SUEDE TRENCH COAT',
+    garmentCode: 'F-6752',
     department: 'women',
     category: 'Trench Coat',
     style: 'Suede',
@@ -221,6 +223,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-bags-01',
     name: 'LE CITY CONCAVE TOP-HANDLE BAG',
+    garmentCode: 'W-3140',
     department: 'women',
     category: 'Bags',
     style: 'Accessories',
@@ -270,6 +273,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-fur-01',
     name: 'WINTER 26 OPERA COCOON FUR COAT',
+    garmentCode: 'F-4026',
     department: 'women',
     category: 'Fur',
     style: 'Fur',
@@ -292,6 +296,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-trousers-01',
     name: 'ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS',
+    garmentCode: 'W-5637',
     department: 'women',
     category: 'Trousers',
     style: 'Classic',
@@ -314,6 +319,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-pants-01',
     name: 'TRACK MONOLITH PIPED LEATHER PANTS',
+    garmentCode: 'W-6180',
     department: 'women',
     category: 'Pants',
     style: 'Sport Chic',
@@ -336,6 +342,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-skirts-01',
     name: 'ASYMMETRIC DRAPED SUEDE MAXI SKIRT',
+    garmentCode: 'F-7290',
     department: 'women',
     category: 'Skirts',
     style: 'Suede',
@@ -358,6 +365,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-denim-01',
     name: 'COUTURE RING SELVEDGE BAGGY DENIM',
+    garmentCode: 'W-8045',
     department: 'women',
     category: 'Denim',
     style: 'Sport Chic',
@@ -380,6 +388,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-tops-01',
     name: 'SCULPTED COWL SATIN & LACE ATELIER TOP',
+    garmentCode: 'F-2364',
     department: 'women',
     category: 'Tops',
     style: 'Classic',
@@ -402,6 +411,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-fullset-01',
     name: 'MONOLITH SUEDE & CASHMERE FULL SET',
+    garmentCode: 'F-2364+W-5637',
     department: 'women',
     category: 'Full Set',
     style: 'Suede',
@@ -414,6 +424,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
         productId: 'samo-w-tops-01',
         productName: 'SCULPTED COWL SATIN & LACE ATELIER TOP',
         pieceLabel: 'Top / Shirt',
+        garmentCode: 'F-2364',
         sizeType: 'letter',
         sizes: ['XS', 'S', 'M', 'L'],
         sizeQuantities: { XS: 5, S: 5, M: 5, L: 0 },
@@ -422,6 +433,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
         productId: 'samo-w-trousers-01',
         productName: 'ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS',
         pieceLabel: 'Trousers / Bottom',
+        garmentCode: 'W-5637',
         sizeType: 'numeric',
         sizes: ['34', '36', '38', '40', '42', '44'],
         sizeQuantities: { '34': 5, '36': 5, '38': 0, '40': 5, '42': 5, '44': 5 },
@@ -447,6 +459,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-w-belts-01',
     name: 'ARCHIVES DOUBLE-RING COW LEATHER BELT',
+    garmentCode: 'W-1920',
     department: 'women',
     category: 'Belts',
     style: 'Accessories',
@@ -471,6 +484,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-k-baby-01',
     name: 'PETIT ATELIER CASHMERE & COTTON KNIT',
+    garmentCode: 'K-1042',
     department: 'kids',
     category: 'MINIS 1 To 5',
     style: 'Classic',
@@ -513,6 +527,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-k-junior-01',
     name: 'CHILDREN SPORT CHIC LEATHER & WOOL BOMBER',
+    garmentCode: 'K-2085',
     department: 'kids',
     category: 'CHILDREN 6+',
     style: 'Sport Chic',
@@ -555,6 +570,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-k-teen-01',
     name: 'TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS',
+    garmentCode: 'K-3190',
     department: 'kids',
     category: 'Teen 13+',
     style: 'Sport Chic',
@@ -597,6 +613,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   {
     id: 'samo-k-children-02',
     name: 'ATELIER SHEARLING COLLAR SUEDE JACKET',
+    garmentCode: 'K-2410',
     department: 'kids',
     category: 'CHILDREN 6+',
     style: 'Suede',

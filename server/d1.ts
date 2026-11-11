@@ -99,6 +99,7 @@ export async function initD1Schema(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      garment_code TEXT,
       department TEXT NOT NULL,
       category TEXT NOT NULL,
       price REAL NOT NULL,
@@ -202,6 +203,11 @@ export async function initD1Schema(): Promise<void> {
   for (const stmt of schemaStatements) {
     await d1Query(stmt);
   }
+  try {
+    await d1Query('ALTER TABLE products ADD COLUMN garment_code TEXT;');
+  } catch {
+    // Column already exists
+  }
 }
 
 /**
@@ -266,35 +272,42 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
     ]);
 
     // Parse products
-    const products = productsRes.results.map((p) => ({
-      id: p.id,
-      name: p.name,
-      department: p.department,
-      category: p.category,
-      price: p.price,
-      originalPrice: p.original_price ?? undefined,
-      discountPercent: p.discount_percent ?? undefined,
-      discountBadge: p.discount_badge ?? undefined,
-      style: p.style || 'Classic Luxury',
-      customStyle: p.custom_style ?? undefined,
-      materials: p.materials ? JSON.parse(p.materials) : [],
-      sizes: p.sizes ? JSON.parse(p.sizes) : [],
-      sizeQuantities: p.size_quantities ? JSON.parse(p.size_quantities) : {},
-      imageUrl: p.image_url || '',
-      galleryUrls: p.gallery_urls ? JSON.parse(p.gallery_urls) : [],
-      hasColors: Boolean(p.has_colors),
-      colorVariants: p.color_variants ? JSON.parse(p.color_variants) : [],
-      isFullSet: Boolean(p.is_full_set),
-      fullSetPieces: p.full_set_pieces ? JSON.parse(p.full_set_pieces) : [],
-      inStock: Boolean(p.in_stock),
-      preorderEnabled: Boolean(p.preorder_enabled),
-      description: p.description || '',
-      details: p.details ? JSON.parse(p.details) : [],
-      featured: Boolean(p.featured),
-      sizeType: p.size_type || 'letter',
-      createdAt: p.created_at || new Date().toISOString(),
-      updatedAt: p.updated_at || new Date().toISOString(),
-    }));
+    const products = productsRes.results.map((p) => {
+      const parsedSetPieces = p.full_set_pieces
+        ? JSON.parse(p.full_set_pieces)
+        : [];
+      return {
+        id: p.id,
+        name: p.name,
+        garmentCode: p.garment_code ?? undefined,
+        department: p.department,
+        category: p.category,
+        price: p.price,
+        originalPrice: p.original_price ?? undefined,
+        discountPercent: p.discount_percent ?? undefined,
+        discountBadge: p.discount_badge ?? undefined,
+        style: p.style || 'Classic Luxury',
+        customStyle: p.custom_style ?? undefined,
+        materials: p.materials ? JSON.parse(p.materials) : [],
+        sizes: p.sizes ? JSON.parse(p.sizes) : [],
+        sizeQuantities: p.size_quantities ? JSON.parse(p.size_quantities) : {},
+        imageUrl: p.image_url || '',
+        galleryUrls: p.gallery_urls ? JSON.parse(p.gallery_urls) : [],
+        hasColors: Boolean(p.has_colors),
+        colorVariants: p.color_variants ? JSON.parse(p.color_variants) : [],
+        isFullSet: Boolean(p.is_full_set),
+        setItems: parsedSetPieces,
+        fullSetPieces: parsedSetPieces,
+        inStock: Boolean(p.in_stock),
+        preorderEnabled: Boolean(p.preorder_enabled),
+        description: p.description || '',
+        details: p.details ? JSON.parse(p.details) : [],
+        featured: Boolean(p.featured),
+        sizeType: p.size_type || 'letter',
+        createdAt: p.created_at || new Date().toISOString(),
+        updatedAt: p.updated_at || new Date().toISOString(),
+      };
+    });
 
     // Parse categories
     const categories = categoriesRes.results.map((c) => ({
@@ -427,17 +440,18 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
  */
 export async function upsertD1Product(p: any): Promise<void> {
   const sql = `INSERT INTO products (
-    id, name, department, category, price, original_price, discount_percent, discount_badge,
+    id, name, garment_code, department, category, price, original_price, discount_percent, discount_badge,
     style, custom_style, materials, sizes, size_quantities, image_url, gallery_urls,
     has_colors, color_variants, is_full_set, full_set_pieces, in_stock, preorder_enabled,
     description, details, featured, size_type, created_at, updated_at
   ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?
   ) ON CONFLICT(id) DO UPDATE SET
     name=excluded.name,
+    garment_code=excluded.garment_code,
     department=excluded.department,
     category=excluded.category,
     price=excluded.price,
@@ -463,9 +477,16 @@ export async function upsertD1Product(p: any): Promise<void> {
     size_type=excluded.size_type,
     updated_at=excluded.updated_at;`;
 
+  const setPiecesPayload = Array.isArray(p.setItems)
+    ? p.setItems
+    : Array.isArray(p.fullSetPieces)
+    ? p.fullSetPieces
+    : [];
+
   const params = [
     p.id,
     p.name || '',
+    p.garmentCode ?? null,
     p.department || 'women',
     p.category || 'Tops',
     p.price ?? 0,
@@ -482,7 +503,7 @@ export async function upsertD1Product(p: any): Promise<void> {
     p.hasColors ? 1 : 0,
     JSON.stringify(Array.isArray(p.colorVariants) ? p.colorVariants : []),
     p.isFullSet ? 1 : 0,
-    JSON.stringify(Array.isArray(p.fullSetPieces) ? p.fullSetPieces : []),
+    JSON.stringify(setPiecesPayload),
     p.inStock !== false ? 1 : 0,
     p.preorderEnabled ? 1 : 0,
     p.description || '',

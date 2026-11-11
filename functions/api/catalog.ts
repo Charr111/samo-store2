@@ -88,35 +88,40 @@ async function readFromD1(
       db.prepare('SELECT key, value, updated_at FROM settings;').all<any>(),
     ]);
 
-    const products = (prodsRes.results || []).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      department: p.department,
-      category: p.category,
-      price: Number(p.price) || 0,
-      originalPrice: p.original_price ?? undefined,
-      discountPercent: p.discount_percent ?? undefined,
-      discountBadge: p.discount_badge ?? undefined,
-      style: p.style || 'Classic Luxury',
-      customStyle: p.custom_style ?? undefined,
-      materials: safeJsonParse(p.materials, []),
-      sizes: safeJsonParse(p.sizes, []),
-      sizeQuantities: safeJsonParse(p.size_quantities, {}),
-      imageUrl: p.image_url || '',
-      galleryUrls: safeJsonParse(p.gallery_urls, []),
-      hasColors: Boolean(p.has_colors),
-      colorVariants: safeJsonParse(p.color_variants, []),
-      isFullSet: Boolean(p.is_full_set),
-      fullSetPieces: safeJsonParse(p.full_set_pieces, []),
-      inStock: Boolean(p.in_stock),
-      preorderEnabled: Boolean(p.preorder_enabled),
-      description: p.description || '',
-      details: safeJsonParse(p.details, []),
-      featured: Boolean(p.featured),
-      sizeType: p.size_type || 'letter',
-      createdAt: p.created_at || new Date().toISOString(),
-      updatedAt: p.updated_at || new Date().toISOString(),
-    }));
+    const products = (prodsRes.results || []).map((p: any) => {
+      const parsedSetPieces = safeJsonParse(p.full_set_pieces, []);
+      return {
+        id: p.id,
+        name: p.name,
+        garmentCode: p.garment_code ?? undefined,
+        department: p.department,
+        category: p.category,
+        price: Number(p.price) || 0,
+        originalPrice: p.original_price ?? undefined,
+        discountPercent: p.discount_percent ?? undefined,
+        discountBadge: p.discount_badge ?? undefined,
+        style: p.style || 'Classic Luxury',
+        customStyle: p.custom_style ?? undefined,
+        materials: safeJsonParse(p.materials, []),
+        sizes: safeJsonParse(p.sizes, []),
+        sizeQuantities: safeJsonParse(p.size_quantities, {}),
+        imageUrl: p.image_url || '',
+        galleryUrls: safeJsonParse(p.gallery_urls, []),
+        hasColors: Boolean(p.has_colors),
+        colorVariants: safeJsonParse(p.color_variants, []),
+        isFullSet: Boolean(p.is_full_set),
+        setItems: parsedSetPieces,
+        fullSetPieces: parsedSetPieces,
+        inStock: Boolean(p.in_stock),
+        preorderEnabled: Boolean(p.preorder_enabled),
+        description: p.description || '',
+        details: safeJsonParse(p.details, []),
+        featured: Boolean(p.featured),
+        sizeType: p.size_type || 'letter',
+        createdAt: p.created_at || new Date().toISOString(),
+        updatedAt: p.updated_at || new Date().toISOString(),
+      };
+    });
 
     const categories = (catsRes.results || []).map((c: any) => ({
       id: c.id,
@@ -249,23 +254,36 @@ async function writeToD1(
   const statements: D1PreparedStatement[] = [];
 
   if (Array.isArray(patch.products)) {
+    try {
+      await db
+        .prepare('ALTER TABLE products ADD COLUMN garment_code TEXT;')
+        .run();
+    } catch {
+      // Column already exists
+    }
     for (const p of patch.products as any[]) {
       if (!p || !p.id) continue;
+      const setPiecesPayload = Array.isArray(p.setItems)
+        ? p.setItems
+        : Array.isArray(p.fullSetPieces)
+        ? p.fullSetPieces
+        : [];
       statements.push(
         db
           .prepare(
             `INSERT INTO products (
-              id, name, department, category, price, original_price, discount_percent, discount_badge,
+              id, name, garment_code, department, category, price, original_price, discount_percent, discount_badge,
               style, custom_style, materials, sizes, size_quantities, image_url, gallery_urls,
               has_colors, color_variants, is_full_set, full_set_pieces, in_stock, preorder_enabled,
               description, details, featured, size_type, created_at, updated_at
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?
             ) ON CONFLICT(id) DO UPDATE SET
               name=excluded.name,
+              garment_code=excluded.garment_code,
               department=excluded.department,
               category=excluded.category,
               price=excluded.price,
@@ -294,6 +312,7 @@ async function writeToD1(
           .bind(
             p.id,
             p.name || '',
+            p.garmentCode ?? null,
             p.department || 'women',
             p.category || 'Tops',
             p.price ?? 0,
@@ -310,7 +329,7 @@ async function writeToD1(
             p.hasColors ? 1 : 0,
             JSON.stringify(Array.isArray(p.colorVariants) ? p.colorVariants : []),
             p.isFullSet ? 1 : 0,
-            JSON.stringify(Array.isArray(p.fullSetPieces) ? p.fullSetPieces : []),
+            JSON.stringify(setPiecesPayload),
             p.inStock !== false ? 1 : 0,
             p.preorderEnabled ? 1 : 0,
             p.description || '',
