@@ -2010,7 +2010,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleResetToDefaults = () => {
     if (
       window.confirm(
-        'Reset all size guides and measurement tables to SAMO verified atelier defaults? Any custom sizes or table edits will be restored.'
+        'Reset all size guides and measurement tables to SAMO Weave verified defaults? Any custom sizes or table edits will be restored.'
       )
     ) {
       handleUpdateCurrentSizeConfig(
@@ -6143,7 +6143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>Size Guides Management</span>
                   </h1>
                   <p className="text-xs text-zinc-400 mt-1">
-                    Control precision atelier sizing charts (Centimeters · cm), manage live product modal visibility, and customize fit notes.
+                    Control precision Samo sizing charts (Centimeters · cm), manage live product modal visibility, and customize fit notes.
                   </p>
                 </div>
 
@@ -6265,7 +6265,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-bold text-white uppercase tracking-wider">
-                        Atelier Fit Note
+                        Samo Fit Note
                       </div>
                       <div className="text-[10px] text-zinc-400">
                         Editorial fit advisory box
@@ -6320,7 +6320,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         : 'border-transparent text-zinc-400 hover:text-zinc-200'
                     }`}
                   >
-                    Atelier Fit Note
+                    Samo Fit Note
                   </button>
                 </div>
 
@@ -6480,7 +6480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })()}
 
-                  {/* Mode: Atelier Fit Note Editor */}
+                  {/* Mode: Samo Fit Note Editor */}
                   {activeSizeGuideSubTab === 'fit_note' && (
                     <div className="space-y-5">
                       <div>
@@ -6496,7 +6496,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               fitNoteTitle: e.target.value,
                             })
                           }
-                          placeholder="ATELIER FIT NOTE"
+                          placeholder="SAMO FIT NOTE"
                           className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white font-semibold"
                         />
                       </div>
@@ -6514,12 +6514,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               fitNoteText: e.target.value,
                             })
                           }
-                          placeholder="Enter atelier fit advisory text..."
+                          placeholder="Enter Samo fit advisory text..."
                           className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white leading-relaxed"
                         />
                       </div>
 
-                      {/* Live Atelier Preview */}
+                      {/* Live Samo Preview */}
                       <div className="pt-2">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
                           Live Boutique Pop-up Preview:
@@ -6531,7 +6531,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#1A1A1A] flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 bg-[#4A080C] shrink-0" />
                             <span>
-                              {currentSizeConfig.fitNoteTitle || 'ATELIER FIT NOTE'}
+                              {currentSizeConfig.fitNoteTitle || 'SAMO FIT NOTE'}
                             </span>
                           </div>
                           <p className="text-xs text-zinc-800 leading-relaxed font-sans">

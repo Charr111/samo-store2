@@ -1145,7 +1145,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             {/* Editorial Construction Notes */}
             <div className="pt-4 border-t border-zinc-200">
               <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950 mb-1.5">
-                Atelier Notes
+                Samo Notes
               </span>
               <p className="text-xs leading-relaxed text-zinc-600">
                 {product.description}
@@ -1183,7 +1183,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 ) : (
                   <form onSubmit={handlePreorderSubmit} className="space-y-2.5">
                     <p className="text-[11px] text-zinc-600 leading-relaxed">
-                      Enter your email address or phone number so our atelier can inform you as soon as Size{' '}
+                      Enter your email address or phone number so Samo can inform you as soon as Size{' '}
                       <strong>{effectiveSelectedSizeLabel}</strong> is back in stock:
                     </p>
                     {preorderError && (
@@ -1262,7 +1262,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </div>
       </div>
 
-      {/* Atelier Size Guide Overlay Modal (Closes without closing the parent ProductModal) */}
+      {/* Samo Size Guide Overlay Modal (Closes without closing the parent ProductModal) */}
       <SizeGuideModal
         isOpen={isSizeGuideOpen}
         onClose={() => setIsSizeGuideOpen(false)}

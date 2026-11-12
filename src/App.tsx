@@ -2415,7 +2415,7 @@ export default function App() {
                     THE HOUSE OF SAMO — SINCE 1999
                   </h1>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Founded in 1999, SAMO began as a dedicated leather and suede atelier crafting architectural outerwear, custom hides, and sculptural silhouettes. For over two decades, the house has remained true to its founding discipline: uncompromising raw materials—full-grain Italian cow leather, velvety calf suede, shearling fur, combed cashmere, and heavy silk—paired with bold, modernist tailoring.
+                    Founded in 1999, SAMO Weave began as a dedicated leather and suede house crafting architectural outerwear, custom hides, and sculptural silhouettes. For over two decades, the house has remained true to its founding discipline: uncompromising raw materials—full-grain Italian cow leather, velvety calf suede, shearling fur, combed cashmere, and heavy silk—paired with bold, modernist tailoring.
                   </p>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
                     Today, the SAMO Showroom brings together our 11-category Women’s ready-to-wear and accessories archive alongside our precision centimeter-graded Kids collection (Baby, Junior, and Teen). Every garment is cut, finished, and inspected to the same exacting standards established in our studio in 1999.
@@ -2438,7 +2438,7 @@ export default function App() {
                   <div>
                     <div className="text-xl md:text-2xl font-bold text-zinc-950">100%</div>
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      Atelier Grade Hides
+                      Samo Grade Hides
                     </div>
                   </div>
                 </div>
@@ -3134,7 +3134,7 @@ export default function App() {
         onSubmitOrder={handleSubmitOrder}
       />
 
-      {/* AI ATELIER STYLIST MODAL */}
+      {/* SAMO WEAVE STYLIST MODAL */}
       <AiStylistModal
         isOpen={aiStylistOpen}
         onClose={() => setAiStylistOpen(false)}
@@ -3152,7 +3152,7 @@ export default function App() {
       />
 
       {/* MINIMAL ARCHITECTURAL FAQ SECTION RIGHT ABOVE THE FOOTER */}
-      <FaqSection />
+      <FaqSection sizeGuideConfig={sizeGuideConfig} />
 
       {/* BALENCIAGA-INSPIRED ARCHITECTURAL MULTI-COLUMN FOOTER */}
       <footer className="bg-[#D4D4D4] text-zinc-950 border-t border-zinc-950 text-xs">

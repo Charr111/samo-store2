@@ -2039,7 +2039,9 @@ export function mergeSiteBannersConfig(
         const fallback = mergedCategoryBanners[key];
         const rawKicker =
           typeof val.kicker === 'string'
-            ? val.kicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            ? val.kicker
+                .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+                .replace(/\bATELIER\b/gi, 'SAMO')
             : fallback?.kicker || 'SAMO WEAVE';
         mergedCategoryBanners[key] = {
           categoryKey: key,
@@ -2086,7 +2088,9 @@ export function mergeSiteBannersConfig(
         : defaults.homeHeroImageUrl,
     homeHeroKicker:
       typeof stored.homeHeroKicker === 'string' && stored.homeHeroKicker.trim()
-        ? stored.homeHeroKicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+        ? stored.homeHeroKicker
+            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/\bATELIER\b/gi, 'SAMO')
         : defaults.homeHeroKicker,
     homeHeroTitle:
       typeof stored.homeHeroTitle === 'string' && stored.homeHeroTitle.trim()
@@ -2100,7 +2104,10 @@ export function mergeSiteBannersConfig(
     homeMiddleKicker:
       typeof stored.homeMiddleKicker === 'string' &&
       stored.homeMiddleKicker.trim()
-        ? stored.homeMiddleKicker.replace(/SAMO KIDS ATELIER/gi, 'SAMO KIDS').replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+        ? stored.homeMiddleKicker
+            .replace(/SAMO KIDS ATELIER/gi, 'SAMO KIDS')
+            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/\bATELIER\b/gi, 'SAMO')
         : defaults.homeMiddleKicker,
     homeMiddleTitle:
       typeof stored.homeMiddleTitle === 'string' &&
@@ -2344,7 +2351,9 @@ export function mergeNewsletterPopupConfig(
     typeof stored.subtitle === 'string'
       ? LEGACY_POPUP_SUBTITLES.has(stored.subtitle.trim())
         ? DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle
-        : stored.subtitle.replace(/SAMO Atelier/gi, 'SAMO Weave')
+        : stored.subtitle
+            .replace(/SAMO Atelier/gi, 'SAMO Weave')
+            .replace(/\bAtelier\b/gi, 'Samo')
       : DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle;
 
   const rawButton =
@@ -2358,7 +2367,9 @@ export function mergeNewsletterPopupConfig(
     typeof stored.kicker === 'string'
       ? LEGACY_POPUP_KICKERS.has(stored.kicker.trim())
         ? ''
-        : stored.kicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+        : stored.kicker
+            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/\bATELIER\b/gi, 'SAMO')
       : DEFAULT_NEWSLETTER_POPUP_CONFIG.kicker;
 
   return {

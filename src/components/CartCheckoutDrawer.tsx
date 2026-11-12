@@ -812,7 +812,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
               </div>
 
               <p className="text-xs text-zinc-600 leading-relaxed">
-                Your order is now visible in the SAMO Admin Dashboard where the atelier team will review and confirm dispatch.
+                Your order is now visible in the SAMO Admin Dashboard where the Samo team will review and confirm dispatch.
               </p>
             </div>
           )}

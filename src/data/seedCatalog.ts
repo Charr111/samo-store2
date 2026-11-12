@@ -387,7 +387,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   },
   {
     id: 'samo-w-tops-01',
-    name: 'SCULPTED COWL SATIN & LACE ATELIER TOP',
+    name: 'SCULPTED COWL SATIN & LACE SAMO TOP',
     garmentCode: 'F-2364',
     department: 'women',
     category: 'Tops',
@@ -422,7 +422,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     setItems: [
       {
         productId: 'samo-w-tops-01',
-        productName: 'SCULPTED COWL SATIN & LACE ATELIER TOP',
+        productName: 'SCULPTED COWL SATIN & LACE SAMO TOP',
         pieceLabel: 'Top / Shirt',
         garmentCode: 'F-2364',
         sizeType: 'letter',
@@ -452,7 +452,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     sizes: ['XS', 'S', 'M', 'L'],
     materials: ['Suede', 'Cashmere', 'Wool', 'Silk'],
     description:
-      'Two-piece runway ensemble pairing our Sculpted Cowl Satin & Lace Atelier Top (Letter sizing) with Architectural Double-Pleat Wool Trousers (Numeric sizing). Stock is synchronized with both standalone pieces.',
+      'Two-piece runway ensemble pairing our Sculpted Cowl Satin & Lace Samo Top (Letter sizing) with Architectural Double-Pleat Wool Trousers (Numeric sizing). Stock is synchronized with both standalone pieces.',
     inStock: true,
     featured: true,
   },
@@ -483,7 +483,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   // KIDS PRODUCTS (MINIS 1 To 5, CHILDREN 6+, Teen 13+ with CM sizing — Full Set removed from Kids)
   {
     id: 'samo-k-baby-01',
-    name: 'PETIT ATELIER CASHMERE & COTTON KNIT',
+    name: 'PETIT SAMO CASHMERE & COTTON KNIT',
     garmentCode: 'K-1042',
     department: 'kids',
     category: 'MINIS 1 To 5',
@@ -612,7 +612,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
   },
   {
     id: 'samo-k-children-02',
-    name: 'ATELIER SHEARLING COLLAR SUEDE JACKET',
+    name: 'SAMO SHEARLING COLLAR SUEDE JACKET',
     garmentCode: 'K-2410',
     department: 'kids',
     category: 'CHILDREN 6+',
@@ -665,8 +665,8 @@ export const INITIAL_PROMO_CODES: PromoCodeItem[] = [
     createdAt: '2026-10-20T00:00:00.000Z',
   },
   {
-    id: 'promo-atelier200',
-    code: 'ATELIER200',
+    id: 'promo-samo200',
+    code: 'SAMO200',
     discountType: 'fixed',
     discountValue: 200,
     active: true,
@@ -679,7 +679,7 @@ export const INITIAL_ORDERS: OrderItem[] = [
     id: 'ord-seed-101',
     orderNumber: 'SAMO-8491',
     customerName: 'Céline Moreau',
-    customerEmail: 'celine.moreau@atelier-paris.fr',
+    customerEmail: 'celine.moreau@samo-paris.fr',
     customerPhone: '+33 6 18 42 90 11',
     shippingLocation: '14 Avenue Montaigne, 75008 Paris, France',
     deliveryMethod: 'Standard Delivery',
@@ -715,7 +715,7 @@ export const INITIAL_ORDERS: OrderItem[] = [
     subtotal: 1430,
     totalPrice: 1430,
     itemsSummary:
-      '1x JUNIOR SPORT CHIC LEATHER & WOOL BOMBER (Size: 120 cm | Materials: Cow Leather, Wool, Cotton) — $890; 1x PETIT ATELIER CASHMERE & COTTON KNIT SET (Size: 90 cm | Materials: Cashmere, Cotton) — $540',
+      '1x JUNIOR SPORT CHIC LEATHER & WOOL BOMBER (Size: 120 cm | Materials: Cow Leather, Wool, Cotton) — $890; 1x PETIT SAMO CASHMERE & COTTON KNIT SET (Size: 90 cm | Materials: Cashmere, Cotton) — $540',
     itemsCount: 2,
     primaryProductName: 'JUNIOR SPORT CHIC LEATHER & WOOL BOMBER',
     primaryProductSize: '120 cm',
@@ -729,7 +729,7 @@ export const INITIAL_ORDERS: OrderItem[] = [
       },
       {
         productId: 'samo-k-baby-01',
-        productName: 'PETIT ATELIER CASHMERE & COTTON KNIT SET',
+        productName: 'PETIT SAMO CASHMERE & COTTON KNIT SET',
         selectedSize: '90 cm',
         quantity: 1,
       },

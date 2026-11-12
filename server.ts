@@ -167,7 +167,7 @@ async function readCatalogState(): Promise<PersistedCatalogState> {
       return d1State;
     }
   } catch (err) {
-    console.warn('[SAMO Atelier] D1 read notice, using local cache:', err);
+    console.warn('[SAMO Weave] D1 read notice, using local cache:', err);
   }
   return readLocalCatalogState();
 }
@@ -187,7 +187,7 @@ async function writeCatalogState(
       return refreshed;
     }
   } catch (err) {
-    console.warn('[SAMO Atelier] D1 write notice, falling back to local state:', err);
+    console.warn('[SAMO Weave] D1 write notice, falling back to local state:', err);
   }
   const current = await readCatalogState();
   const next: PersistedCatalogState = {
@@ -224,11 +224,11 @@ async function startServer() {
   // Initialize Cloudflare D1 SQL schema and warm catalog cache on boot
   initD1Schema()
     .then(() => {
-      console.log('[SAMO Atelier] Cloudflare D1 SQL connected & schema verified.');
+      console.log('[SAMO Weave] Cloudflare D1 SQL connected & schema verified.');
       readCatalogState().catch(() => {});
     })
     .catch((err) => {
-      console.warn('[SAMO Atelier] D1 boot warning:', err);
+      console.warn('[SAMO Weave] D1 boot warning:', err);
     });
 
   // Cross-Device Catalog Sync Endpoint (Backed by Cloudflare D1 SQL)
@@ -660,7 +660,7 @@ async function startServer() {
             .join('\n')
         : '';
 
-      const systemPrompt = `You are the Head Atelier Director for SAMO, an architectural luxury fashion house specializing in Women and Kids wear (Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts).
+      const systemPrompt = `You are the Head Samo Weave Director for SAMO, an architectural luxury fashion house specializing in Women and Kids wear (Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts).
 Provide concise, authoritative styling, sizing (Letter XS-XL, European Numeric 34-44, or Kids Centimeters 80 cm - 150 cm), and material care guidance.
 Current department focus: ${department || 'All'}.
 Available catalog items:

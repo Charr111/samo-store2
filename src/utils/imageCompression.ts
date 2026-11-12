@@ -568,7 +568,7 @@ export async function deleteMediaFromR2(
       };
     }
   } catch (err) {
-    console.warn('[SAMO Atelier] R2 media delete notice:', err);
+    console.warn('[SAMO Weave] R2 media delete notice:', err);
   }
   return { deletedKeys: keys };
 }

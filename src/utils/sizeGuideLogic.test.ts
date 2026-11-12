@@ -65,16 +65,18 @@ test('getCategoryActiveSizeGuides prioritizes manual admin category selection', 
   assert.deepEqual(getCategoryActiveSizeGuides(unconfiguredCat), ['tops_guide']);
 });
 
-test('mergeSizeGuideConfig safely handles partial/empty input', () => {
+test('mergeSizeGuideConfig safely handles partial/empty input and normalizes Atelier to SAMO', () => {
   const merged = mergeSizeGuideConfig(null);
   assert.equal(merged.masterEnabled, true);
+  assert.equal(merged.fitNoteTitle, 'SAMO FIT NOTE');
   assert.equal(merged.tables.tops_guide.rows.length, 7);
 
   const partialMerged = mergeSizeGuideConfig({
     masterEnabled: false,
-    fitNoteTitle: 'CUSTOM FIT NOTE',
+    fitNoteTitle: 'ATELIER FIT NOTE',
   });
   assert.equal(partialMerged.masterEnabled, false);
-  assert.equal(partialMerged.fitNoteTitle, 'CUSTOM FIT NOTE');
+  assert.equal(partialMerged.fitNoteTitle, 'SAMO FIT NOTE');
   assert.equal(partialMerged.topsGuideEnabled, true);
 });
+

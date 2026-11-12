@@ -73,7 +73,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
                 Size Guide
               </h2>
               <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono-tabular">
-                Centimeters (cm) · Atelier Standard Fit
+                Centimeters (cm) · Samo Standard Fit
               </p>
             </div>
           </div>
@@ -173,7 +173,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
             </div>
           )}
 
-          {/* Atelier Fit Note Double-Framed Box */}
+          {/* Samo Fit Note Double-Framed Box */}
           {config.fitNoteEnabled && config.fitNoteText && (
             <div
               className="border border-[#1A1A1A] p-4 bg-[#FBFBFA] space-y-1.5 rounded-none"
@@ -181,7 +181,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
             >
               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.16em] text-[#1A1A1A] flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-[#4A080C] shrink-0" />
-                <span>{config.fitNoteTitle || 'ATELIER FIT NOTE'}</span>
+                <span>{config.fitNoteTitle || 'SAMO FIT NOTE'}</span>
               </div>
               <p className="text-xs text-zinc-700 leading-relaxed">
                 {config.fitNoteText}
@@ -192,7 +192,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
 
         {/* Footer info banner */}
         <div className="px-4 sm:px-6 py-3 border-t border-[#E5E5E5] bg-[#FFFFFF] flex items-center justify-between text-[10px] text-zinc-500 shrink-0">
-          <span>SAMO Atelier · Precision Garment Sizing</span>
+          <span>SAMO Weave · Precision Garment Sizing</span>
           <button
             type="button"
             onClick={onClose}

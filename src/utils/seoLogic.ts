@@ -29,7 +29,7 @@ export const LUXURY_FASHION_CORE_KEYWORDS: readonly string[] = [
   'designer leather bags',
   'luxury kids wear',
   'precision centimeter sizing',
-  'fine leather atelier',
+  'fine leather Samo Weave',
   'sport chic luxury',
   'Beirut Paris Milan luxury fashion',
 ];

@@ -1,6 +1,6 @@
 import { CategoryItem, SizeGuideConfig, SizeGuideId } from '../types/samo';
 
-export const DEFAULT_FIT_NOTE_TITLE = 'ATELIER FIT NOTE';
+export const DEFAULT_FIT_NOTE_TITLE = 'SAMO FIT NOTE';
 export const DEFAULT_FIT_NOTE_TEXT =
   'For structured woven and satin pieces graded 38 to 46, size 38 corresponds to a Small (S). If you are between sizes or prefer a relaxed drape on non-stretch fabrics (like satin, raw denim, or heavy cow leather), we recommend taking the next size up.';
 
@@ -142,6 +142,21 @@ export function mergeSizeGuideConfig(
   const topsIncoming = incoming.tables?.tops_guide;
   const trousersIncoming = incoming.tables?.trousers_guide;
 
+  const normalizedFitNoteTitle =
+    typeof incoming.fitNoteTitle === 'string' && incoming.fitNoteTitle.trim()
+      ? incoming.fitNoteTitle
+          .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+          .replace(/ATELIER FIT NOTE/gi, 'SAMO FIT NOTE')
+          .replace(/\bAtelier\b/gi, 'SAMO')
+      : def.fitNoteTitle;
+
+  const normalizedFitNoteText =
+    typeof incoming.fitNoteText === 'string' && incoming.fitNoteText.trim()
+      ? incoming.fitNoteText
+          .replace(/SAMO Atelier/gi, 'SAMO Weave')
+          .replace(/\batelier\b/gi, 'Samo')
+      : def.fitNoteText;
+
   return {
     masterEnabled:
       typeof incoming.masterEnabled === 'boolean'
@@ -159,14 +174,8 @@ export function mergeSizeGuideConfig(
       typeof incoming.fitNoteEnabled === 'boolean'
         ? incoming.fitNoteEnabled
         : def.fitNoteEnabled,
-    fitNoteTitle:
-      typeof incoming.fitNoteTitle === 'string' && incoming.fitNoteTitle.trim()
-        ? incoming.fitNoteTitle
-        : def.fitNoteTitle,
-    fitNoteText:
-      typeof incoming.fitNoteText === 'string' && incoming.fitNoteText.trim()
-        ? incoming.fitNoteText
-        : def.fitNoteText,
+    fitNoteTitle: normalizedFitNoteTitle,
+    fitNoteText: normalizedFitNoteText,
     tables: {
       tops_guide: {
         id: 'tops_guide',

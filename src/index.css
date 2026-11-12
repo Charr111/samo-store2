@@ -4,6 +4,7 @@
   :root {
     --font-display: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-serif: 'Cormorant Garamond', Georgia, Cambria, "Times New Roman", Times, serif;
     --font-mono: 'IBM Plex Mono', monospace;
   }
 
@@ -18,6 +19,10 @@
 
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
+  }
+
+  .font-serif {
+    font-family: var(--font-serif);
   }
 
   .font-mono-tabular {
