@@ -516,9 +516,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="sole-product-modal-title"
+      onClick={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          !isSizeGuideOpen &&
+          window.matchMedia('(min-width: 768px)').matches
+        ) {
+          onClose();
+        }
+      }}
       className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/70 p-3 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
     >
-      <div className="relative w-full max-w-4xl bg-white border border-zinc-950 grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-4xl bg-white border border-zinc-950 grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto"
+      >
         {/* Close Button */}
         <button
           type="button"
