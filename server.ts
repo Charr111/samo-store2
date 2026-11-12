@@ -149,7 +149,7 @@ async function pushCatalogStateToR2(state: PersistedCatalogState): Promise<void>
 
 let cachedD1Catalog: PersistedCatalogState | null = null;
 let lastD1FetchMs = 0;
-const D1_CACHE_TTL_MS = 2500;
+const D1_CACHE_TTL_MS = 30_000;
 
 async function readCatalogState(): Promise<PersistedCatalogState> {
   const now = Date.now();
@@ -540,6 +540,7 @@ async function startServer() {
       };
 
       await upsertD1NewsletterSubscriber(newSub);
+      lastD1FetchMs = 0;
       const all = await readD1NewsletterSubscribers();
 
       res
@@ -628,6 +629,7 @@ async function startServer() {
       );
       if (target) {
         await deleteD1NewsletterSubscriber(target.email);
+        lastD1FetchMs = 0;
       }
       const filtered = await readD1NewsletterSubscribers();
       res.status(200).json({ success: true, subscribers: filtered });

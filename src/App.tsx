@@ -102,10 +102,15 @@ import { ProductImage } from './components/ProductImage';
 import { CatalogProductCard } from './components/CatalogProductCard';
 import { ProductModal } from './components/ProductModal';
 import { CartCheckoutDrawer } from './components/CartCheckoutDrawer';
-import { AdminDashboard } from './components/AdminDashboard';
 import { AiStylistModal } from './components/AiStylistModal';
 import { NewsletterPopupModal } from './components/NewsletterPopupModal';
 import { FaqSection } from './components/FaqSection';
+
+const AdminDashboard = React.lazy(() =>
+  import('./components/AdminDashboard').then((mod) => ({
+    default: mod.AdminDashboard,
+  }))
+);
 
 const STORAGE_KEYS = {
   categories: 'samo_categories_v2',
@@ -959,14 +964,28 @@ export default function App() {
     };
 
     pullServerCatalog();
-    const intervalId = window.setInterval(pullServerCatalog, 4000);
+    const intervalId = window.setInterval(() => {
+      if (
+        typeof document === 'undefined' ||
+        document.visibilityState === 'visible'
+      ) {
+        pullServerCatalog();
+      }
+    }, 20000);
     const onFocus = () => pullServerCatalog();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pullServerCatalog();
+      }
+    };
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       active = false;
       window.clearInterval(intervalId);
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
@@ -2320,73 +2339,75 @@ export default function App() {
     [cartItems]
   );
 
-  // ROUTE: /admin — Strictly isolated Admin Mode
+  // ROUTE: /admin — Strictly isolated Admin Mode (Lazy-loaded so storefront shoppers never download the Admin bundle)
   if (currentRoute === '/admin') {
     return (
-      <AdminDashboard
-        currentUser={currentUser}
-        aiAdminUnlocked={aiAdminUnlocked}
-        onUnlockAiAdmin={() => {
-          setAiAdminUnlocked(true);
-        }}
-        onGoogleSignIn={async () => {
-          await signInWithPopup(auth, googleProvider);
-        }}
-        onSignOut={async () => {
-          await firebaseSignOut(auth);
-          setAiAdminUnlocked(false);
-          try {
-            localStorage.removeItem(STORAGE_KEYS.aiAdmin);
-          } catch {}
-        }}
-        onNavigateHome={(route) => handleNavigate(route)}
-        categories={categories}
-        products={products}
-        promoCodes={promoCodes}
-        customMaterials={customMaterials}
-        customColors={customColors}
-        orders={orders}
-        preorders={preorders}
-        admins={admins}
-        siteBanners={siteBanners}
-        onUpdateSiteBanners={handleUpdateSiteBanners}
-        onAddCategory={handleAddCategory}
-        onUpdateCategory={handleUpdateCategory}
-        onUpdateCategorySortOrder={handleUpdateCategorySortOrder}
-        onMoveCategoryOrder={handleMoveCategoryOrder}
-        onRenumberDepartmentCategories={handleRenumberDepartmentCategories}
-        onDeleteCategory={handleDeleteCategory}
-        onAddProduct={handleAddProduct}
-        onUpdateProductSizeQuantity={handleUpdateProductSizeQuantity}
-        onUpdateProductColorVariants={handleUpdateProductColorVariants}
-        onUpdateProductMeta={handleUpdateProductMeta}
-        onToggleProductStock={handleToggleProductStock}
-        onDeleteProduct={handleDeleteProduct}
-        onAddPromoCode={handleAddPromoCode}
-        onDeletePromoCode={handleDeletePromoCode}
-        onAddCustomMaterial={handleAddCustomMaterial}
-        onAddCustomColor={handleAddCustomColor}
-        onUpdateOrderStatus={handleUpdateOrderStatus}
-        onDeleteOrder={handleDeleteOrder}
-        autoAcceptOrders={autoAcceptOrders}
-        onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
-        showLowStockCount={showLowStockCount}
-        onToggleShowLowStockCount={handleToggleShowLowStockCount}
-        shrinkUploadsEnabled={shrinkUploadsEnabled}
-        onToggleShrinkUploads={handleToggleShrinkUploads}
-        onUpdatePreorderStatus={handleUpdatePreorderStatus}
-        onDeletePreorder={handleDeletePreorder}
-        onAddAdminByEmail={handleAddAdminByEmail}
-        onRemoveAdminByEmail={handleRemoveAdminByEmail}
-        newsletterSubscribers={newsletterSubscribers}
-        onDeleteNewsletterSubscriber={handleDeleteNewsletterSubscriber}
-        newsletterPopupConfig={newsletterPopupConfig}
-        onUpdateNewsletterPopupConfig={handleUpdateNewsletterPopupConfig}
-        seoConfig={seoConfig}
-        onRefreshSeoMetadata={handleRefreshSeoMetadata}
-        sizeGuideConfig={sizeGuideConfig}
-        onUpdateSizeGuideConfig={handleUpdateSizeGuideConfig}
-      />
+      <React.Suspense fallback={<div className="min-h-screen bg-[#0E0E10]" />}>
+        <AdminDashboard
+          currentUser={currentUser}
+          aiAdminUnlocked={aiAdminUnlocked}
+          onUnlockAiAdmin={() => {
+            setAiAdminUnlocked(true);
+          }}
+          onGoogleSignIn={async () => {
+            await signInWithPopup(auth, googleProvider);
+          }}
+          onSignOut={async () => {
+            await firebaseSignOut(auth);
+            setAiAdminUnlocked(false);
+            try {
+              localStorage.removeItem(STORAGE_KEYS.aiAdmin);
+            } catch {}
+          }}
+          onNavigateHome={(route) => handleNavigate(route)}
+          categories={categories}
+          products={products}
+          promoCodes={promoCodes}
+          customMaterials={customMaterials}
+          customColors={customColors}
+          orders={orders}
+          preorders={preorders}
+          admins={admins}
+          siteBanners={siteBanners}
+          onUpdateSiteBanners={handleUpdateSiteBanners}
+          onAddCategory={handleAddCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onUpdateCategorySortOrder={handleUpdateCategorySortOrder}
+          onMoveCategoryOrder={handleMoveCategoryOrder}
+          onRenumberDepartmentCategories={handleRenumberDepartmentCategories}
+          onDeleteCategory={handleDeleteCategory}
+          onAddProduct={handleAddProduct}
+          onUpdateProductSizeQuantity={handleUpdateProductSizeQuantity}
+          onUpdateProductColorVariants={handleUpdateProductColorVariants}
+          onUpdateProductMeta={handleUpdateProductMeta}
+          onToggleProductStock={handleToggleProductStock}
+          onDeleteProduct={handleDeleteProduct}
+          onAddPromoCode={handleAddPromoCode}
+          onDeletePromoCode={handleDeletePromoCode}
+          onAddCustomMaterial={handleAddCustomMaterial}
+          onAddCustomColor={handleAddCustomColor}
+          onUpdateOrderStatus={handleUpdateOrderStatus}
+          onDeleteOrder={handleDeleteOrder}
+          autoAcceptOrders={autoAcceptOrders}
+          onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
+          showLowStockCount={showLowStockCount}
+          onToggleShowLowStockCount={handleToggleShowLowStockCount}
+          shrinkUploadsEnabled={shrinkUploadsEnabled}
+          onToggleShrinkUploads={handleToggleShrinkUploads}
+          onUpdatePreorderStatus={handleUpdatePreorderStatus}
+          onDeletePreorder={handleDeletePreorder}
+          onAddAdminByEmail={handleAddAdminByEmail}
+          onRemoveAdminByEmail={handleRemoveAdminByEmail}
+          newsletterSubscribers={newsletterSubscribers}
+          onDeleteNewsletterSubscriber={handleDeleteNewsletterSubscriber}
+          newsletterPopupConfig={newsletterPopupConfig}
+          onUpdateNewsletterPopupConfig={handleUpdateNewsletterPopupConfig}
+          seoConfig={seoConfig}
+          onRefreshSeoMetadata={handleRefreshSeoMetadata}
+          sizeGuideConfig={sizeGuideConfig}
+          onUpdateSizeGuideConfig={handleUpdateSizeGuideConfig}
+        />
+      </React.Suspense>
     );
   }
 
