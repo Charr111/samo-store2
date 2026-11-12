@@ -88,7 +88,7 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
             </div>
           </div>
           <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-tabular">
-            Swipe horizontally on mobile →
+            Swipe horizontally →
           </span>
         </div>
 
@@ -165,7 +165,7 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
           >
             FREQUENTLY ASKED QUESTIONS
           </h2>
-          <p className="font-serif italic text-base sm:text-lg text-zinc-800">
+          <p className="font-serif not-italic text-base sm:text-lg text-zinc-800">
             Everything you need to know about our services and policies.
           </p>
         </div>
@@ -233,13 +233,13 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
             rel="noopener noreferrer"
             data-testid="faq-whatsapp-contact-link"
             aria-label="Still have questions? Contact us on WhatsApp at 70 224 767"
-            className="inline-flex items-center justify-center font-serif italic text-base sm:text-lg tracking-[0.03em] text-zinc-950 hover:opacity-75 transition-opacity cursor-pointer"
+            className="inline-flex items-center justify-center font-serif not-italic text-base sm:text-lg tracking-[0.03em] text-zinc-950 hover:opacity-75 transition-opacity cursor-pointer"
           >
-            <span className="underline underline-offset-4">
+            <span className="not-italic no-underline">
               STILL HAVE QUESTIONS?
             </span>
-            <span className="mx-1.5 no-underline">/</span>
-            <span className="underline underline-offset-4">CONTACT US →</span>
+            <span className="mx-1.5 not-italic no-underline">/</span>
+            <span className="not-italic underline underline-offset-4">CONTACT US →</span>
           </a>
         </div>
       </div>

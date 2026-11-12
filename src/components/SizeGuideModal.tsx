@@ -123,7 +123,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
                   {currentTable.title}
                 </span>
                 <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-tabular">
-                  Swipe horizontally on mobile →
+                  Swipe horizontally →
                 </span>
               </div>
 
