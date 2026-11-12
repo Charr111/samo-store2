@@ -207,7 +207,14 @@ export function buildCategoryUrl(
   if (cleanRoute === '/admin' || cleanRoute === '/showroom') {
     return cleanRoute;
   }
-  if (cleanRoute === '/new-arrivals' || cleanRoute === '/gifts') {
+  if (cleanRoute === '/new-arrivals') {
+    const cat = (categoryName || '').trim().toLowerCase();
+    if (cat === 'women' || cat === 'kids') {
+      return `/new-arrivals/${cat}`;
+    }
+    return '/new-arrivals';
+  }
+  if (cleanRoute === '/gifts') {
     return cleanRoute;
   }
   if (cleanRoute === '/women' || cleanRoute === '/kids') {
@@ -356,11 +363,26 @@ export function parseCatalogUrlState(
     };
   }
   if (firstSeg === 'new-arrivals') {
+    const secondSeg = (segments[1] || '').toLowerCase();
+    if (secondSeg === 'women' || secondSeg === 'kids') {
+      const dept = secondSeg as Department;
+      const prodSlug = segments[2];
+      const matched = prodSlug
+        ? findProductBySlug(products, prodSlug, dept) ||
+          findProductBySlug(products, prodSlug)
+        : null;
+      return {
+        route: '/new-arrivals',
+        selectedCategory: dept,
+        matchedProduct: matched || null,
+        productSlugCandidate: prodSlug,
+      };
+    }
     const prodSlug = segments[1];
     const matched = prodSlug ? findProductBySlug(products, prodSlug) : null;
     return {
       route: '/new-arrivals',
-      selectedCategory: 'all',
+      selectedCategory: matched?.department === 'kids' ? 'kids' : 'women',
       matchedProduct: matched || null,
       productSlugCandidate: prodSlug,
     };
@@ -1873,7 +1895,9 @@ export function getCategoryBannerKey(
   const lowerCat = cleanCat.toLowerCase();
 
   if (routeOrDept === '/new-arrivals') {
-    return 'collection:new-arrivals';
+    return lowerCat === 'kids'
+      ? 'collection:new-arrivals-kids'
+      : 'collection:new-arrivals';
   }
   if (routeOrDept === '/gifts') {
     return 'collection:gifts';
@@ -1911,6 +1935,7 @@ const DEFAULT_CATEGORY_STUDIO_IMAGES: Record<string, string> = {
   'kids:teen-13': 'studio://kids-teen-suede-varsity',
   'kids:teen-13-plus': 'studio://kids-teen-suede-varsity',
   'collection:new-arrivals': 'studio://women-fur-opera-coat',
+  'collection:new-arrivals-kids': 'studio://kids-junior-leather-bomber',
   'collection:gifts': 'studio://women-bags-hourglass-burgundy',
 };
 
@@ -1970,8 +1995,14 @@ export function buildDefaultSiteBanners(
   categoryBanners['collection:new-arrivals'] =
     buildDefaultCategoryBannerForCategory(
       'collection',
-      'New Arrivals',
+      'New Arrivals (Women)',
       'collection:new-arrivals'
+    );
+  categoryBanners['collection:new-arrivals-kids'] =
+    buildDefaultCategoryBannerForCategory(
+      'collection',
+      'New Arrival (Kids)',
+      'collection:new-arrivals-kids'
     );
   categoryBanners['collection:gifts'] = buildDefaultCategoryBannerForCategory(
     'collection',

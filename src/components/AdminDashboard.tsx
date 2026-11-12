@@ -4399,6 +4399,220 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         );
                       }
                     )}
+
+                    {/* Dedicated Women's New Arrivals Category In-Feed Banner Card */}
+                    {(() => {
+                      const bKey = getCategoryBannerKey('/new-arrivals', 'women');
+                      const catDisplayName = 'New Arrivals (Women)';
+                      const storedBanner = siteBanners.categoryBanners?.[bKey];
+                      const bannerCfg =
+                        storedBanner ||
+                        buildDefaultCategoryBannerForCategory(
+                          'collection',
+                          catDisplayName,
+                          bKey
+                        );
+                      const isBannerActive =
+                        Boolean(bannerCfg.enabled) &&
+                        Boolean(
+                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                        );
+
+                      return (
+                        <div
+                          key={bKey}
+                          data-testid="admin-banner-card-new-arrivals-women"
+                          className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                            <div className="space-y-1">
+                              <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-white text-zinc-950 font-mono-tabular text-[11px] font-extrabold">
+                                  COLLECTION
+                                </span>
+                                <span>Women · {catDisplayName}</span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400">
+                                Banner appears between products in /new-arrivals/women (Women&apos;s New Arrivals)
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCategoryBanner(
+                                    bKey,
+                                    'collection',
+                                    catDisplayName,
+                                    (prev) => {
+                                      const nextEnabled = !isBannerActive;
+                                      const fallbackDefault =
+                                        buildDefaultCategoryBannerForCategory(
+                                          'collection',
+                                          catDisplayName,
+                                          bKey
+                                        );
+                                      return {
+                                        ...prev,
+                                        enabled: nextEnabled,
+                                        imageUrl:
+                                          nextEnabled &&
+                                          (!prev.imageUrl ||
+                                            !prev.imageUrl.trim())
+                                            ? fallbackDefault.imageUrl
+                                            : prev.imageUrl,
+                                      };
+                                    },
+                                    `${catDisplayName} Banner ${
+                                      isBannerActive
+                                        ? 'Removed/Hidden'
+                                        : 'Added/Enabled'
+                                    }`
+                                  )
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                  isBannerActive
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                    : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {isBannerActive ? (
+                                  <>
+                                    <Eye className="w-3 h-3" />
+                                    <span>Banner Active</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <EyeOff className="w-3 h-3" />
+                                    <span>No Banner</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                            <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                              {isBannerActive ? (
+                                <ProductImage
+                                  src={bannerCfg.imageUrl}
+                                  alt={`${catDisplayName} In-Feed Banner`}
+                                  category="Fur"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
+                                  No Banner Active (Hidden on Website)
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="sm:col-span-8 space-y-2.5">
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                  In-Feed Banner Image URL for {catDisplayName}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={bannerCfg.imageUrl}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateCategoryBanner(
+                                      bKey,
+                                      'collection',
+                                      catDisplayName,
+                                      (prev) => ({
+                                        ...prev,
+                                        imageUrl: val,
+                                        enabled: Boolean(val.trim()),
+                                      })
+                                    );
+                                  }}
+                                  placeholder="https://... (Leave empty or click Delete Banner for no banner)"
+                                  className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                                  <span>Show after:</span>
+                                  <select
+                                    value={bannerCfg.insertAfterCount || 4}
+                                    onChange={(e) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          insertAfterCount: Number(
+                                            e.target.value
+                                          ),
+                                        }),
+                                        `Updated ${catDisplayName} banner position`
+                                      )
+                                    }
+                                    className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
+                                  >
+                                    <option value={2}>2 products</option>
+                                    <option value={4}>4 products</option>
+                                    <option value={6}>6 products</option>
+                                    <option value={8}>8 products</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <R2ImageUploadButton
+                                    compact={true}
+                                    ariaLabel={`Upload banner photo for ${catDisplayName}`}
+                                    label={
+                                      isBannerActive
+                                        ? 'Replace Photo'
+                                        : 'Upload Banner'
+                                    }
+                                    onUploaded={(url) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          imageUrl: url,
+                                          enabled: true,
+                                        }),
+                                        `Uploaded new banner for ${catDisplayName}`
+                                      )
+                                    }
+                                  />
+                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: '',
+                                            enabled: false,
+                                          }),
+                                          `Removed banner from ${catDisplayName} — no banner will appear in this category`
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                    >
+                                      Delete Banner
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -4836,6 +5050,220 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         );
                       }
                     )}
+
+                    {/* Dedicated Kids' New Arrivals Category In-Feed Banner Card */}
+                    {(() => {
+                      const bKey = getCategoryBannerKey('/new-arrivals', 'kids');
+                      const catDisplayName = 'New Arrival (Kids)';
+                      const storedBanner = siteBanners.categoryBanners?.[bKey];
+                      const bannerCfg =
+                        storedBanner ||
+                        buildDefaultCategoryBannerForCategory(
+                          'collection',
+                          catDisplayName,
+                          bKey
+                        );
+                      const isBannerActive =
+                        Boolean(bannerCfg.enabled) &&
+                        Boolean(
+                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                        );
+
+                      return (
+                        <div
+                          key={bKey}
+                          data-testid="admin-banner-card-new-arrivals-kids"
+                          className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                            <div className="space-y-1">
+                              <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-white text-zinc-950 font-mono-tabular text-[11px] font-extrabold">
+                                  COLLECTION
+                                </span>
+                                <span>Kids · {catDisplayName}</span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400">
+                                Banner appears between products in /new-arrivals/kids (Kids&apos; New Arrivals)
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCategoryBanner(
+                                    bKey,
+                                    'collection',
+                                    catDisplayName,
+                                    (prev) => {
+                                      const nextEnabled = !isBannerActive;
+                                      const fallbackDefault =
+                                        buildDefaultCategoryBannerForCategory(
+                                          'collection',
+                                          catDisplayName,
+                                          bKey
+                                        );
+                                      return {
+                                        ...prev,
+                                        enabled: nextEnabled,
+                                        imageUrl:
+                                          nextEnabled &&
+                                          (!prev.imageUrl ||
+                                            !prev.imageUrl.trim())
+                                            ? fallbackDefault.imageUrl
+                                            : prev.imageUrl,
+                                      };
+                                    },
+                                    `${catDisplayName} Banner ${
+                                      isBannerActive
+                                        ? 'Removed/Hidden'
+                                        : 'Added/Enabled'
+                                    }`
+                                  )
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                  isBannerActive
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                    : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {isBannerActive ? (
+                                  <>
+                                    <Eye className="w-3 h-3" />
+                                    <span>Banner Active</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <EyeOff className="w-3 h-3" />
+                                    <span>No Banner</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                            <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                              {isBannerActive ? (
+                                <ProductImage
+                                  src={bannerCfg.imageUrl}
+                                  alt={`${catDisplayName} In-Feed Banner`}
+                                  category="MINIS 1 To 5"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
+                                  No Banner Active (Hidden on Website)
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="sm:col-span-8 space-y-2.5">
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                  In-Feed Banner Image URL for {catDisplayName}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={bannerCfg.imageUrl}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateCategoryBanner(
+                                      bKey,
+                                      'collection',
+                                      catDisplayName,
+                                      (prev) => ({
+                                        ...prev,
+                                        imageUrl: val,
+                                        enabled: Boolean(val.trim()),
+                                      })
+                                    );
+                                  }}
+                                  placeholder="https://... (Leave empty or click Delete Banner for no banner)"
+                                  className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                                  <span>Show after:</span>
+                                  <select
+                                    value={bannerCfg.insertAfterCount || 4}
+                                    onChange={(e) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          insertAfterCount: Number(
+                                            e.target.value
+                                          ),
+                                        }),
+                                        `Updated ${catDisplayName} banner position`
+                                      )
+                                    }
+                                    className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
+                                  >
+                                    <option value={2}>2 products</option>
+                                    <option value={4}>4 products</option>
+                                    <option value={6}>6 products</option>
+                                    <option value={8}>8 products</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <R2ImageUploadButton
+                                    compact={true}
+                                    ariaLabel={`Upload banner photo for ${catDisplayName}`}
+                                    label={
+                                      isBannerActive
+                                        ? 'Replace Photo'
+                                        : 'Upload Banner'
+                                    }
+                                    onUploaded={(url) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          imageUrl: url,
+                                          enabled: true,
+                                        }),
+                                        `Uploaded new banner for ${catDisplayName}`
+                                      )
+                                    }
+                                  />
+                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: '',
+                                            enabled: false,
+                                          }),
+                                          `Removed banner from ${catDisplayName} — no banner will appear in this category`
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                    >
+                                      Delete Banner
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -7350,10 +7778,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         />
                         <div>
                           <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
-                            Show in New Arrivals (/new-arrivals)
+                            Show in New Arrivals (
+                            {prod.department === 'kids'
+                              ? '/new-arrivals/kids'
+                              : '/new-arrivals/women'}
+                            )
                           </span>
                           <span className="block text-[11px] text-zinc-500">
-                            Uncheck to remove this product from New Arrivals while keeping it in its category ({prod.category}).
+                            Uncheck to remove this product from{' '}
+                            {prod.department === 'kids'
+                              ? 'New Arrival (Kids)'
+                              : 'New Arrivals (Women)'}{' '}
+                            while keeping it in its category ({prod.category}).
                           </span>
                         </div>
                       </label>
@@ -9417,11 +9853,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="w-4 h-4 accent-zinc-950 cursor-pointer"
                     />
                     <span className="text-xs font-bold uppercase tracking-wider text-zinc-950">
-                      Show in New Arrivals (/new-arrivals)
+                      Show in New Arrivals (
+                      {itemDept === 'kids'
+                        ? '/new-arrivals/kids'
+                        : '/new-arrivals/women'}
+                      )
                     </span>
                   </label>
                   <p className="text-[11px] text-zinc-500 mt-0.5 pl-6">
-                    Keep checked to showcase this item in New Arrivals in addition to its selected Category ({itemCategory}).
+                    Keep checked to showcase this item in{' '}
+                    {itemDept === 'kids'
+                      ? 'New Arrival (Kids) (/new-arrivals/kids)'
+                      : 'New Arrivals (Women) (/new-arrivals/women)'}{' '}
+                    in addition to its selected Category ({itemCategory}).
                   </p>
                 </div>
               </div>

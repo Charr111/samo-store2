@@ -982,7 +982,12 @@ export default function App() {
     if (activeProductModal) {
       setActiveProductModal(null);
     }
-    const targetCategory = categoryName || 'all';
+    const targetCategory =
+      route === '/new-arrivals'
+        ? (categoryName || '').trim().toLowerCase() === 'kids'
+          ? 'kids'
+          : 'women'
+        : categoryName || 'all';
     const targetUrl = buildCategoryUrl(route, targetCategory);
     window.history.pushState({}, '', targetUrl);
     setCurrentRoute(route);
@@ -2103,7 +2108,11 @@ export default function App() {
         searchQuery,
       });
     } else if (currentRoute === '/new-arrivals') {
-      baseList = filterNewArrivalProducts(products);
+      const targetNaDept: Department =
+        selectedCategory.toLowerCase() === 'kids' ? 'kids' : 'women';
+      baseList = filterNewArrivalProducts(products).filter(
+        (p) => p.department === targetNaDept
+      );
     } else if (currentRoute === '/gifts') {
       baseList = filterGiftsProducts(products);
     } else if (currentRoute === '/home') {
@@ -2134,6 +2143,24 @@ export default function App() {
 
   // Resolve active category in-feed banner to appear between products on category pages
   const activeCategoryBanner = useMemo(() => {
+    if (currentRoute === '/new-arrivals') {
+      const isKidsNa = selectedCategory.toLowerCase() === 'kids';
+      const naDept: Department = isKidsNa ? 'kids' : 'women';
+      const naCatName = isKidsNa
+        ? 'New Arrival (Kids)'
+        : 'New Arrivals (Women)';
+      const key = getCategoryBannerKey('/new-arrivals', naDept);
+      const configured =
+        siteBanners.categoryBanners?.[key] ||
+        buildDefaultCategoryBannerForCategory('collection', naCatName, key);
+
+      return {
+        ...configured,
+        department: naDept,
+        categoryName: naCatName,
+      };
+    }
+
     let targetDept: Department = 'women';
     let targetCatName = 'Jacket';
 
@@ -2152,9 +2179,6 @@ export default function App() {
     } else if (currentRoute === '/gifts') {
       targetDept = 'women';
       targetCatName = 'Bags';
-    } else if (currentRoute === '/new-arrivals') {
-      targetDept = 'women';
-      targetCatName = 'Jacket';
     }
 
     const key = getCategoryBannerKey(targetDept, targetCatName);
@@ -2841,7 +2865,9 @@ export default function App() {
                       {searchQuery
                         ? `Search Results: "${searchQuery}"`
                         : currentRoute === '/new-arrivals'
-                        ? 'New Arrivals'
+                        ? selectedCategory.toLowerCase() === 'kids'
+                          ? 'New Arrivals — Kids'
+                          : 'New Arrivals — Women'
                         : 'Gifts — Bags & Belts'}
                     </h1>
                   </div>
@@ -2988,13 +3014,13 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Box 1: New Arrivals */}
                   <div
-                    onClick={() => handleNavigate('/new-arrivals')}
+                    onClick={() => handleNavigate('/new-arrivals', 'women')}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        handleNavigate('/new-arrivals');
+                        handleNavigate('/new-arrivals', 'women');
                       }
                     }}
                     className="group cursor-pointer border border-zinc-200 hover:border-zinc-950 bg-white flex flex-col justify-between transition-all"
@@ -3242,7 +3268,7 @@ export default function App() {
               <li>
                 <button
                   type="button"
-                  onClick={() => handleNavigate('/new-arrivals')}
+                  onClick={() => handleNavigate('/new-arrivals', 'women')}
                   className="hover:underline cursor-pointer"
                 >
                   New Arrivals
@@ -3289,14 +3315,14 @@ export default function App() {
               </li>
               <li>
                 <a
-                  href="/new-arrivals"
+                  href="/new-arrivals/women"
                   onClick={(e) => {
                     e.preventDefault();
-                    handleNavigate('/new-arrivals');
+                    handleNavigate('/new-arrivals', 'women');
                   }}
                   className="underline"
                 >
-                  samoweave.com/new-arrivals
+                  samoweave.com/new-arrivals/women
                 </a>
               </li>
               <li>

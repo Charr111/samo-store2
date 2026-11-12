@@ -63,7 +63,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile (< lg) Left Menu Hamburger Button */}
           <button
             type="button"
-            onClick={() => setDrawerOpen(!drawerOpen)}
+            onClick={() => {
+              if (!drawerOpen) {
+                if (
+                  currentRoute === '/kids' ||
+                  (currentRoute === '/new-arrivals' &&
+                    selectedCategory.toLowerCase() === 'kids')
+                ) {
+                  setDrawerTab('kids');
+                } else if (
+                  currentRoute === '/women' ||
+                  (currentRoute === '/new-arrivals' &&
+                    selectedCategory.toLowerCase() !== 'kids')
+                ) {
+                  setDrawerTab('women');
+                }
+              }
+              setDrawerOpen(!drawerOpen);
+            }}
             aria-label={drawerOpen ? 'Close navigation menu' : 'Open navigation menu'}
             className="lg:hidden p-2 -ml-2 text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
           >
@@ -76,14 +93,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="hidden lg:flex items-center gap-6 xl:gap-7 text-xs font-semibold tracking-[0.12em] uppercase text-zinc-700"
           >
             <a
-              href="/new-arrivals"
+              href="/new-arrivals/women"
               onClick={(e) => {
                 e.preventDefault();
-                onNavigate('/new-arrivals');
-                onSelectCategory('all');
+                onNavigate('/new-arrivals', 'women');
               }}
               className={`py-1 transition-colors whitespace-nowrap shrink-0 ${
-                currentRoute === '/new-arrivals'
+                currentRoute === '/new-arrivals' &&
+                selectedCategory.toLowerCase() !== 'kids'
                   ? 'text-zinc-950 border-b-2 border-zinc-950'
                   : 'hover:text-zinc-950'
               }`}
@@ -185,7 +202,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setDrawerOpen(!drawerOpen)}
+            onClick={() => {
+              if (!drawerOpen) {
+                if (
+                  currentRoute === '/kids' ||
+                  (currentRoute === '/new-arrivals' &&
+                    selectedCategory.toLowerCase() === 'kids')
+                ) {
+                  setDrawerTab('kids');
+                } else if (
+                  currentRoute === '/women' ||
+                  (currentRoute === '/new-arrivals' &&
+                    selectedCategory.toLowerCase() !== 'kids')
+                ) {
+                  setDrawerTab('women');
+                }
+              }
+              setDrawerOpen(!drawerOpen);
+            }}
             aria-label={drawerOpen ? 'Close navigation menu' : 'Open navigation menu'}
             className="hidden lg:inline-flex p-2 text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
           >
@@ -194,44 +228,46 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Balenciaga-inspired Full-Width Search Strip ("WHAT ARE YOU LOOKING FOR?") */}
-      <div className="flex items-center justify-between px-4 md:px-8 h-10 bg-white border-b border-zinc-200">
-        <div className="flex items-center gap-3 flex-1">
-          <Search className="w-4 h-4 text-zinc-500 shrink-0" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && searchQuery.trim()) {
-                onAiQuickSearch(searchQuery.trim());
-              }
-            }}
-            placeholder="WHAT ARE YOU LOOKING FOR? (E.G. COW LEATHER JACKET, SUEDE TRENCH...)"
-            aria-label="Search SAMO catalog"
-            className="w-full text-[11px] md:text-xs tracking-[0.08em] uppercase placeholder:text-zinc-400 text-zinc-950 focus:outline-none bg-transparent"
-          />
-        </div>
-        {searchQuery && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => onAiQuickSearch(searchQuery)}
-              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>Smart Match</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onSearchChange('')}
-              className="text-[11px] uppercase tracking-wider text-zinc-500 hover:text-zinc-950 px-1.5 cursor-pointer"
-            >
-              Clear
-            </button>
+      {/* Balenciaga-inspired Full-Width Search Strip ("WHAT ARE YOU LOOKING FOR?") — Hidden on Home Screen, shown on Category & Collection Pages */}
+      {currentRoute !== '/home' && (
+        <div className="flex items-center justify-between px-4 md:px-8 h-10 bg-white border-b border-zinc-200">
+          <div className="flex items-center gap-3 flex-1">
+            <Search className="w-4 h-4 text-zinc-500 shrink-0" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  onAiQuickSearch(searchQuery.trim());
+                }
+              }}
+              placeholder="WHAT ARE YOU LOOKING FOR? (E.G. COW LEATHER JACKET, SUEDE TRENCH...)"
+              aria-label="Search SAMO catalog"
+              className="w-full text-[11px] md:text-xs tracking-[0.08em] uppercase placeholder:text-zinc-400 text-zinc-950 focus:outline-none bg-transparent"
+            />
           </div>
-        )}
-      </div>
+          {searchQuery && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => onAiQuickSearch(searchQuery)}
+                className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Smart Match</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="text-[11px] uppercase tracking-wider text-zinc-500 hover:text-zinc-950 px-1.5 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Subcategory Horizontal Ribbon ONLY for /women and /kids (matching Video 2 & Screenshot 4) */}
       {(currentRoute === '/women' || currentRoute === '/kids') && (
@@ -319,7 +355,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onNavigate('/new-arrivals');
+                    onNavigate(
+                      '/new-arrivals',
+                      drawerTab === 'kids' ? 'kids' : 'women'
+                    );
                     setDrawerOpen(false);
                   }}
                   className="py-2 px-2 border border-zinc-300 text-[11px] font-bold uppercase tracking-wider hover:border-zinc-950 cursor-pointer"

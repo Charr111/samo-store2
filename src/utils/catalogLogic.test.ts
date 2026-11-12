@@ -1621,3 +1621,37 @@ test('Garment Code helpers format Ref. codes, support optional per-color serial 
     'F-2364-BLK'
   );
 });
+
+test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids) and dedicated category banners work cleanly', () => {
+  assert.equal(buildCategoryUrl('/new-arrivals', 'women'), '/new-arrivals/women');
+  assert.equal(buildCategoryUrl('/new-arrivals', 'kids'), '/new-arrivals/kids');
+  assert.equal(buildCategoryUrl('/new-arrivals'), '/new-arrivals');
+
+  const parsedWomen = parseCatalogUrlState('/new-arrivals/women', INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+  assert.equal(parsedWomen.route, '/new-arrivals');
+  assert.equal(parsedWomen.selectedCategory, 'women');
+
+  const parsedKids = parseCatalogUrlState('/new-arrivals/kids', INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+  assert.equal(parsedKids.route, '/new-arrivals');
+  assert.equal(parsedKids.selectedCategory, 'kids');
+
+  const parsedDefault = parseCatalogUrlState('/new-arrivals', INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+  assert.equal(parsedDefault.route, '/new-arrivals');
+  assert.equal(parsedDefault.selectedCategory, 'women');
+
+  assert.equal(getCategoryBannerKey('/new-arrivals', 'women'), 'collection:new-arrivals');
+  assert.equal(getCategoryBannerKey('/new-arrivals', 'kids'), 'collection:new-arrivals-kids');
+
+  const defaultBanners = buildDefaultSiteBanners(INITIAL_CATEGORIES);
+  assert.ok(defaultBanners.categoryBanners['collection:new-arrivals']);
+  assert.equal(
+    defaultBanners.categoryBanners['collection:new-arrivals'].categoryName,
+    'New Arrivals (Women)'
+  );
+  assert.ok(defaultBanners.categoryBanners['collection:new-arrivals-kids']);
+  assert.equal(
+    defaultBanners.categoryBanners['collection:new-arrivals-kids'].categoryName,
+    'New Arrival (Kids)'
+  );
+});
+
