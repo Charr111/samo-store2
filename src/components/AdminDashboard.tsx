@@ -3426,7 +3426,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         playsInline
                         onError={(e) => {
                           const defaultVid =
-                            '/assets/aistudio/recording-2026-10-20_ae756f63.webm';
+                            'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4';
                           if (e.currentTarget.src.indexOf(defaultVid) === -1) {
                             e.currentTarget.src = defaultVid;
                           }
@@ -3457,7 +3457,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           Video&rdquo; is selected
                         </label>
                         {siteBanners.homeHeroVideoUrl !==
-                          '/assets/aistudio/recording-2026-10-20_ae756f63.webm' && (
+                          'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4' && (
                           <button
                             type="button"
                             onClick={() => {
@@ -3465,7 +3465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 ...siteBanners,
                                 homeHeroMediaType: 'video',
                                 homeHeroVideoUrl:
-                                  '/assets/aistudio/recording-2026-10-20_ae756f63.webm',
+                                  'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4',
                               });
                               setBannerFeedback(
                                 '✓ Restored Original SAMO Homepage Hero Video'

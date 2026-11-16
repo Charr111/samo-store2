@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .playwright-cli/
 .samo-catalog-state.json
+.data/

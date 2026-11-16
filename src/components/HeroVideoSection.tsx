@@ -13,7 +13,7 @@ interface HeroVideoSectionProps {
   title?: string;
 }
 
-export const DEFAULT_HERO_VIDEO = '/assets/aistudio/recording-2026-10-20_ae756f63.webm';
+export const DEFAULT_HERO_VIDEO = 'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4';
 
 export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   onNavigate,
