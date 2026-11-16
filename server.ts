@@ -18,8 +18,8 @@ import {
   readD1NewsletterSubscribers,
   upsertD1NewsletterSubscriber,
   deleteD1NewsletterSubscriber,
-  NewsletterSubscriberRecord,
-} from './server/d1';
+  type NewsletterSubscriberRecord,
+} from './server/d1.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -217,7 +217,7 @@ function getAiClient(): GoogleGenAI {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '50mb' }));
 

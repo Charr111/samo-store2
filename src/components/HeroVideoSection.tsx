@@ -34,7 +34,6 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   const effectiveVideoUrl = customVideoFailed
     ? DEFAULT_HERO_VIDEO
     : requestedVideoUrl;
-  const isDefaultClip = effectiveVideoUrl === DEFAULT_HERO_VIDEO;
 
   useEffect(() => {
     setCustomVideoFailed(false);
@@ -73,27 +72,13 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
           muted={isMuted}
           playsInline
           preload="auto"
-          onTimeUpdate={(e) => {
-            if (!isDefaultClip) return;
-            const vid = e.currentTarget;
-            if (vid.currentTime < 0.2 || vid.currentTime > 2.8) {
-              vid.currentTime = 0.25;
-            }
-          }}
-          onLoadedMetadata={(e) => {
-            if (isDefaultClip) {
-              e.currentTarget.currentTime = 0.25;
-            }
-          }}
           onError={(e) => {
             console.warn('[SAMO Weave] Hero video playback notice:', e);
             if (!effectiveVideoUrl || effectiveVideoUrl === '') {
               setCustomVideoFailed(true);
             }
           }}
-          className={`pointer-events-none h-full w-full object-cover opacity-90 ${
-            isDefaultClip ? 'object-[50%_75%] scale-[1.24] origin-bottom' : 'object-center'
-          }`}
+          className="pointer-events-none h-full w-full object-cover object-center opacity-90"
         >
           {effectiveVideoUrl.toLowerCase().endsWith('.webm') && (
             <source src={effectiveVideoUrl} type="video/webm" />
