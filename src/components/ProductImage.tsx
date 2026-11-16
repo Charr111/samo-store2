@@ -36,8 +36,18 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     style: styleType,
   });
 
-  const isStudioUri =
-    !normalizedSrc || normalizedSrc.startsWith('studio://') || hasError;
+  // If no image URL is uploaded yet (or an external image failed), render a clean blank studio box
+  if (!normalizedSrc || hasError) {
+    return (
+      <div
+        className={`relative flex items-center justify-center overflow-hidden bg-[#EFEFEF] select-none ${className}`}
+        role="img"
+        aria-label={seoAltText}
+      />
+    );
+  }
+
+  const isStudioUri = normalizedSrc.startsWith('studio://');
   const variantKey = (normalizedSrc || alt || category).toLowerCase();
   const isProfile = variantKey.includes('profile');
   const isDetail = variantKey.includes('detail');

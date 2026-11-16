@@ -38,20 +38,59 @@ export const PREBUILT_COLORS: readonly string[] = [
   'Camel',
 ];
 
-export const LETTER_SIZES: readonly string[] = ['XS', 'S', 'M', 'L', 'XL'];
+export const LETTER_SIZES: readonly string[] = [
+  'XS',
+  'S',
+  'M',
+  'L',
+  'XL',
+  'XXL',
+  'OS',
+];
 export const DUAL_LETTER_SIZES: readonly string[] = ['S/M', 'M/L', 'L/XL'];
-export const NUMERIC_SIZES: readonly string[] = ['34', '36', '38', '40', '42', '44'];
+export const NUMERIC_SIZES: readonly string[] = [
+  '34',
+  '36',
+  '38',
+  '40',
+  '42',
+  '44',
+  '46',
+  '48',
+  '38/39',
+  '39/40',
+  '40/41',
+];
 export const MONTHS_SIZES: readonly string[] = [
   '3-6 Months',
+  '6-9 Months',
   '6-12 Months',
+  '9-12 Months',
   '12-18 Months',
   '18-24 Months',
+  '6-9M',
+  '9-12M',
+  '12-18M',
+  '18-24M',
 ];
 export const YEARS_SIZES: readonly string[] = [
   '2-3 Years',
   '4-5 Years',
   '6-7 Years',
   '8-9 Years',
+  '2y',
+  '3y',
+  '4y',
+  '5y',
+  '6y',
+  '7y',
+  '8y',
+  '9y',
+  '10y',
+  '11y',
+  '12y',
+  '13y',
+  '14y',
 ];
 export const CM_SIZES: readonly string[] = [
   '80 cm',
@@ -98,12 +137,17 @@ export function getColorSwatchHex(colorName: string): string {
     white: '#FAFAFA',
     camel: '#B88B58',
     beige: '#D6C7B2',
+    graige: '#B8B0A4',
     sand: '#CBB89D',
+    'light grey': '#A1A1AA',
+    'light gray': '#A1A1AA',
     grey: '#71717A',
     gray: '#71717A',
     charcoal: '#27272A',
     navy: '#172554',
     blue: '#1E3A8A',
+    matcha: '#748B6F',
+    mint: '#8DA390',
     olive: '#3F4D34',
     green: '#14532D',
     red: '#991B1B',
@@ -271,6 +315,12 @@ export function findCategoryBySlug(
     if (catSlug === targetSlug) return true;
     if (createSafeSlug(c.name) === targetSlug) return true;
     if (c.name.trim().toLowerCase() === rawClean.toLowerCase()) return true;
+    if (
+      (targetSlug === 'jacket' || targetSlug === 'jackets') &&
+      (catSlug === 'jacket' || catSlug === 'jackets')
+    ) {
+      return true;
+    }
 
     if (department === 'kids' || c.department === 'kids') {
       const norm = normalizeKidsCategoryName(c.name);
@@ -516,6 +566,10 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
   }
 
   if (sizeType === 'numeric') {
+    const dualNumMatch = trimmed.match(/^(\d+\s*[-/]\s*\d+)$/);
+    if (dualNumMatch) {
+      return dualNumMatch[1].replace(/\s*[-/]\s*/g, '/');
+    }
     const numMatch = trimmed.match(/\d+/);
     return numMatch ? numMatch[0].slice(0, 10) : trimmed.slice(0, 40);
   }
@@ -557,11 +611,13 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
  * Returns default preset sizes for a given SizeType.
  */
 export function getDefaultSizesForType(sizeType: SizeType): string[] {
-  if (sizeType === 'letter') return [...LETTER_SIZES];
+  if (sizeType === 'letter') return ['XS', 'S', 'M', 'L', 'XL'];
   if (sizeType === 'dual_letter') return [...DUAL_LETTER_SIZES];
   if (sizeType === 'numeric') return ['36', '38', '40', '42'];
-  if (sizeType === 'months') return [...MONTHS_SIZES];
-  if (sizeType === 'years') return [...YEARS_SIZES];
+  if (sizeType === 'months')
+    return ['3-6 Months', '6-12 Months', '12-18 Months', '18-24 Months'];
+  if (sizeType === 'years')
+    return ['2-3 Years', '4-5 Years', '6-7 Years', '8-9 Years'];
   return ['90 cm', '100 cm', '110 cm', '120 cm', '130 cm'];
 }
 
@@ -1688,6 +1744,8 @@ export function filterCatalogProducts(
     const matchesCategory =
       cat === 'all' ||
       itemCatNormalized === cat ||
+      ((cat === 'jacket' || cat === 'jackets') &&
+        (itemCatNormalized === 'jacket' || itemCatNormalized === 'jackets')) ||
       (cat === 'full set' && item.department === 'women' && Boolean(item.isFullSet));
     if (!matchesCategory) {
       return false;
@@ -1912,7 +1970,11 @@ export function getCategoryBannerKey(
 
   const normalizedName =
     dept === 'kids' ? normalizeKidsCategoryName(cleanCat) : cleanCat;
-  return `${dept}:${createSafeSlug(normalizedName)}`;
+  const slug = createSafeSlug(normalizedName);
+  if (dept === 'women' && slug === 'jackets') {
+    return 'women:jacket';
+  }
+  return `${dept}:${slug}`;
 }
 
 const DEFAULT_CATEGORY_STUDIO_IMAGES: Record<string, string> = {

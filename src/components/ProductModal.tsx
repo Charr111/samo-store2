@@ -410,12 +410,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const sourceGallery =
     variantGalleryUrls.length > 0 ? variantGalleryUrls : fallbackProductGalleryUrls;
 
-  const allImages = Array.from(
-    new Set([
-      primaryImageForSelection,
-      ...sourceGallery.filter((u) => u && u !== primaryImageForSelection),
-    ])
+  const nonEmptyImages = Array.from(
+    new Set(
+      [
+        (primaryImageForSelection || '').trim(),
+        ...sourceGallery.filter((u) => u && u !== primaryImageForSelection),
+      ].filter(Boolean)
+    )
   ).slice(0, 4);
+  const allImages = nonEmptyImages.length > 0 ? nonEmptyImages : [''];
 
   const scrollToGallerySlide = (targetIndex: number) => {
     if (allImages.length <= 1) return;
@@ -1154,15 +1157,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             )}
 
-            {/* Editorial Construction Notes */}
-            <div className="pt-4 border-t border-zinc-200">
-              <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950 mb-1.5">
-                Samo Notes
-              </span>
-              <p className="text-xs leading-relaxed text-zinc-600">
-                {product.description}
-              </p>
-            </div>
+            {/* Editorial Construction Notes (only shown when a description is set) */}
+            {product.description && product.description.trim() && (
+              <div className="pt-4 border-t border-zinc-200">
+                <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950 mb-1.5">
+                  Samo Notes
+                </span>
+                <p className="text-xs leading-relaxed text-zinc-600">
+                  {product.description}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Primary Actions: ADD TO CART + BUY NOW, OR PREORDER WHEN OUT-OF-STOCK SIZE IS SELECTED */}

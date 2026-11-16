@@ -51,7 +51,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
         (Array.isArray(activeVariant.galleryUrls) &&
           activeVariant.galleryUrls.length > 0))
     ) {
-      return [primaryUrl || 'studio://samo-item'];
+      return [primaryUrl || ''];
     }
 
     const rawList = [
@@ -70,7 +70,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
     if (deduped.length === 1 && deduped[0].startsWith('studio://')) {
       deduped.push(`${deduped[0]}-profile`);
     }
-    return deduped.length > 0 ? deduped.slice(0, 4) : ['studio://samo-item'];
+    return deduped.length > 0 ? deduped.slice(0, 4) : [''];
   }, [
     activeVariant,
     hasColorVariants,

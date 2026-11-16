@@ -41,6 +41,11 @@ interface D1ApiResponse<T = any> {
   success: boolean;
 }
 
+export function hasD1Config(): boolean {
+  const cfg = getD1Config();
+  return Boolean(cfg.accountId && cfg.databaseId && cfg.apiToken);
+}
+
 /**
  * Execute a SQL query against Cloudflare D1 via the REST API.
  */
@@ -49,6 +54,9 @@ export async function d1Query<T = any>(
   params: unknown[] = []
 ): Promise<{ results: T[]; changes: number; success: boolean }> {
   const config = getD1Config();
+  if (!config.accountId || !config.databaseId || !config.apiToken) {
+    throw new Error('Cloudflare D1 REST credentials not configured in local environment.');
+  }
   const url = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/d1/database/${config.databaseId}/query`;
 
   const resp = await fetch(url, {
@@ -84,6 +92,7 @@ export async function d1Query<T = any>(
  * Initialize all relational tables in Cloudflare D1 SQL.
  */
 export async function initD1Schema(): Promise<void> {
+  if (!hasD1Config()) return;
   const schemaStatements = [
     `CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
@@ -248,6 +257,7 @@ export interface NewsletterSubscriberRecord {
  * Reads the complete catalog state from Cloudflare D1 SQL.
  */
 export async function readD1CatalogState(): Promise<PersistedCatalogState | null> {
+  if (!hasD1Config()) return null;
   try {
     const [
       productsRes,
@@ -680,6 +690,7 @@ export async function upsertD1Setting(key: string, value: unknown): Promise<void
 export async function writeD1CatalogPatch(
   patch: Partial<PersistedCatalogState>
 ): Promise<void> {
+  if (!hasD1Config()) return;
   // 1. Products
   if (Array.isArray(patch.products)) {
     for (const prod of patch.products as any[]) {

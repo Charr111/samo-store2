@@ -41,6 +41,7 @@ import {
   INITIAL_PREORDERS,
   INITIAL_PRODUCTS,
   INITIAL_PROMO_CODES,
+  LEGACY_REMOVED_PRODUCT_IDS,
 } from './data/seedCatalog';
 import {
   buildCategoryUrl,
@@ -113,15 +114,15 @@ const AdminDashboard = React.lazy(() =>
 );
 
 const STORAGE_KEYS = {
-  categories: 'samo_categories_v2',
+  categories: 'samo_categories_v3',
   deletedCategories: 'samo_deleted_categories_v1',
-  products: 'samo_products_v5',
-  deletedProducts: 'samo_deleted_products_v1',
+  products: 'samo_products_v6',
+  deletedProducts: 'samo_deleted_products_v2',
   promos: 'samo_promo_codes_v1',
   materials: 'samo_custom_materials_v1',
-  colors: 'samo_custom_colors_v1',
-  orders: 'samo_orders_v1',
-  preorders: 'samo_preorders_v1',
+  colors: 'samo_custom_colors_v2',
+  orders: 'samo_orders_v2',
+  preorders: 'samo_preorders_v2',
   admins: 'samo_admins_v2',
   cart: 'samo_cart_v1',
   aiAdmin: 'samo_ai_admin_unlocked_v1',
@@ -241,7 +242,10 @@ function normalizeStoredProducts(
   items: ProductItem[],
   deletedIds: string[] = []
 ): ProductItem[] {
-  const deletedSet = new Set(deletedIds);
+  const deletedSet = new Set([
+    ...LEGACY_REMOVED_PRODUCT_IDS,
+    ...deletedIds,
+  ]);
   const map = new Map<string, ProductItem>();
 
   // 1. Insert stored / newly added admin products FIRST so newest items stay at the top
@@ -358,7 +362,12 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [deletedProductIds, setDeletedProductIds] = useState<string[]>(() =>
-    loadStored(STORAGE_KEYS.deletedProducts, [])
+    Array.from(
+      new Set([
+        ...LEGACY_REMOVED_PRODUCT_IDS,
+        ...loadStored(STORAGE_KEYS.deletedProducts, []),
+      ])
+    )
   );
   const [deletedCategoryIds, setDeletedCategoryIds] = useState<string[]>(() =>
     loadStored(STORAGE_KEYS.deletedCategories, [])
@@ -384,7 +393,7 @@ export default function App() {
   const [products, setProducts] = useState<ProductItem[]>(() =>
     normalizeStoredProducts(
       loadStored(STORAGE_KEYS.products, INITIAL_PRODUCTS),
-      loadStored(STORAGE_KEYS.deletedProducts, [])
+      loadStored(STORAGE_KEYS.deletedProducts, [...LEGACY_REMOVED_PRODUCT_IDS])
     )
   );
   const [promoCodes, setPromoCodes] = useState<PromoCodeItem[]>(() =>
@@ -394,7 +403,16 @@ export default function App() {
     loadStored(STORAGE_KEYS.materials, ['Shearling', 'Lambskin'])
   );
   const [customColors, setCustomColors] = useState<string[]>(() =>
-    loadStored(STORAGE_KEYS.colors, ['Olive', 'Navy'])
+    loadStored(STORAGE_KEYS.colors, [
+      'Olive',
+      'Navy',
+      'Grey',
+      'Light Grey',
+      'Graige',
+      'Matcha',
+      'Beige',
+      'White',
+    ])
   );
   const [orders, setOrders] = useState<OrderItem[]>(() =>
     loadStored(STORAGE_KEYS.orders, INITIAL_ORDERS)
