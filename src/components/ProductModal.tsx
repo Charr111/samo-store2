@@ -561,7 +561,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
         {/* Left Column: Product Gallery Images (Up to 4 Images) (7 cols) */}
         <div className="md:col-span-7 bg-[#EFEFEF] border-b md:border-b-0 md:border-r border-zinc-200 md:border-zinc-950 flex flex-col justify-between">
-          <div className="relative aspect-[4/5] max-h-[50dvh] md:max-h-none w-full overflow-hidden bg-[#EFEFEF]">
+          <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#EFEFEF]">
             {/* Swipeable Horizontal Track (Seamless studio backdrop with no white vertical seam) */}
             <div
               ref={galleryScrollRef}
