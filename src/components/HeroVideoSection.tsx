@@ -25,6 +25,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   title = 'NEW ARRIVALS',
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const userPausedRef = useRef<boolean>(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [customVideoFailed, setCustomVideoFailed] = useState(false);
@@ -35,18 +36,86 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
     ? DEFAULT_HERO_VIDEO
     : requestedVideoUrl;
 
+  const showImageBanner = mediaType === 'image' || videoFailed;
+
+  const attemptAutoplay = React.useCallback(() => {
+    const vid = videoRef.current;
+    if (!vid || showImageBanner || userPausedRef.current) return;
+    if (isMuted) {
+      vid.defaultMuted = true;
+      vid.muted = true;
+    }
+    vid.playsInline = true;
+    const playPromise = vid.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          if (!vid || userPausedRef.current) return;
+          vid.defaultMuted = true;
+          vid.muted = true;
+          setIsMuted(true);
+          vid
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => {});
+        });
+    }
+  }, [isMuted, showImageBanner]);
+
   useEffect(() => {
+    userPausedRef.current = false;
     setCustomVideoFailed(false);
     setVideoFailed(false);
     setIsPlaying(true);
   }, [requestedVideoUrl, mediaType]);
 
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || showImageBanner) return;
+
+    vid.defaultMuted = true;
+    vid.muted = isMuted;
+    vid.playsInline = true;
+    vid.setAttribute('muted', '');
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('webkit-playsinline', '');
+
+    attemptAutoplay();
+
+    // One-time passive touchstart/scroll fallback for iOS Low Power Mode or Android Data Saver
+    const handleFirstInteraction = () => {
+      const currentVid = videoRef.current;
+      if (currentVid && currentVid.paused && !userPausedRef.current) {
+        attemptAutoplay();
+      }
+    };
+
+    window.addEventListener('touchstart', handleFirstInteraction, {
+      passive: true,
+      once: true,
+    });
+    window.addEventListener('scroll', handleFirstInteraction, {
+      passive: true,
+      once: true,
+    });
+
+    return () => {
+      window.removeEventListener('touchstart', handleFirstInteraction);
+      window.removeEventListener('scroll', handleFirstInteraction);
+    };
+  }, [effectiveVideoUrl, showImageBanner, isMuted, attemptAutoplay]);
+
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
+      userPausedRef.current = false;
       videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     } else {
+      userPausedRef.current = true;
       videoRef.current.pause();
       setIsPlaying(false);
     }
@@ -54,24 +123,28 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
 
   const toggleMute = () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !videoRef.current.muted;
-    setIsMuted(videoRef.current.muted);
+    const nextMuted = !videoRef.current.muted;
+    videoRef.current.defaultMuted = nextMuted;
+    videoRef.current.muted = nextMuted;
+    setIsMuted(nextMuted);
   };
 
-  const showImageBanner = mediaType === 'image' || videoFailed;
-
   return (
-    <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
+    <section className="relative w-full h-[calc(100svh-3.5rem)] md:h-[74vh] md:min-h-[520px] md:max-h-[820px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
       {/* Background Video or Admin-Selected Image Banner */}
       {!showImageBanner ? (
         <video
           key={effectiveVideoUrl}
           ref={videoRef}
+          src={effectiveVideoUrl}
           autoPlay
           loop
           muted={isMuted}
           playsInline
           preload="auto"
+          onLoadedMetadata={attemptAutoplay}
+          onCanPlay={attemptAutoplay}
+          onPlay={() => setIsPlaying(true)}
           onError={(e) => {
             console.warn('[SAMO Weave] Hero video playback notice:', e);
             if (!effectiveVideoUrl || effectiveVideoUrl === '') {
@@ -79,20 +152,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
             }
           }}
           className="pointer-events-none h-full w-full object-cover object-center opacity-90"
-        >
-          {effectiveVideoUrl.toLowerCase().endsWith('.webm') && (
-            <source src={effectiveVideoUrl} type="video/webm" />
-          )}
-          {effectiveVideoUrl.toLowerCase().endsWith('.mov') && (
-            <source src={effectiveVideoUrl} type="video/quicktime" />
-          )}
-          {(effectiveVideoUrl.toLowerCase().endsWith('.hevc') ||
-            effectiveVideoUrl.toLowerCase().endsWith('.m4v')) && (
-            <source src={effectiveVideoUrl} type='video/mp4; codecs="hevc"' />
-          )}
-          <source src={effectiveVideoUrl} type="video/mp4" />
-          <source src={effectiveVideoUrl} />
-        </video>
+        />
       ) : (
         <div className="h-full w-full opacity-90">
           <ProductImage

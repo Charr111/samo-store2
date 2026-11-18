@@ -250,6 +250,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     }
   }, [product]);
 
+  // Lock background body scroll while the product pop-up is open
+  useEffect(() => {
+    if (!product) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [product]);
+
   if (!product) return null;
 
   const isFullSetProduct =
@@ -513,6 +523,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     }
   };
 
+  const isSingleOneSize =
+    !isFullSetProduct &&
+    activeSizes.length === 1 &&
+    ['os', 'one size'].includes(activeSizes[0].trim().toLowerCase());
+
   return (
     <div
       ref={modalOverlayRef}
@@ -528,38 +543,36 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           onClose();
         }
       }}
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/70 p-3 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white md:bg-black/70 p-0 md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-4xl bg-white border border-zinc-950 grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto"
+        className="relative w-full min-h-[100dvh] md:min-h-0 max-w-none md:max-w-4xl bg-white border-0 md:border md:border-zinc-950 grid grid-cols-1 md:grid-cols-12 md:overflow-hidden my-0 md:my-auto"
       >
-        {/* Close Button */}
+        {/* Pinned Top-Right Close (×) Button (40px x 40px tap target, fixed on mobile so it never scrolls out of view) */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Close product popup"
-          className="absolute top-3.5 right-3.5 z-20 w-9 h-9 bg-white border border-zinc-950 flex items-center justify-center text-zinc-950 hover:bg-zinc-950 hover:text-white transition-colors cursor-pointer"
+          className="fixed top-3.5 right-3.5 md:absolute md:top-3.5 md:right-3.5 z-30 w-10 h-10 bg-white/95 border border-zinc-950 flex items-center justify-center text-zinc-950 hover:bg-zinc-950 hover:text-white transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Left Column: Product Gallery Images (Up to 4 Images) (7 cols) */}
-        <div className="md:col-span-7 bg-[#EFEFEF] border-b md:border-b-0 md:border-r border-zinc-950 flex flex-col justify-between">
-          <div className="relative aspect-[4/5] w-full overflow-hidden">
-            {/* Swipeable Horizontal Track (93% primary image width so ~7% of image #2 peeks on the right) */}
+        <div className="md:col-span-7 bg-[#EFEFEF] border-b md:border-b-0 md:border-r border-zinc-200 md:border-zinc-950 flex flex-col justify-between">
+          <div className="relative aspect-[4/5] max-h-[50dvh] md:max-h-none w-full overflow-hidden bg-[#EFEFEF]">
+            {/* Swipeable Horizontal Track (Seamless studio backdrop with no white vertical seam) */}
             <div
               ref={galleryScrollRef}
               onScroll={handleGalleryScroll}
-              className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar touch-pan-x bg-white"
+              className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar touch-pan-x bg-[#EFEFEF]"
             >
               {allImages.map((imgUrl, idx) => (
                 <div
                   key={`${imgUrl}-${idx}`}
                   className={`relative h-full shrink-0 snap-start bg-[#EFEFEF] ${
-                    allImages.length > 1
-                      ? 'w-[93%] border-r-2 border-white last:border-r-0'
-                      : 'w-full'
+                    allImages.length > 1 ? 'w-[93%]' : 'w-full'
                   }`}
                 >
                   <ProductImage
@@ -620,19 +633,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             )}
           </div>
 
-          {/* Thumbnail Selector Strip (Up to 4 Images) */}
+          {/* Thumbnail Selector Strip (Up to 4 Images — Full opacity-100 for accurate garment/leather colors) */}
           {allImages.length > 1 && (
-            <div className="flex items-center gap-2 p-3 bg-white border-t border-zinc-200 overflow-x-auto">
+            <div className="flex items-center gap-2 px-4 py-2.5 md:p-3 bg-white border-t border-zinc-200 overflow-x-auto">
               {allImages.map((imgUrl, idx) => (
                 <button
                   key={`${imgUrl}-${idx}`}
                   type="button"
                   onClick={() => scrollToGallerySlide(idx)}
                   aria-label={`View angle ${idx + 1}`}
-                  className={`w-16 h-20 border transition-all shrink-0 cursor-pointer ${
+                  className={`w-14 h-[72px] md:w-16 md:h-20 border opacity-100 transition-colors shrink-0 cursor-pointer ${
                     activeImageIndex === idx
                       ? 'border-zinc-950 ring-1 ring-zinc-950'
-                      : 'border-zinc-200 opacity-70 hover:opacity-100'
+                      : 'border-zinc-200 hover:border-zinc-500'
                   }`}
                 >
                   <ProductImage
@@ -652,58 +665,70 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         {/* Right Column: Sole Item Purchase Module (5 cols) */}
         <div
           ref={detailsScrollRef}
-          className="md:col-span-5 p-6 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-8 flex flex-col justify-between bg-white md:max-h-[88vh] md:overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
+          className="md:col-span-5 px-5 pt-4 pb-0 md:p-8 flex flex-col justify-between bg-white md:max-h-[88vh] md:overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
-          <div className="space-y-5">
-            {/* Unboxed Clean Metadata Header (Optimized spacing for Product Name, Garment Ref, and Price on mobile & desktop) */}
-            <div className="pb-1">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">
+          <div className="space-y-4 md:space-y-5 pb-4 md:pb-0">
+            {/* Editorial Metadata Header: DEPARTMENT · CATEGORY · REF. CODE + Paired Title & Price */}
+            <div className="pb-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-[#737373] mb-1.5">
                 <span>{product.department}</span>
                 <span aria-hidden="true">·</span>
                 <span>{product.category}</span>
-                <span aria-hidden="true">·</span>
-                <span>{product.style}</span>
+                {formattedGarmentRef ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span
+                      data-testid="product-modal-garment-code"
+                      className="font-mono-tabular uppercase"
+                    >
+                      {formattedGarmentRef}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{product.style}</span>
+                  </>
+                )}
               </div>
-              <h2
-                id="sole-product-modal-title"
-                className="font-display text-lg sm:text-xl md:text-2xl font-extrabold tracking-[0.06em] uppercase text-zinc-950 leading-snug"
-              >
-                {product.name}
-              </h2>
-              {formattedGarmentRef && (
-                <p
-                  data-testid="product-modal-garment-code"
-                  className="mt-2 sm:mt-2.5 font-mono-tabular text-[11px] sm:text-xs font-medium tracking-[0.06em] text-zinc-500"
+
+              <div className="flex items-baseline justify-between gap-3">
+                <h2
+                  id="sole-product-modal-title"
+                  className="font-display text-[18px] sm:text-xl md:text-2xl font-semibold md:font-extrabold tracking-[0.05em] uppercase text-zinc-950 leading-snug"
                 >
-                  {formattedGarmentRef}
-                </p>
-              )}
-              <div className="mt-2.5 sm:mt-3 flex items-center justify-between">
-                <div className="flex items-center gap-2.5 font-mono-tabular">
-                  <span className="text-lg font-bold text-zinc-950">
+                  {product.name}
+                </h2>
+                <div className="flex items-baseline gap-2 font-mono-tabular shrink-0">
+                  <span className="text-[17px] sm:text-lg font-normal md:font-bold text-zinc-950">
                     ${pricing.effectivePrice.toLocaleString()}
                   </span>
                   {pricing.hasDiscount && (
-                    <>
-                      <span className="text-sm text-zinc-400 line-through">
-                        ${pricing.originalPrice.toLocaleString()}
-                      </span>
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200">
-                        {pricing.discountBadge}
-                      </span>
-                    </>
+                    <span className="text-xs sm:text-sm text-zinc-400 line-through">
+                      ${pricing.originalPrice.toLocaleString()}
+                    </span>
                   )}
                 </div>
-                {isSelectedConfigurationOut && (
-                  <button
-                    type="button"
-                    onClick={() => scrollToPreorderBox(true)}
-                    className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700 cursor-pointer"
-                  >
-                    Out of Stock
-                  </button>
-                )}
               </div>
+
+              {(pricing.hasDiscount || isSelectedConfigurationOut) && (
+                <div className="mt-2 flex items-center gap-2">
+                  {pricing.hasDiscount && (
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200">
+                      {pricing.discountBadge}
+                    </span>
+                  )}
+                  {isSelectedConfigurationOut && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToPreorderBox(true)}
+                      className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700 cursor-pointer"
+                    >
+                      Out of Stock
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Minimal Color Selector (Preselected on First Color, Switches Image & Sizes) */}
@@ -758,14 +783,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             {!isFullSetProduct &&
               Array.isArray(product.materials) &&
               product.materials.length > 0 && (
-                <div className="pt-4 border-t border-zinc-200">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="pt-3.5 border-t border-zinc-200">
+                  <div className="mb-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                       Materials Composition
-                    </span>
-                    <span className="text-[11px] text-zinc-500">
-                      {product.materials.length}{' '}
-                      {product.materials.length === 1 ? 'Material' : 'Materials'}
                     </span>
                   </div>
                   <p className="text-xs font-medium text-zinc-800 tracking-wide">
@@ -1052,9 +1073,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   );
                 })}
               </div>
+            ) : isSingleOneSize && !isSelectedConfigurationOut ? (
+              /* STANDARD SINGLE ONE-SIZE (OS) IN-STOCK PRODUCT: Clean Editorial Metadata Row */
+              <div className="pt-3.5 border-t border-zinc-200 flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
+                  Size
+                </span>
+                <span className="text-xs font-mono-tabular font-medium uppercase tracking-[0.1em] text-zinc-700">
+                  One Size
+                </span>
+              </div>
             ) : (
               /* STANDARD PRODUCT: Sizes Selection Section (All Sizes Clickable Including Out-of-Stock Sizes) */
-              <div className="pt-4 border-t border-zinc-200">
+              <div className="pt-3.5 border-t border-zinc-200">
                 <div className="flex items-center justify-between mb-2.5 gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
@@ -1159,7 +1190,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
             {/* Editorial Construction Notes (only shown when a description is set) */}
             {product.description && product.description.trim() && (
-              <div className="pt-4 border-t border-zinc-200">
+              <div className="pt-3.5 border-t border-zinc-200">
                 <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950 mb-1.5">
                   Samo Notes
                 </span>
@@ -1170,8 +1201,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             )}
           </div>
 
-          {/* Primary Actions: ADD TO CART + BUY NOW, OR PREORDER WHEN OUT-OF-STOCK SIZE IS SELECTED */}
-          <div className="pt-6 mt-6 border-t border-zinc-200 space-y-2.5">
+          {/* Primary Actions: Sticky Bottom Dual-Button Bar on Mobile (ADD TO CART + BUY NOW), OR PREORDER WHEN OUT-OF-STOCK SIZE IS SELECTED */}
+          <div className="sticky bottom-0 z-20 -mx-5 px-5 pt-3 pb-[calc(0.875rem+env(safe-area-inset-bottom,12px))] md:static md:mx-0 md:px-0 md:pb-0 md:pt-6 md:mt-6 bg-white border-t border-zinc-200">
             {isSelectedConfigurationOut ? (
               <div
                 ref={preorderSectionRef}
@@ -1235,45 +1266,44 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 )}
               </div>
             ) : (
-              <>
+              <div className="grid grid-cols-2 md:grid-cols-1 gap-2.5">
                 <button
                   type="button"
                   onClick={handleAdd}
-                  className="w-full py-3.5 px-5 bg-white text-zinc-950 border border-zinc-950 text-xs font-bold tracking-[0.16em] uppercase hover:bg-zinc-100 transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-12 px-3 md:px-5 bg-white text-zinc-950 border border-zinc-950 text-[11px] md:text-xs font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   {addedFeedback ? (
                     <>
-                      <Check className="w-4 h-4 text-emerald-700" />
-                      <span>
-                        Added {activeVariant ? `${activeVariant.colorName} · ` : ''}
-                        Size {effectiveSelectedSizeLabel} to Bag
+                      <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span className="truncate">
+                        Added to Bag
                       </span>
                     </>
                   ) : (
-                    <>
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>
-                        Add to Cart — ${pricing.effectivePrice.toLocaleString()}
-                      </span>
-                    </>
+                    <span>
+                      Add to Cart — ${pricing.effectivePrice.toLocaleString()}
+                    </span>
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleImmediateBuy}
-                  className="w-full py-3.5 px-5 bg-zinc-950 text-white border border-zinc-950 text-xs font-bold tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-12 px-3 md:px-5 bg-zinc-950 text-white border border-zinc-950 text-[11px] md:text-xs font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  <Zap className="w-4 h-4" />
                   <span>
-                    Buy Now (
-                    {activeVariant
-                      ? `${activeVariant.colorName} · ${effectiveSelectedSizeLabel}`
-                      : effectiveSelectedSizeLabel}
-                    )
+                    {isSingleOneSize && !activeVariant
+                      ? 'Buy Now'
+                      : `Buy Now (${
+                          activeVariant
+                            ? isSingleOneSize
+                              ? activeVariant.colorName
+                              : `${activeVariant.colorName} · ${effectiveSelectedSizeLabel}`
+                            : effectiveSelectedSizeLabel
+                        })`}
                   </span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
