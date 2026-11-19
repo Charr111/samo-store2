@@ -1032,7 +1032,7 @@ test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords),
     products: INITIAL_PRODUCTS,
     seoConfig: snapshot,
   });
-  assert.equal(homeSeo.title, 'SAMO | Official Website');
+  assert.equal(homeSeo.title, 'SAMO Official Website');
   assert.equal(homeSeo.canonicalUrl, 'https://samoweave.com/home');
   assert.equal(homeSeo.keywords.includes('bespoke leather coat'), true);
 

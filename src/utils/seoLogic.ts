@@ -254,7 +254,7 @@ export function generateCatalogSeoSnapshot(
 
   return {
     lastUpdatedAt: new Date().toISOString(),
-    siteTitleSuffix: 'SAMO | Official Website',
+    siteTitleSuffix: 'SAMO Official Website',
     defaultDescription:
       'SAMO (Est. 1999) — Architectural luxury ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.',
     defaultKeywords: activeCoreKeywords,
@@ -466,7 +466,7 @@ export function buildDynamicPageSeo(params: {
     { title: string; description: string; path: string }
   > = {
     '/home': {
-      title: 'SAMO | Official Website',
+      title: 'SAMO Official Website',
       description:
         seoConfig?.defaultDescription ||
         'SAMO (Est. 1999) — Architectural luxury ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.',

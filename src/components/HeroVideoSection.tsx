@@ -140,7 +140,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   };
 
   return (
-    <section className="relative w-full h-[calc(100svh-3.5rem)] md:h-[82vh] md:min-h-[565px] md:max-h-[900px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
+    <section className="relative w-full h-[100svh] md:h-[94vh] md:min-h-[600px] md:max-h-[980px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
       {/* Background Video or Admin-Selected Image Banner */}
       {!showImageBanner ? (
         <video

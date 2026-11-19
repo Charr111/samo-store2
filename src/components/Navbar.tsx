@@ -86,21 +86,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header
-      onPointerEnter={(e) => {
-        if (e.pointerType === 'mouse') setIsHeaderHovered(true);
-      }}
-      onPointerLeave={(e) => {
-        if (e.pointerType === 'mouse') setIsHeaderHovered(false);
-      }}
-      className={`${
-        isHomeHeroOverlay ? 'fixed top-0 inset-x-0' : 'sticky top-0'
-      } z-40 w-full transition-colors duration-300 ease-out ${
-        isTransparentOverVideo
-          ? 'bg-transparent border-b border-transparent'
-          : 'bg-white/95 backdrop-blur-md border-b border-zinc-200'
-      }`}
-    >
+    <>
+      <header
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse') setIsHeaderHovered(true);
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse') setIsHeaderHovered(false);
+        }}
+        className={`${
+          isHomeHeroOverlay ? 'fixed top-0 inset-x-0' : 'sticky top-0'
+        } z-40 w-full transition-colors duration-300 ease-out ${
+          isTransparentOverVideo
+            ? 'bg-transparent border-b border-transparent'
+            : 'bg-[#FFFFFF] border-b border-zinc-200'
+        }`}
+      >
       {/* Primary Top Bar:
           - Mobile (< lg): Left Menu Hamburger | Center SAMO Logo | Right Compact Bag Icon
           - Desktop (lg+): Left Nav Links (New Arrivals, Women, Kids, Gifts) | Center SAMO Logo | Right Bag & Menu
@@ -437,10 +438,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
+      </header>
+
       {/* Slide-out Mega Drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 top-16 z-50 flex bg-black/50 backdrop-blur-[1px]">
-          <div className="w-full max-w-md bg-white h-full overflow-y-auto border-r border-zinc-950 flex flex-col justify-between p-6">
+        <div className="fixed inset-x-0 top-16 bottom-0 z-50 flex bg-black/50 h-[calc(100dvh-4rem)]">
+          <div className="w-full max-w-md bg-[#FFFFFF] text-zinc-950 h-full overflow-y-auto border-r border-zinc-200 flex flex-col justify-between p-6">
             <div>
               {/* Department Switcher Tabs */}
               <div className="grid grid-cols-2 border border-zinc-950 mb-6">
@@ -551,6 +554,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
         </div>
       )}
-    </header>
+    </>
   );
 };
