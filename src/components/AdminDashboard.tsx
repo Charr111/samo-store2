@@ -4006,23 +4006,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const previewPromoBg = (
                           siteBanners.orderEmailPromoBannerUrl || ''
                         ).trim();
-                        const previewPromoDesc =
+                        const previewPromoDesc = (
                           siteBanners.orderEmailPromoDescription !== undefined
-                            ? siteBanners.orderEmailPromoDescription.trim()
-                            : 'Enjoy 10% off your next order at samoweave.com';
+                            ? siteBanners.orderEmailPromoDescription
+                            : 'Enjoy 10% off your next order'
+                        )
+                          .trim()
+                          .replace(/\s+at\s+samoweave\.com\.?$/i, '')
+                          .trim();
                         const hasBg =
                           previewPromoBg.startsWith('https://') ||
                           previewPromoBg.startsWith('http://');
                         return (
-                          <div className="px-4 py-4 bg-white border-b border-zinc-200">
+                          <div className="px-0 pb-4 bg-white border-b border-zinc-200">
                             {hasBg ? (
                               <div
-                                className="relative border border-zinc-950 bg-zinc-900 bg-cover bg-center overflow-hidden"
+                                className="relative border-y border-zinc-950 bg-zinc-900 bg-cover bg-center overflow-hidden"
                                 style={{
                                   backgroundImage: `url("${previewPromoBg}")`,
                                 }}
                               >
-                                <div className="p-5 bg-zinc-950/55 text-center space-y-2">
+                                <div
+                                  className="p-5 text-center space-y-2"
+                                  style={{
+                                    backgroundColor: 'rgba(9, 9, 11, 0.46)',
+                                  }}
+                                >
                                   <div className="text-xs font-extrabold uppercase tracking-[0.2em] text-white">
                                     YOU GOT 10% OFF
                                   </div>
@@ -4315,7 +4324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               siteBanners.orderEmailPromoDescription !==
                               undefined
                                 ? siteBanners.orderEmailPromoDescription
-                                : 'Enjoy 10% off your next order at samoweave.com'
+                                : 'Enjoy 10% off your next order'
                             }
                             onChange={(e) =>
                               updateSiteBannerField(
@@ -4324,7 +4333,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 'Order Email Promo Description'
                               )
                             }
-                            placeholder="Enjoy 10% off your next order at samoweave.com"
+                            placeholder="Enjoy 10% off your next order"
                             className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
                           />
                         </div>
@@ -4539,7 +4548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       siteBanners.orderEmailPromoDescription !==
                                       undefined
                                         ? siteBanners.orderEmailPromoDescription
-                                        : 'Enjoy 10% off your next order at samoweave.com',
+                                        : 'Enjoy 10% off your next order',
                                     promoGiftBannerUrl:
                                       siteBanners.orderEmailPromoBannerUrl ||
                                       '',

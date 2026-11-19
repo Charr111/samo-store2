@@ -1662,7 +1662,7 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
   assert.equal(defaultBanners.orderEmailPromoCode, 'SAMO10');
   assert.equal(
     defaultBanners.orderEmailPromoDescription,
-    'Enjoy 10% off your next order at samoweave.com'
+    'Enjoy 10% off your next order'
   );
   assert.equal(defaultBanners.orderEmailPromoBannerUrl, '');
 
@@ -1679,7 +1679,7 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
   assert.equal(mergedWithPromo.orderEmailPromoCode, 'VIP15');
   assert.equal(
     mergedWithPromo.orderEmailPromoDescription,
-    'Enjoy 15% off your next acquisition at samoweave.com'
+    'Enjoy 15% off your next acquisition'
   );
   assert.equal(
     mergedWithPromo.orderEmailPromoBannerUrl,
@@ -1762,13 +1762,25 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     true
   );
   assert.equal(
-    payload.html.includes('rgba(9,9,11,0.55)'),
+    payload.html.includes('rgba(9,9,11,0.46)'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('padding:0 0 24px 0;background-color:#FFFFFF;'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('-webkit-user-select:all;user-select:all;cursor:pointer;'),
     true
   );
   assert.equal(payload.html.includes('SAMOVIP15'), true);
   assert.equal(
-    payload.html.includes('Enjoy 15% off your next order at samoweave.com'),
+    payload.html.includes('Enjoy 15% off your next order'),
     true
+  );
+  assert.equal(
+    payload.html.includes('Enjoy 15% off your next order at samoweave.com'),
+    false
   );
   assert.equal(
     payload.html.includes('https://images.samoweave.com/banners/order-email-banner-1.jpg'),

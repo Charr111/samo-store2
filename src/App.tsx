@@ -1338,7 +1338,7 @@ export default function App() {
             promoGiftDescription:
               siteBanners.orderEmailPromoDescription !== undefined
                 ? siteBanners.orderEmailPromoDescription
-                : 'Enjoy 10% off your next order at samoweave.com',
+                : 'Enjoy 10% off your next order',
             promoGiftBannerUrl: siteBanners.orderEmailPromoBannerUrl || '',
           }),
         });

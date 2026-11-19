@@ -2172,8 +2172,7 @@ export function buildDefaultSiteBanners(
     orderEmailReplyToAddress: 'info@samoweave.com',
     orderEmailPromoEnabled: false,
     orderEmailPromoCode: 'SAMO10',
-    orderEmailPromoDescription:
-      'Enjoy 10% off your next order at samoweave.com',
+    orderEmailPromoDescription: 'Enjoy 10% off your next order',
     orderEmailPromoBannerUrl: '',
     categoryBanners,
   };
@@ -2339,7 +2338,10 @@ export function mergeSiteBannersConfig(
         : defaults.orderEmailPromoCode,
     orderEmailPromoDescription:
       typeof stored.orderEmailPromoDescription === 'string'
-        ? stored.orderEmailPromoDescription.trim()
+        ? stored.orderEmailPromoDescription
+            .trim()
+            .replace(/\s+at\s+samoweave\.com\.?$/i, '')
+            .trim()
         : defaults.orderEmailPromoDescription,
     orderEmailPromoBannerUrl:
       typeof stored.orderEmailPromoBannerUrl === 'string'
@@ -2869,10 +2871,14 @@ export function buildOrderConfirmationEmailPayload(
 
   const promoGiftEnabled = Boolean(config.promoGiftEnabled);
   const promoGiftCode = (config.promoGiftCode ?? 'SAMO10').trim().toUpperCase();
-  const promoGiftDescription =
+  const promoGiftDescription = (
     config.promoGiftDescription !== undefined
-      ? config.promoGiftDescription.trim()
-      : 'Enjoy 10% off your next order at samoweave.com';
+      ? config.promoGiftDescription
+      : 'Enjoy 10% off your next order'
+  )
+    .trim()
+    .replace(/\s+at\s+samoweave\.com\.?$/i, '')
+    .trim();
   const promoGiftBannerUrl = (config.promoGiftBannerUrl || '').trim();
   const hasPublicPromoBanner =
     promoGiftBannerUrl.startsWith('https://') ||
@@ -3178,10 +3184,10 @@ export function buildOrderConfirmationEmailPayload(
           ${
             showPromoGiftSection
               ? hasPublicPromoBanner
-                ? `<!-- Next-Order VIP Promo Gift Card Section (With Background Banner) -->
+                ? `<!-- Next-Order VIP Promo Gift Card Section (Full-Bleed With Background Banner) -->
           <tr>
-            <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border:1px solid #09090B;border-collapse:collapse;">
+            <td style="padding:0 0 24px 0;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-top:1px solid #09090B;border-bottom:1px solid #09090B;border-left:0;border-right:0;border-collapse:collapse;">
                 <tr>
                   <td
                     align="center"
@@ -3189,7 +3195,7 @@ export function buildOrderConfirmationEmailPayload(
                     bgcolor="#18181B"
                     style="background-image:url('${escapeHtmlEmailText(promoGiftBannerUrl)}');background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#18181B;padding:0;text-align:center;"
                   >
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:rgba(9,9,11,0.55);">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:rgba(9,9,11,0.46);">
                       <tr>
                         <td align="center" style="padding:26px 20px;text-align:center;">
                           <div style="font-size:15px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;margin-bottom:${
@@ -3207,9 +3213,7 @@ export function buildOrderConfirmationEmailPayload(
                           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
                             <tr>
                               <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #FFFFFF;padding:10px 24px;">
-                                <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;user-select:all;">
-                                  ${escapeHtmlEmailText(promoGiftCode)}
-                                </span>
+                                <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;-webkit-user-select:all;user-select:all;cursor:pointer;">${escapeHtmlEmailText(promoGiftCode)}</span>
                               </td>
                             </tr>
                           </table>
@@ -3223,8 +3227,8 @@ export function buildOrderConfirmationEmailPayload(
           </tr>`
                 : `<!-- Next-Order VIP Promo Gift Card Section -->
           <tr>
-            <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAF9F7;border:1px solid #09090B;border-collapse:collapse;">
+            <td style="padding:0 0 24px 0;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAF9F7;border-top:1px solid #09090B;border-bottom:1px solid #09090B;border-left:0;border-right:0;border-collapse:collapse;">
                 <tr>
                   <td align="center" style="padding:22px 18px;text-align:center;">
                     <div style="font-size:15px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;margin-bottom:${
@@ -3242,9 +3246,7 @@ export function buildOrderConfirmationEmailPayload(
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
                       <tr>
                         <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #09090B;padding:10px 22px;">
-                          <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;user-select:all;">
-                            ${escapeHtmlEmailText(promoGiftCode)}
-                          </span>
+                          <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;-webkit-user-select:all;user-select:all;cursor:pointer;">${escapeHtmlEmailText(promoGiftCode)}</span>
                         </td>
                       </tr>
                     </table>
