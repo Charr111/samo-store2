@@ -1688,9 +1688,10 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
 });
 
 import { buildOrderConfirmationEmailPayload } from './catalogLogic';
+import { buildResendEmailPayload } from '../../functions/api/order-confirmation-email';
 
 test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, optional next-order promo gift card with background banner, clickable campaign banner, and dual table CTA buttons', () => {
-  const payload = buildOrderConfirmationEmailPayload({
+  const emailInput = {
     order: {
       id: 'ord-9901',
       orderNumber: 'SAMO-9901',
@@ -1698,8 +1699,8 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
       customerEmail: 'layla@example.com',
       customerPhone: '+961 70 123 456',
       shippingLocation: 'Achrafieh, Beirut',
-      deliveryMethod: 'Standard Delivery',
-      paymentMethod: 'COD',
+      deliveryMethod: 'Standard Delivery' as const,
+      paymentMethod: 'COD' as const,
       subtotal: 500,
       discountAmount: 50,
       promoCode: 'SAMO10',
@@ -1725,7 +1726,10 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     promoGiftCode: 'SAMOVIP15',
     promoGiftDescription: 'Enjoy 15% off your next order at samoweave.com',
     promoGiftBannerUrl: 'https://images.samoweave.com/banners/promo-bg.jpg',
-  });
+  };
+
+  const payload = buildOrderConfirmationEmailPayload(emailInput);
+  const cloudflarePayload = buildResendEmailPayload(emailInput);
 
   assert.equal(payload.from, 'SAMO <orders@samoweave.com>');
   assert.deepEqual(payload.to, ['layla@example.com']);
@@ -1745,6 +1749,7 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     true
   );
   assert.equal(payload.html.includes('YOU GOT 10% OFF'), true);
+  assert.equal(cloudflarePayload.html.includes('YOU GOT 10% OFF'), true);
   assert.equal(
     payload.html.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'),
     false
@@ -1762,24 +1767,49 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     true
   );
   assert.equal(
+    cloudflarePayload.html.includes('background="https://images.samoweave.com/banners/promo-bg.jpg"'),
+    true
+  );
+  assert.equal(
     payload.html.includes('rgba(9,9,11,0.46)'),
     true
   );
   assert.equal(
-    payload.html.includes('padding:0 0 24px 0;background-color:#FFFFFF;'),
+    cloudflarePayload.html.includes('rgba(9,9,11,0.46)'),
     true
   );
   assert.equal(
-    payload.html.includes('-webkit-user-select:all;user-select:all;cursor:pointer;'),
+    payload.html.includes('padding:0;background-color:#FFFFFF;'),
     true
   );
+  assert.equal(
+    cloudflarePayload.html.includes('padding:0;background-color:#FFFFFF;'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('user-select:all'),
+    false
+  );
+  assert.equal(
+    cloudflarePayload.html.includes('user-select:all'),
+    false
+  );
   assert.equal(payload.html.includes('SAMOVIP15'), true);
+  assert.equal(cloudflarePayload.html.includes('SAMOVIP15'), true);
   assert.equal(
     payload.html.includes('Enjoy 15% off your next order'),
     true
   );
   assert.equal(
+    cloudflarePayload.html.includes('Enjoy 15% off your next order'),
+    true
+  );
+  assert.equal(
     payload.html.includes('Enjoy 15% off your next order at samoweave.com'),
+    false
+  );
+  assert.equal(
+    cloudflarePayload.html.includes('Enjoy 15% off your next order at samoweave.com'),
     false
   );
   assert.equal(

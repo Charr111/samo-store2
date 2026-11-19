@@ -4018,7 +4018,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           previewPromoBg.startsWith('https://') ||
                           previewPromoBg.startsWith('http://');
                         return (
-                          <div className="px-0 pb-4 bg-white border-b border-zinc-200">
+                          <div className="p-0 bg-white border-b border-zinc-200">
                             {hasBg ? (
                               <div
                                 className="relative border-y border-zinc-950 bg-zinc-900 bg-cover bg-center overflow-hidden"

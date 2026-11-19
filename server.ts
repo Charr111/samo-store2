@@ -919,7 +919,7 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
             ? String(body.promoGiftDescription)
             : storedBanners.orderEmailPromoDescription !== undefined
             ? String(storedBanners.orderEmailPromoDescription)
-            : 'Enjoy 10% off your next order at samoweave.com',
+            : 'Enjoy 10% off your next order',
         promoGiftBannerUrl:
           body.promoGiftBannerUrl !== undefined
             ? String(body.promoGiftBannerUrl).trim()
