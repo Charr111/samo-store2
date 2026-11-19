@@ -3067,7 +3067,7 @@ export function buildOrderConfirmationEmailPayload(
                       <tr>
                         <td align="center" bgcolor="#09090B" style="background-color:#09090B;border:1px solid #09090B;">
                           <a
-                            href="https://samoweave.com/new-arrivals/women?utm_source=order_email&utm_medium=email"
+                            href="${escapeHtmlEmailText(bannerTargetLink)}"
                             target="_blank"
                             style="display:block;padding:14px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;text-decoration:none;text-align:center;"
                           >
@@ -3077,16 +3077,16 @@ export function buildOrderConfirmationEmailPayload(
                       </tr>
                     </table>
 
-                    <!-- Secondary Outlined Black-on-White Button: DISCOVER THE HOUSE -->
+                    <!-- Secondary Outlined Black-on-White Button: CONTACT US (WhatsApp) -->
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
                       <tr>
                         <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid #09090B;">
                           <a
-                            href="https://samoweave.com/home?utm_source=order_email&utm_medium=email"
+                            href="https://api.whatsapp.com/send/?phone=96170224767&amp;text&amp;type=phone_number&amp;app_absent=0"
                             target="_blank"
                             style="display:block;padding:13px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;text-decoration:none;text-align:center;"
                           >
-                            DISCOVER THE HOUSE
+                            CONTACT US
                           </a>
                         </td>
                       </tr>
@@ -3101,10 +3101,8 @@ export function buildOrderConfirmationEmailPayload(
           <tr>
             <td align="center" style="background-color:#D4D4D4;padding:20px 24px;border-top:1px solid #09090B;text-align:center;">
               <div style="font-size:11px;line-height:1.6;color:#27272A;margin-bottom:8px;">
-                Questions regarding your order or sizing? Contact our client concierge at
-                <a href="mailto:info@samoweave.com" style="color:#09090B;font-weight:700;text-decoration:underline;">info@samoweave.com</a>
-                or
-                <a href="mailto:support@samoweave.com" style="color:#09090B;font-weight:700;text-decoration:underline;">support@samoweave.com</a>.
+                Questions about your order? Contact our Client Concierge:
+                <a href="mailto:support@samoweave.com" style="color:#09090B;font-weight:700;text-decoration:underline;">support@samoweave.com</a>
               </div>
               <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#09090B;">
                 &copy; 2026 SAMO (EST. 1999) &mdash; ALL RIGHTS RESERVED
@@ -3149,10 +3147,10 @@ export function buildOrderConfirmationEmailPayload(
     ...(customerEmail ? [`Email: ${customerEmail}`] : []),
     `Address / Location: ${shippingLocation}`,
     ``,
-    `Explore New Arrivals: https://samoweave.com/new-arrivals/women?utm_source=order_email&utm_medium=email`,
-    `Discover the House: https://samoweave.com/home?utm_source=order_email&utm_medium=email`,
+    `Explore New Arrivals: ${bannerTargetLink}`,
+    `Contact Us: https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0`,
     ``,
-    `Client Concierge: info@samoweave.com | support@samoweave.com`,
+    `Questions about your order? Contact our Client Concierge: support@samoweave.com`,
     `© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED`,
   ].join('\n');
 

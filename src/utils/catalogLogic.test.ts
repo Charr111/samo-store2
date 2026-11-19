@@ -1717,12 +1717,39 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     true
   );
   assert.equal(payload.html.includes('EXPLORE NEW ARRIVALS'), true);
-  assert.equal(payload.html.includes('DISCOVER THE HOUSE'), true);
+  assert.equal(payload.html.includes('CONTACT US'), true);
+  assert.equal(
+    payload.html.includes(
+      'https://api.whatsapp.com/send/?phone=96170224767&amp;text&amp;type=phone_number&amp;app_absent=0'
+    ),
+    true
+  );
+  assert.equal(payload.html.includes('DISCOVER THE HOUSE'), false);
+  assert.equal(
+    payload.html.includes('mailto:support@samoweave.com'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('mailto:info@samoweave.com'),
+    false
+  );
   assert.equal(payload.html.includes('AVENUE HEAVY COW LEATHER BIKER JACKET'), true);
   assert.equal(payload.html.includes('Ref. W-1042'), true);
   assert.equal(payload.html.includes('SAMO10'), true);
   assert.equal(payload.html.includes('$450'), true);
   assert.equal(payload.text.includes('SAMO — ORDER CONFIRMED (#SAMO-9901)'), true);
+  assert.equal(
+    payload.text.includes(
+      'Contact Us: https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0'
+    ),
+    true
+  );
+  assert.equal(
+    payload.text.includes(
+      'Questions about your order? Contact our Client Concierge: support@samoweave.com'
+    ),
+    true
+  );
 });
 
 

@@ -4025,9 +4025,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="w-full py-2.5 bg-zinc-950 text-white text-center text-[10px] font-bold uppercase tracking-[0.18em]">
                         EXPLORE NEW ARRIVALS
                       </div>
-                      <div className="w-full py-2.5 bg-white text-zinc-950 border border-zinc-950 text-center text-[10px] font-bold uppercase tracking-[0.18em]">
-                        DISCOVER THE HOUSE
-                      </div>
+                      <a
+                        href="https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full py-2.5 bg-white text-zinc-950 border border-zinc-950 text-center text-[10px] font-bold uppercase tracking-[0.18em] hover:bg-zinc-100 transition-colors"
+                      >
+                        CONTACT US
+                      </a>
+                    </div>
+                    <div className="px-3.5 py-2.5 bg-[#D4D4D4] border-t border-zinc-950 text-center text-[10px] text-zinc-800">
+                      Questions about your order? Contact our Client Concierge:{' '}
+                      <span className="font-bold text-zinc-950 underline">
+                        support@samoweave.com
+                      </span>
                     </div>
                   </div>
 
