@@ -180,14 +180,18 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
 
       {/* Bottom-Right Minimalist Volume Control (Mute/Unmute when in video mode) */}
       {!showImageBanner && (
-        <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 flex items-center">
+        <div className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-5 z-20 flex items-center">
           <button
             type="button"
             onClick={toggleMute}
             aria-label={isMuted ? 'Unmute campaign video' : 'Mute campaign video'}
-            className="bg-transparent border-0 p-1.5 text-white/90 hover:text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.65)] flex items-center justify-center transition-colors cursor-pointer"
+            className="bg-transparent border-0 p-1 text-white/90 hover:text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.65)] flex items-center justify-center transition-colors cursor-pointer"
           >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted ? (
+              <VolumeX className="w-[14.7px] h-[14.7px]" />
+            ) : (
+              <Volume2 className="w-[14.7px] h-[14.7px]" />
+            )}
           </button>
         </div>
       )}

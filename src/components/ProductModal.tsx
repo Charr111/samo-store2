@@ -1270,7 +1270,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <button
                   type="button"
                   onClick={handleAdd}
-                  className="w-full h-12 px-3 md:px-5 bg-white text-zinc-950 border border-zinc-950 text-[11px] md:text-xs font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-12 px-3 md:px-5 bg-white text-zinc-950 border border-zinc-950 text-[10.5px] md:text-[11.5px] font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   {addedFeedback ? (
                     <>
@@ -1289,18 +1289,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <button
                   type="button"
                   onClick={handleImmediateBuy}
-                  className="w-full h-12 px-3 md:px-5 bg-zinc-950 text-white border border-zinc-950 text-[11px] md:text-xs font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-12 px-3 md:px-5 bg-zinc-950 text-white border border-zinc-950 text-[10.5px] md:text-[11.5px] font-bold tracking-[0.14em] md:tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <span>
-                    {isSingleOneSize && !activeVariant
-                      ? 'Buy Now'
-                      : `Buy Now (${
-                          activeVariant
-                            ? isSingleOneSize
-                              ? activeVariant.colorName
-                              : `${activeVariant.colorName} · ${effectiveSelectedSizeLabel}`
-                            : effectiveSelectedSizeLabel
-                        })`}
+                    Buy Now — ${pricing.effectivePrice.toLocaleString()}
                   </span>
                 </button>
               </div>

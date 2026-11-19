@@ -170,7 +170,7 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
           </p>
         </div>
 
-        {/* Soft Ivory Rounded FAQ Containers */}
+        {/* Rounded FAQ Containers Matching Footer Color (#D4D4D4) */}
         <div className="space-y-3.5">
           {FAQ_ENTRIES.map((item) => {
             const isOpen = openId === item.id;
@@ -178,7 +178,7 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
               <div
                 key={item.id}
                 data-testid={`faq-item-${item.id}`}
-                className="bg-[#F4F2EC] rounded-[14px] border border-[#EAE6DD] shadow-[0_2px_10px_rgba(0,0,0,0.06)] transition-all overflow-hidden"
+                className="bg-[#D4D4D4] rounded-[14px] border border-zinc-400/70 shadow-[0_2px_10px_rgba(0,0,0,0.06)] transition-all overflow-hidden"
               >
                 <button
                   type="button"
@@ -192,12 +192,12 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
                   {isOpen ? (
                     <Minus
                       strokeWidth={1.5}
-                      className="w-5 h-5 text-[#6E6A63] shrink-0"
+                      className="w-5 h-5 text-zinc-700 shrink-0"
                     />
                   ) : (
                     <Plus
                       strokeWidth={1.5}
-                      className="w-5 h-5 text-[#6E6A63] shrink-0"
+                      className="w-5 h-5 text-zinc-700 shrink-0"
                     />
                   )}
                 </button>
