@@ -124,26 +124,26 @@ test('getComplementaryUpsellProducts returns items from the same department/cate
     featured: true,
   });
 
-  const pWomenJacket = makeProd('w-jacket', 'women', 'Jacket');
+  const pWomenJacket1 = makeProd('w-jacket-1', 'women', 'Jacket');
+  const pWomenJacket2 = makeProd('w-jacket-2', 'women', 'Jacket');
   const pWomenBag = makeProd('w-bag', 'women', 'Bags');
   const pKidsBaby1 = makeProd('k-baby-1', 'kids', 'Baby');
   const pKidsBaby2 = makeProd('k-baby-2', 'kids', 'Baby');
   const pKidsJunior = makeProd('k-junior', 'kids', 'Junior');
-  const all = [pWomenJacket, pWomenBag, pKidsBaby1, pKidsBaby2, pKidsJunior];
+  const all = [pWomenJacket1, pWomenJacket2, pWomenBag, pKidsBaby1, pKidsBaby2, pKidsJunior];
 
   const womenUpsell = getComplementaryUpsellProducts(
-    [{ product: pWomenJacket }],
-    all,
-    2
+    [{ product: pWomenJacket1 }],
+    all
   );
   assert.equal(womenUpsell.length, 1);
-  assert.equal(womenUpsell[0].id, 'w-bag');
+  assert.equal(womenUpsell[0].id, 'w-jacket-2');
 
   const kidsBabyUpsell = getComplementaryUpsellProducts(
     [{ product: pKidsBaby1 }],
-    all,
-    2
+    all
   );
+  assert.equal(kidsBabyUpsell.length, 1);
   assert.equal(kidsBabyUpsell[0].id, 'k-baby-2');
 });
 
@@ -1687,6 +1687,7 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
           selectedSize: 'M',
           quantity: 1,
           unitPrice: 500,
+          imageUrl: 'https://images.samoweave.com/products/biker-jacket.webp',
         },
       ],
       createdAt: '2026-11-19T06:00:00.000Z',
@@ -1702,6 +1703,14 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
   assert.equal(payload.subject, 'Order Confirmed — SAMO (#SAMO-9901)');
   assert.equal(
     payload.html.includes('https://images.samoweave.com/logo/samo-weave-logo.png'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('https://images.samoweave.com/products/biker-jacket.webp'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('width="56"') && payload.html.includes('height="70"'),
     true
   );
   assert.equal(

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, CheckCircle2, ArrowRight, Tag, Sparkles } from 'lucide-react';
+import { X, Trash2, Plus, Minus, CheckCircle2, ArrowRight, Tag } from 'lucide-react';
 import {
   CartItem,
   DeliveryMethod,
@@ -90,7 +90,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   );
 
   const bagTotalWithoutDelivery = Math.max(0, totals.subtotal - totals.discountAmount);
-  const upsellProducts = getComplementaryUpsellProducts(cartItems, products, 2);
+  const upsellProducts = getComplementaryUpsellProducts(cartItems, products, 1);
 
   const handleQuickAddUpsell = (prod: ProductItem) => {
     if (prod.hasColors && Array.isArray(prod.colorVariants) && prod.colorVariants.length > 0) {
@@ -158,6 +158,10 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       !cityCountry.trim()
     ) {
       setFormError('Please complete all customer contact and shipping location fields.');
+      return;
+    }
+    if (!customerEmail.trim().includes('@') || !customerEmail.trim().includes('.')) {
+      setFormError('Please enter a valid email address to receive your order confirmation.');
       return;
     }
 
@@ -234,9 +238,24 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
               selectedSetSizes: ci.selectedSetSizes,
               allProducts: products,
             });
+          const matchedVariantImage =
+            ci.selectedColor && Array.isArray(ci.product.colorVariants)
+              ? ci.product.colorVariants.find(
+                  (v) =>
+                    v.colorName.trim().toLowerCase() ===
+                    ci.selectedColor!.trim().toLowerCase()
+                )?.imageUrl
+              : undefined;
+          const resolvedImageUrl = (
+            ci.selectedColorImage ||
+            matchedVariantImage ||
+            ci.product.imageUrl ||
+            ''
+          ).trim();
           return {
             productId: ci.product.id,
             productName: ci.product.name,
+            ...(resolvedImageUrl ? { imageUrl: resolvedImageUrl } : {}),
             selectedColor: ci.selectedColor,
             selectedSize: ci.selectedSize,
             selectedSetSizes: ci.selectedSetSizes,
@@ -429,25 +448,17 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     })}
                   </div>
 
-                  {/* Similar Items / Complementary Upsell Section */}
+                  {/* Similar Item Section (Single Parallel Recommendation) */}
                   {upsellProducts.length > 0 && (
                     <div className="pt-4 border-t border-zinc-950 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-zinc-950" />
-                          <h3 className="font-display text-xs font-extrabold uppercase tracking-[0.14em] text-zinc-950">
-                            Similar Items — Complement Your Selection
-                          </h3>
-                        </div>
-                        <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-zinc-500">
-                          {cartItems[cartItems.length - 1]?.product.department === 'kids'
-                            ? `KIDS · ${cartItems[cartItems.length - 1]?.product.category.toUpperCase()}`
-                            : 'WOMEN CURATION'}
-                        </span>
+                        <h3 className="font-display text-xs font-extrabold uppercase tracking-[0.14em] text-zinc-950">
+                          Similar Item
+                        </h3>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3">
-                        {upsellProducts.map((upsell) => {
+                        {upsellProducts.slice(0, 1).map((upsell) => {
                           const upsellPricing = getEffectiveProductPrice(upsell);
                           return (
                             <div
@@ -811,10 +822,6 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   </span>
                 </div>
               </div>
-
-              <p className="text-xs text-zinc-600 leading-relaxed">
-                Your order is now visible in the SAMO Admin Dashboard where the Samo team will review and confirm dispatch.
-              </p>
             </div>
           )}
         </div>

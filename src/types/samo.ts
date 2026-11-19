@@ -153,6 +153,7 @@ export type PaymentMethod = 'COD' | 'Whish/OMT Payment';
 export interface OrderedLineItem {
   productId: string;
   productName: string;
+  imageUrl?: string;
   selectedColor?: string;
   selectedSize?: string;
   selectedSetSizes?: SelectedSetPieceSize[];

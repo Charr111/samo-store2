@@ -4191,6 +4191,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ? {
                                   ...orders[0],
                                   customerEmail: targetEmail.trim(),
+                                  orderedItems: Array.isArray(
+                                    orders[0].orderedItems
+                                  )
+                                    ? orders[0].orderedItems.map((it) => {
+                                        if (it.imageUrl) return it;
+                                        const matchedP = products.find(
+                                          (p) => p.id === it.productId
+                                        );
+                                        const varImg =
+                                          it.selectedColor &&
+                                          Array.isArray(matchedP?.colorVariants)
+                                            ? matchedP.colorVariants.find(
+                                                (v) =>
+                                                  v.colorName
+                                                    .trim()
+                                                    .toLowerCase() ===
+                                                  it.selectedColor!
+                                                    .trim()
+                                                    .toLowerCase()
+                                              )?.imageUrl
+                                            : undefined;
+                                        const resolvedImg =
+                                          varImg ||
+                                          matchedP?.imageUrl ||
+                                          orders[0].primaryProductImage ||
+                                          '';
+                                        return resolvedImg
+                                          ? { ...it, imageUrl: resolvedImg }
+                                          : it;
+                                      })
+                                    : undefined,
                                 }
                               : {
                                   id: 'ord-test',
@@ -4205,12 +4236,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   discountAmount: 0,
                                   deliveryFee: 0,
                                   totalPrice: 495,
+                                  primaryProductImage:
+                                    products[0]?.imageUrl || '',
                                   orderedItems: [
                                     {
                                       productId: products[0]?.id || 'samo-sample-1',
                                       productName:
                                         products[0]?.name ||
                                         'ARCHITECTURAL ITALIAN COW LEATHER JACKET',
+                                      imageUrl: products[0]?.imageUrl || '',
                                       garmentCode: products[0]?.garmentCode || 'W-1042',
                                       selectedColor: 'Obsidian Black',
                                       selectedSize: 'M',
@@ -5909,6 +5943,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onClick={() =>
                             onUpdateOrderStatus(order.id, 'rejected')
                           }
+                          title="Reject order and restore deducted item stock quantities back to inventory"
                           aria-label={`Reject order ${order.orderNumber}`}
                           className={`px-3.5 py-2 rounded-xl border text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${
                             order.status === 'rejected'

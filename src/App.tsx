@@ -127,7 +127,7 @@ const STORAGE_KEYS = {
   cart: 'samo_cart_v1',
   aiAdmin: 'samo_ai_admin_unlocked_v1',
   siteBanners: 'samo_site_banners_v2',
-  autoAcceptOrders: 'samo_auto_accept_orders_v1',
+  autoAcceptOrders: 'samo_auto_accept_orders_v2',
   showLowStockCount: 'samo_show_low_stock_v1',
   newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
   seoConfig: 'samo_seo_config_v1',
@@ -428,7 +428,7 @@ export default function App() {
     return sanitizeAuthorizedAdmins(stored);
   });
   const [autoAcceptOrders, setAutoAcceptOrders] = useState<boolean>(() =>
-    loadStored<boolean>(STORAGE_KEYS.autoAcceptOrders, false)
+    loadStored<boolean>(STORAGE_KEYS.autoAcceptOrders, true)
   );
   const [showLowStockCount, setShowLowStockCount] = useState<boolean>(() =>
     loadStored<boolean>(STORAGE_KEYS.showLowStockCount, false)
@@ -1225,8 +1225,30 @@ export default function App() {
     const newId = `ord-${Date.now()}`;
     const nowIso = new Date().toISOString();
     const initialStatus: OrderStatus = autoAcceptOrders ? 'accepted' : 'pending';
+
+    const enrichedOrderedItems = Array.isArray(orderPayload.orderedItems)
+      ? orderPayload.orderedItems.map((item) => {
+          if (item.imageUrl && item.imageUrl.trim()) {
+            return item;
+          }
+          const matchedProd = products.find((p) => p.id === item.productId);
+          if (!matchedProd) return item;
+          const variantImg =
+            item.selectedColor && Array.isArray(matchedProd.colorVariants)
+              ? matchedProd.colorVariants.find(
+                  (v) =>
+                    v.colorName.trim().toLowerCase() ===
+                    item.selectedColor!.trim().toLowerCase()
+                )?.imageUrl
+              : undefined;
+          const resolvedImg = (variantImg || matchedProd.imageUrl || '').trim();
+          return resolvedImg ? { ...item, imageUrl: resolvedImg } : item;
+        })
+      : undefined;
+
     const newOrder: OrderItem = {
       ...orderPayload,
+      ...(enrichedOrderedItems ? { orderedItems: enrichedOrderedItems } : {}),
       id: newId,
       status: initialStatus,
       createdAt: nowIso,
@@ -1236,22 +1258,23 @@ export default function App() {
     setOrders(nextOrders);
     setCartItems([]);
 
+    let catalogSyncPromise: Promise<void>;
     if (autoAcceptOrders) {
       const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
       setProducts(updatedCatalog);
-      await pushServerCatalogPatch({
+      catalogSyncPromise = pushServerCatalogPatch({
         orders: nextOrders,
         products: updatedCatalog,
       });
     } else {
-      await pushServerCatalogPatch({ orders: nextOrders });
+      catalogSyncPromise = pushServerCatalogPatch({ orders: nextOrders });
     }
 
-    // Trigger automated transactional order confirmation email via Resend REST API (non-blocking)
-    void (async () => {
+    const emailDispatchPromise = (async () => {
       try {
         await fetch('/api/order-confirmation-email', {
           method: 'POST',
+          keepalive: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             order: newOrder,
@@ -1273,6 +1296,8 @@ export default function App() {
         console.warn('[SAMO] Non-blocking order email trigger notice:', emailErr);
       }
     })();
+
+    await Promise.allSettled([catalogSyncPromise, emailDispatchPromise]);
 
     return newOrder;
   };

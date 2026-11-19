@@ -827,25 +827,50 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
         return;
       }
 
-      const recipientEmail = String(order.customerEmail || '').trim();
-      if (!recipientEmail || !recipientEmail.includes('@')) {
-        res.status(200).json({
-          ok: false,
-          skipped: true,
-          error: 'Customer email address is missing or invalid.',
-        });
-        return;
-      }
-
       const currentCatalog = await readCatalogState();
       const storedBanners =
         (currentCatalog.siteBanners as Record<string, string> | undefined) || {};
+      const catalogProducts = Array.isArray(currentCatalog.products)
+        ? (currentCatalog.products as Array<{
+            id?: string;
+            imageUrl?: string;
+            colorVariants?: Array<{ colorName?: string; imageUrl?: string }>;
+          }>)
+        : [];
+
+      if (Array.isArray(order.orderedItems)) {
+        for (const item of order.orderedItems) {
+          if (item.imageUrl || !item.productId) continue;
+          const matchedProd = catalogProducts.find(
+            (p) => p.id === item.productId
+          );
+          if (matchedProd) {
+            let resolvedImg = matchedProd.imageUrl || '';
+            if (
+              item.selectedColor &&
+              Array.isArray(matchedProd.colorVariants)
+            ) {
+              const matchedVar = matchedProd.colorVariants.find(
+                (v) =>
+                  (v.colorName || '').trim().toLowerCase() ===
+                  String(item.selectedColor).trim().toLowerCase()
+              );
+              if (matchedVar?.imageUrl) {
+                resolvedImg = matchedVar.imageUrl;
+              }
+            }
+            if (resolvedImg) {
+              item.imageUrl = resolvedImg;
+            }
+          }
+        }
+      }
 
       const emailPayload = buildResendEmailPayload({
         order,
         bannerUrl:
-          body.bannerUrl !== undefined
-            ? body.bannerUrl
+          body.bannerUrl && String(body.bannerUrl).trim()
+            ? String(body.bannerUrl).trim()
             : storedBanners.orderEmailBannerUrl || '',
         bannerLinkUrl:
           body.bannerLinkUrl ||

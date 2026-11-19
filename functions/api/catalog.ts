@@ -142,25 +142,60 @@ async function readFromD1(
       createdAt: c.created_at || new Date().toISOString(),
     }));
 
-    const orders = (ordersRes.results || []).map((o: any) => ({
-      id: o.id,
-      customerName: o.customer_name,
-      customerEmail: o.customer_email || '',
-      customerPhone: o.customer_phone || '',
-      customerAddress: o.customer_address || '',
-      customerCity: o.customer_city || '',
-      deliveryMethod: o.delivery_method || 'delivery',
-      totalPrice: Number(o.total_price) || 0,
-      subtotal: Number(o.subtotal) || 0,
-      discountAmount: Number(o.discount_amount) || 0,
-      deliveryFee: Number(o.delivery_fee) || 0,
-      status: o.status,
-      promoCode: o.promo_code || undefined,
-      orderNotes: o.order_notes || undefined,
-      items: safeJsonParse(o.items, []),
-      createdAt: o.created_at,
-      updatedAt: o.updated_at,
-    }));
+    const orders = (ordersRes.results || []).map((o: any) => {
+      const parsedItems = safeJsonParse<any[]>(o.items, []);
+      const parsedMeta = safeJsonParse<Record<string, any> | null>(
+        o.order_notes,
+        null
+      );
+      const shippingLoc =
+        parsedMeta?.shippingLocation ||
+        o.customer_address ||
+        o.customer_city ||
+        '';
+      return {
+        id: o.id,
+        orderNumber: parsedMeta?.orderNumber || o.id,
+        customerName: o.customer_name,
+        customerEmail: o.customer_email || '',
+        customerPhone: o.customer_phone || '',
+        shippingLocation: shippingLoc,
+        customerAddress: o.customer_address || shippingLoc,
+        customerCity: o.customer_city || '',
+        deliveryMethod: o.delivery_method || 'Standard Delivery',
+        paymentMethod: parsedMeta?.paymentMethod || 'COD',
+        totalPrice: Number(o.total_price) || 0,
+        subtotal: Number(o.subtotal) || 0,
+        discountAmount: Number(o.discount_amount) || 0,
+        deliveryFee: Number(o.delivery_fee) || 0,
+        status: o.status,
+        promoCode: o.promo_code || undefined,
+        itemsSummary: parsedMeta?.itemsSummary || '',
+        itemsCount:
+          Number(parsedMeta?.itemsCount) ||
+          parsedItems.reduce(
+            (sum, it) => sum + (Number(it?.quantity) || 1),
+            0
+          ) ||
+          1,
+        primaryProductName:
+          parsedMeta?.primaryProductName ||
+          parsedItems[0]?.productName ||
+          'SAMO Order',
+        primaryProductSize:
+          parsedMeta?.primaryProductSize ||
+          parsedItems[0]?.selectedSize ||
+          'OS',
+        primaryProductImage:
+          parsedMeta?.primaryProductImage ||
+          parsedItems[0]?.imageUrl ||
+          '',
+        orderedItems: parsedItems,
+        items: parsedItems,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+      };
+    });
 
     const preorders = (preordersRes.results || []).map((pr: any) => ({
       id: pr.id,
@@ -229,7 +264,7 @@ async function readFromD1(
       autoAcceptOrders:
         typeof settingsMap.autoAcceptOrders === 'boolean'
           ? settingsMap.autoAcceptOrders
-          : false,
+          : true,
       showLowStockCount:
         typeof settingsMap.showLowStockCount === 'boolean'
           ? settingsMap.showLowStockCount
@@ -404,6 +439,21 @@ async function writeToD1(
   if (Array.isArray(patch.orders)) {
     for (const o of patch.orders as any[]) {
       if (!o || !o.id) continue;
+      const lineItems = Array.isArray(o.orderedItems)
+        ? o.orderedItems
+        : Array.isArray(o.items)
+        ? o.items
+        : [];
+      const orderMetaJson = JSON.stringify({
+        orderNumber: o.orderNumber || o.id,
+        shippingLocation: o.shippingLocation || o.customerAddress || '',
+        paymentMethod: o.paymentMethod || 'COD',
+        itemsSummary: o.itemsSummary || '',
+        itemsCount: o.itemsCount ?? lineItems.length,
+        primaryProductName: o.primaryProductName || '',
+        primaryProductSize: o.primaryProductSize || '',
+        primaryProductImage: o.primaryProductImage || '',
+      });
       statements.push(
         db
           .prepare(
@@ -417,6 +467,8 @@ async function writeToD1(
               ?, ?, ?, ?, ?
             ) ON CONFLICT(id) DO UPDATE SET
               status=excluded.status,
+              order_notes=excluded.order_notes,
+              items=excluded.items,
               updated_at=excluded.updated_at;`
           )
           .bind(
@@ -424,17 +476,17 @@ async function writeToD1(
             o.customerName || '',
             o.customerEmail || '',
             o.customerPhone || '',
-            o.customerAddress || '',
+            o.shippingLocation || o.customerAddress || '',
             o.customerCity || '',
-            o.deliveryMethod || 'delivery',
+            o.deliveryMethod || 'Standard Delivery',
             o.totalPrice ?? 0,
             o.subtotal ?? 0,
             o.discountAmount ?? 0,
             o.deliveryFee ?? 0,
-            o.status || 'pending',
+            o.status || 'accepted',
             o.promoCode ?? null,
-            o.orderNotes ?? null,
-            JSON.stringify(Array.isArray(o.items) ? o.items : []),
+            orderMetaJson,
+            JSON.stringify(lineItems),
             o.createdAt || new Date().toISOString(),
             o.updatedAt || new Date().toISOString()
           )

@@ -31,9 +31,11 @@ interface OrderEmailPayloadInput {
     itemsSummary?: string;
     primaryProductName?: string;
     primaryProductSize?: string;
+    primaryProductImage?: string;
     orderedItems?: Array<{
       productId?: string;
       productName?: string;
+      imageUrl?: string;
       selectedColor?: string;
       selectedSize?: string;
       selectedSetSizes?: Array<{
@@ -96,16 +98,20 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
   const totalPrice =
     Number(order.totalPrice) || Math.max(0, subtotal - discountAmount + deliveryFee);
 
-  const rawSender = (config.senderAddress || 'orders@samoweave.com').trim();
+  const rawSender = (config.senderAddress || 'orders@samoweave.com')
+    .trim()
+    .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com');
   const fromField = rawSender.includes('<') ? rawSender : `SAMO <${rawSender}>`;
 
   const rawBcc = (
     config.bccAddress !== undefined ? config.bccAddress : 'orders@samoweave.com'
-  ).trim();
+  )
+    .trim()
+    .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com');
   const bccList = rawBcc
     ? rawBcc
         .split(/[,;]+/)
-        .map((e) => e.trim())
+        .map((e) => e.trim().replace(/^order@samoweave\.com$/i, 'orders@samoweave.com'))
         .filter((e) => e.includes('@'))
     : [];
 
@@ -163,6 +169,14 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
       const lineTotal =
         unitPrice !== undefined ? `$${(unitPrice * qty).toLocaleString()}` : '';
 
+      const rawItemImg = (
+        item.imageUrl ||
+        (orderedItems.length === 1 ? order.primaryProductImage : '') ||
+        ''
+      ).trim();
+      const hasPublicItemImage =
+        rawItemImg.startsWith('https://') || rawItemImg.startsWith('http://');
+
       const metaParts: string[] = [];
       if (refCode) metaParts.push(refCode);
       if (color) metaParts.push(`Color: ${color}`);
@@ -185,16 +199,35 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
       itemsHtmlRows += `
         <tr>
           <td style="padding:14px 0;border-bottom:1px solid #E5E5E5;vertical-align:top;">
-            <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#09090B;line-height:1.4;">
-              ${escapeHtml(name)}
-            </div>
-            ${
-              metaLine
-                ? `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#52525B;letter-spacing:0.04em;margin-top:4px;line-height:1.5;">
-                    ${escapeHtml(metaLine)}
-                  </div>`
-                : ''
-            }
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+              <tr>
+                ${
+                  hasPublicItemImage
+                    ? `<td width="56" style="width:56px;padding-right:12px;vertical-align:top;">
+                        <img
+                          src="${escapeHtml(rawItemImg)}"
+                          alt="${escapeHtml(name)}"
+                          width="56"
+                          height="70"
+                          style="display:block;width:56px;height:70px;object-fit:cover;border:1px solid #E4E4E7;background-color:#F4F4F5;"
+                        />
+                      </td>`
+                    : ''
+                }
+                <td style="vertical-align:top;">
+                  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#09090B;line-height:1.4;">
+                    ${escapeHtml(name)}
+                  </div>
+                  ${
+                    metaLine
+                      ? `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#52525B;letter-spacing:0.04em;margin-top:4px;line-height:1.5;">
+                          ${escapeHtml(metaLine)}
+                        </div>`
+                      : ''
+                  }
+                </td>
+              </tr>
+            </table>
           </td>
           <td align="center" style="padding:14px 8px;border-bottom:1px solid #E5E5E5;vertical-align:top;font-family:'Courier New',Courier,monospace;font-size:12px;color:#27272A;white-space:nowrap;">
             Qty: ${qty}
@@ -485,6 +518,16 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
     `© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED`,
   ].join('\n');
 
+  const hasValidCustomerEmail = customerEmail.includes('@');
+  const primaryRecipient = hasValidCustomerEmail
+    ? customerEmail
+    : bccList[0] || 'orders@samoweave.com';
+  const effectiveBccList = hasValidCustomerEmail
+    ? bccList.filter(
+        (e) => e.toLowerCase() !== primaryRecipient.toLowerCase()
+      )
+    : bccList.slice(1);
+
   const payload: {
     from: string;
     to: string[];
@@ -495,14 +538,14 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
     text: string;
   } = {
     from: fromField,
-    to: [customerEmail || rawSender],
+    to: [primaryRecipient],
     subject: `Order Confirmed — SAMO (#${orderRef})`,
     html,
     text,
   };
 
-  if (bccList.length > 0) {
-    payload.bcc = bccList;
+  if (effectiveBccList.length > 0) {
+    payload.bcc = effectiveBccList;
   }
   if (replyTo) {
     payload.reply_to = replyTo;
@@ -560,30 +603,9 @@ export const onRequestPost = async (context: {
       );
     }
 
-    const recipientEmail = (order.customerEmail || '').trim();
-    if (!recipientEmail || !recipientEmail.includes('@')) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          skipped: true,
-          error: 'Customer email address is missing or invalid.',
-        }),
-        {
-          status: 200,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
     let storedBanners: Record<string, string> = {};
     const db = context.env.DB || context.env.SAMO_D1;
-    if (
-      db &&
-      (!body.bannerUrl ||
-        !body.senderAddress ||
-        body.bccAddress === undefined ||
-        !body.replyToAddress)
-    ) {
+    if (db) {
       try {
         const row = await db
           .prepare('SELECT value FROM settings WHERE key = ?1;')
@@ -598,13 +620,53 @@ export const onRequestPost = async (context: {
       } catch (d1Err) {
         console.warn('[SAMO] D1 siteBanners lookup notice:', d1Err);
       }
+
+      // Enrich orderedItems with product/color variant images from D1 if any item lacks imageUrl
+      if (
+        Array.isArray(order.orderedItems) &&
+        order.orderedItems.some((item) => !item.imageUrl)
+      ) {
+        for (const item of order.orderedItems) {
+          if (item.imageUrl || !item.productId) continue;
+          try {
+            const prodRow = await db
+              .prepare(
+                'SELECT image_url, color_variants FROM products WHERE id = ?1;'
+              )
+              .bind(item.productId)
+              .first<{ image_url?: string; color_variants?: string }>();
+            if (prodRow) {
+              let resolvedImg = prodRow.image_url || '';
+              if (item.selectedColor && prodRow.color_variants) {
+                try {
+                  const variants = JSON.parse(prodRow.color_variants) as Array<{
+                    colorName?: string;
+                    imageUrl?: string;
+                  }>;
+                  const matchedVar = variants.find(
+                    (v) =>
+                      (v.colorName || '').trim().toLowerCase() ===
+                      item.selectedColor!.trim().toLowerCase()
+                  );
+                  if (matchedVar?.imageUrl) {
+                    resolvedImg = matchedVar.imageUrl;
+                  }
+                } catch {}
+              }
+              if (resolvedImg) {
+                item.imageUrl = resolvedImg;
+              }
+            }
+          } catch {}
+        }
+      }
     }
 
     const emailPayload = buildResendEmailPayload({
       order,
       bannerUrl:
-        body.bannerUrl !== undefined
-          ? body.bannerUrl
+        body.bannerUrl && body.bannerUrl.trim()
+          ? body.bannerUrl.trim()
           : storedBanners.orderEmailBannerUrl || '',
       bannerLinkUrl:
         body.bannerLinkUrl ||

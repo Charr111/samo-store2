@@ -1633,18 +1633,24 @@ export function calculateOrderTotals(
 }
 
 /**
- * Selects complementary upsell products for the Shopping Bag drawer from the same
- * department (Women or Kids — matching Baby/Junior/Teen when Kids is selected),
- * excluding items already in the cart.
+ * Selects parallel similar products for the Shopping Bag drawer from the same
+ * department and category as the items in the customer's bag, excluding items already in the cart.
  */
 export function getComplementaryUpsellProducts(
   cartItems: { product: ProductItem }[],
   allProducts: ProductItem[],
-  limit = 2
+  limit = 1
 ): ProductItem[] {
   if (!Array.isArray(cartItems) || cartItems.length === 0) return [];
   const inCartIds = new Set(cartItems.map((ci) => ci.product.id));
   const anchor = cartItems[cartItems.length - 1].product;
+  const anchorCatLower = anchor.category.trim().toLowerCase();
+  const inCartCategories = new Set(
+    cartItems.map((ci) => ci.product.category.trim().toLowerCase())
+  );
+  const anchorMaterials = new Set(
+    (anchor.materials || []).map((m) => m.trim().toLowerCase())
+  );
 
   const availablePool = allProducts.filter((p) => {
     if (inCartIds.has(p.id)) return false;
@@ -1654,23 +1660,24 @@ export function getComplementaryUpsellProducts(
 
   const scored = availablePool.map((candidate) => {
     let score = 0;
-    const sameCategory =
-      candidate.category.trim().toLowerCase() ===
-      anchor.category.trim().toLowerCase();
+    const candidateCatLower = candidate.category.trim().toLowerCase();
+    const sameCategory = candidateCatLower === anchorCatLower;
+    const matchesAnyCartCategory = inCartCategories.has(candidateCatLower);
     const sameStyle =
       candidate.style.trim().toLowerCase() === anchor.style.trim().toLowerCase();
+    const sharesMaterial = (candidate.materials || []).some((m) =>
+      anchorMaterials.has(m.trim().toLowerCase())
+    );
 
-    if (anchor.department === 'kids') {
-      // For Kids (Baby, Junior, Teen), prioritize the exact same age/size sub-category first
-      if (sameCategory) score += 10;
-      if (sameStyle) score += 4;
-    } else {
-      // For Women, prioritize complementary categories (e.g., Bags/Belts/Tops/Trousers with Jackets) or matching style
-      if (!sameCategory) score += 6;
-      if (sameStyle) score += 5;
-      const catLower = candidate.category.trim().toLowerCase();
-      if (catLower === 'bags' || catLower === 'belts') score += 3;
+    // Parallel recommendation: prioritize the exact same category as the item being purchased
+    if (sameCategory) {
+      score += 12;
+    } else if (matchesAnyCartCategory) {
+      score += 8;
     }
+    if (sameStyle) score += 5;
+    if (sharesMaterial) score += 3;
+
     return { candidate, score };
   });
 
@@ -2252,11 +2259,15 @@ export function mergeSiteBannersConfig(
     orderEmailSenderAddress:
       typeof stored.orderEmailSenderAddress === 'string' &&
       stored.orderEmailSenderAddress.trim()
-        ? stored.orderEmailSenderAddress.trim()
+        ? stored.orderEmailSenderAddress
+            .trim()
+            .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com')
         : defaults.orderEmailSenderAddress,
     orderEmailBccAddress:
       typeof stored.orderEmailBccAddress === 'string'
-        ? stored.orderEmailBccAddress.trim()
+        ? stored.orderEmailBccAddress
+            .trim()
+            .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com')
         : defaults.orderEmailBccAddress,
     orderEmailReplyToAddress:
       typeof stored.orderEmailReplyToAddress === 'string' &&
@@ -2696,6 +2707,7 @@ export interface OrderConfirmationEmailConfig {
     promoCode?: string;
     totalPrice?: number;
     itemsSummary?: string;
+    primaryProductImage?: string;
     orderedItems?: Array<{
       productId?: string;
       productName?: string;
@@ -2711,6 +2723,7 @@ export interface OrderConfirmationEmailConfig {
       garmentCode?: string;
       quantity?: number;
       unitPrice?: number;
+      imageUrl?: string;
     }>;
     createdAt?: string;
   };
@@ -2751,16 +2764,20 @@ export function buildOrderConfirmationEmailPayload(
   const totalPrice =
     Number(order.totalPrice) || Math.max(0, subtotal - discountAmount + deliveryFee);
 
-  const rawSender = (config.senderAddress || 'orders@samoweave.com').trim();
+  const rawSender = (config.senderAddress || 'orders@samoweave.com')
+    .trim()
+    .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com');
   const fromField = rawSender.includes('<') ? rawSender : `SAMO <${rawSender}>`;
 
   const rawBcc = (
     config.bccAddress !== undefined ? config.bccAddress : 'orders@samoweave.com'
-  ).trim();
+  )
+    .trim()
+    .replace(/^order@samoweave\.com$/i, 'orders@samoweave.com');
   const bccList = rawBcc
     ? rawBcc
         .split(/[,;]+/)
-        .map((e) => e.trim())
+        .map((e) => e.trim().replace(/^order@samoweave\.com$/i, 'orders@samoweave.com'))
         .filter((e) => e.includes('@'))
     : [];
 
@@ -2821,6 +2838,14 @@ export function buildOrderConfirmationEmailPayload(
       const lineTotal =
         unitPrice !== undefined ? `$${(unitPrice * qty).toLocaleString()}` : '';
 
+      const rawItemImg = (
+        item.imageUrl ||
+        (orderedItems.length === 1 ? order.primaryProductImage : '') ||
+        ''
+      ).trim();
+      const hasPublicItemImage =
+        rawItemImg.startsWith('https://') || rawItemImg.startsWith('http://');
+
       const metaParts: string[] = [];
       if (refCode) metaParts.push(refCode);
       if (color) metaParts.push(`Color: ${color}`);
@@ -2843,16 +2868,35 @@ export function buildOrderConfirmationEmailPayload(
       itemsHtmlRows += `
         <tr>
           <td style="padding:14px 0;border-bottom:1px solid #E5E5E5;vertical-align:top;">
-            <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#09090B;line-height:1.4;">
-              ${escapeHtmlEmailText(name)}
-            </div>
-            ${
-              metaLine
-                ? `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#52525B;letter-spacing:0.04em;margin-top:4px;line-height:1.5;">
-                    ${escapeHtmlEmailText(metaLine)}
-                  </div>`
-                : ''
-            }
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+              <tr>
+                ${
+                  hasPublicItemImage
+                    ? `<td width="56" style="width:56px;padding-right:12px;vertical-align:top;">
+                        <img
+                          src="${escapeHtmlEmailText(rawItemImg)}"
+                          alt="${escapeHtmlEmailText(name)}"
+                          width="56"
+                          height="70"
+                          style="display:block;width:56px;height:70px;object-fit:cover;border:1px solid #E4E4E7;background-color:#F4F4F5;"
+                        />
+                      </td>`
+                    : ''
+                }
+                <td style="vertical-align:top;">
+                  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#09090B;line-height:1.4;">
+                    ${escapeHtmlEmailText(name)}
+                  </div>
+                  ${
+                    metaLine
+                      ? `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#52525B;letter-spacing:0.04em;margin-top:4px;line-height:1.5;">
+                          ${escapeHtmlEmailText(metaLine)}
+                        </div>`
+                      : ''
+                  }
+                </td>
+              </tr>
+            </table>
           </td>
           <td align="center" style="padding:14px 8px;border-bottom:1px solid #E5E5E5;vertical-align:top;font-family:'Courier New',Courier,monospace;font-size:12px;color:#27272A;white-space:nowrap;">
             Qty: ${qty}
@@ -3154,6 +3198,16 @@ export function buildOrderConfirmationEmailPayload(
     `© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED`,
   ].join('\n');
 
+  const hasValidCustomerEmail = customerEmail.includes('@');
+  const fallbackStoreRecipients =
+    bccList.length > 0 ? bccList : ['orders@samoweave.com'];
+  const toList = hasValidCustomerEmail ? [customerEmail] : fallbackStoreRecipients;
+  const effectiveBccList = hasValidCustomerEmail
+    ? bccList.filter(
+        (addr) => addr.toLowerCase() !== customerEmail.toLowerCase()
+      )
+    : [];
+
   const payload: {
     from: string;
     to: string[];
@@ -3164,14 +3218,14 @@ export function buildOrderConfirmationEmailPayload(
     text: string;
   } = {
     from: fromField,
-    to: [customerEmail || rawSender],
+    to: toList,
     subject: `Order Confirmed — SAMO (#${orderRef})`,
     html,
     text,
   };
 
-  if (bccList.length > 0) {
-    payload.bcc = bccList;
+  if (effectiveBccList.length > 0) {
+    payload.bcc = effectiveBccList;
   }
   if (replyTo) {
     payload.reply_to = replyTo;
