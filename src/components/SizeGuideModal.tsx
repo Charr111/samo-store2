@@ -192,7 +192,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({
 
         {/* Footer info banner */}
         <div className="px-4 sm:px-6 py-3 border-t border-[#E5E5E5] bg-[#FFFFFF] flex items-center justify-between text-[10px] text-zinc-500 shrink-0">
-          <span>SAMO Weave · Precision Garment Sizing</span>
+          <span>SAMO · Precision Garment Sizing</span>
           <button
             type="button"
             onClick={onClose}

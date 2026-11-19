@@ -23,7 +23,7 @@ export const AiStylistModal: React.FC<AiStylistModalProps> = ({
   >([
     {
       role: 'assistant',
-      text: 'Welcome to SAMO Weave. Ask for curated runway pairings across Women (Jacket, Trench Coat, Fur, Suede, Trousers, Bags, Belts) or Kids (Baby, Junior, Teen in cm sizing).',
+      text: 'Welcome to SAMO. Ask for curated runway pairings across Women (Jacket, Trench Coat, Fur, Suede, Trousers, Bags, Belts) or Kids (Baby, Junior, Teen in cm sizing).',
     },
   ]);
 
@@ -49,7 +49,7 @@ export const AiStylistModal: React.FC<AiStylistModalProps> = ({
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to reach SAMO Weave AI');
+        throw new Error(data.error || 'Failed to reach SAMO AI');
       }
       setMessages((prev) => [
         ...prev,
@@ -79,7 +79,7 @@ export const AiStylistModal: React.FC<AiStylistModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="SAMO Weave AI Stylist"
+      aria-label="SAMO AI Stylist"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
     >
       <div className="w-full max-w-2xl bg-white border border-zinc-950 flex flex-col max-h-[85vh]">
@@ -87,7 +87,7 @@ export const AiStylistModal: React.FC<AiStylistModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Sparkles className="w-4 h-4" />
             <h2 className="font-display text-sm font-bold tracking-[0.16em] uppercase">
-              SAMO Weave High-Thinking Stylist
+              SAMO High-Thinking Stylist
             </h2>
           </div>
           <button
@@ -130,7 +130,7 @@ export const AiStylistModal: React.FC<AiStylistModalProps> = ({
               }`}
             >
               <div className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">
-                {m.role === 'user' ? 'Client Inquiry' : 'SAMO Weave Director'}
+                {m.role === 'user' ? 'Client Inquiry' : 'SAMO Director'}
               </div>
               <div className="whitespace-pre-line">{m.text}</div>
             </div>

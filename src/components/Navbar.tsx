@@ -164,9 +164,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               onNavigate('/home');
               onSelectCategory('all');
             }}
-            className="font-display text-2xl lg:text-[28px] font-extrabold tracking-[0.18em] text-zinc-950 uppercase whitespace-nowrap shrink-0"
+            aria-label="SAMO Home"
+            className="inline-flex items-center justify-center shrink-0"
           >
-            SAMO
+            <img
+              src="https://images.samoweave.com/logo/samo-weave-logo.png"
+              alt="SAMO"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+              className="h-8 sm:h-9 md:h-10 w-auto max-w-[160px] sm:max-w-[190px] md:max-w-[220px] object-contain select-none"
+            />
           </a>
         </div>
 

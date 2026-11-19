@@ -2030,7 +2030,7 @@ export function buildDefaultCategoryBannerForCategory(
     department,
     categoryName,
     imageUrl,
-    kicker: `SAMO WEAVE · ${displayCat.toUpperCase()}`,
+    kicker: `SAMO · ${displayCat.toUpperCase()}`,
     title: `${displayCat.toUpperCase()} EDITORIAL ARCHIVE`,
     enabled: true,
     insertAfterCount: 4,
@@ -2097,7 +2097,7 @@ export function buildDefaultSiteBanners(
     homeHeroVideoUrl: 'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4',
     homeHeroImageUrl: 'studio://women-jacket-black-leather-biker',
     homeHeroKicker:
-      'SAMO WEAVE · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
+      'SAMO · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
     homeHeroTitle: 'NEW ARRIVALS',
     homeMiddleBannerUrl: 'studio://kids-junior-leather-bomber',
     homeMiddleKicker:
@@ -2133,9 +2133,10 @@ export function mergeSiteBannersConfig(
         const rawKicker =
           typeof val.kicker === 'string'
             ? val.kicker
-                .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+                .replace(/SAMO ATELIER/gi, 'SAMO')
+                .replace(/SAMO WEAVE/gi, 'SAMO')
                 .replace(/\bATELIER\b/gi, 'SAMO')
-            : fallback?.kicker || 'SAMO WEAVE';
+            : fallback?.kicker || 'SAMO';
         mergedCategoryBanners[key] = {
           categoryKey: key,
           department: val.department || fallback?.department || 'women',
@@ -2182,7 +2183,8 @@ export function mergeSiteBannersConfig(
     homeHeroKicker:
       typeof stored.homeHeroKicker === 'string' && stored.homeHeroKicker.trim()
         ? stored.homeHeroKicker
-            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/SAMO ATELIER/gi, 'SAMO')
+            .replace(/SAMO WEAVE/gi, 'SAMO')
             .replace(/\bATELIER\b/gi, 'SAMO')
         : defaults.homeHeroKicker,
     homeHeroTitle:
@@ -2199,7 +2201,8 @@ export function mergeSiteBannersConfig(
       stored.homeMiddleKicker.trim()
         ? stored.homeMiddleKicker
             .replace(/SAMO KIDS ATELIER/gi, 'SAMO KIDS')
-            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/SAMO ATELIER/gi, 'SAMO')
+            .replace(/SAMO WEAVE/gi, 'SAMO')
             .replace(/\bATELIER\b/gi, 'SAMO')
         : defaults.homeMiddleKicker,
     homeMiddleTitle:
@@ -2301,7 +2304,7 @@ export function buildEditorialProductDescription(
   const templates = [
     `${subjectPhrase}${materialPhrase}. Tailored in the house's signature ${styleLabel.toLowerCase()} proportions with clean architectural lines and precision finishing.${colorPhrase}`,
     `Designed for the ${deptLabel} collection, this ${categoryLabel.toLowerCase()}${materialPhrase} balances structured ${styleLabel.toLowerCase()} construction with effortless movement and refined hardware details.${colorPhrase}`,
-    `SAMO Weave ${styleLabel.toLowerCase()} ${categoryLabel.toLowerCase()}${materialPhrase}, cut with a sharp silhouette, tonal seam work, and enduring house craftsmanship.${colorPhrase}`,
+    `SAMO ${styleLabel.toLowerCase()} ${categoryLabel.toLowerCase()}${materialPhrase}, cut with a sharp silhouette, tonal seam work, and enduring house craftsmanship.${colorPhrase}`,
   ];
 
   const idx = Math.abs(variationIndex) % templates.length;
@@ -2404,7 +2407,7 @@ export const DEFAULT_NEWSLETTER_POPUP_CONFIG: NewsletterPopupConfig = {
   delaySeconds: 10,
   maxTimesPerDay: 2,
   kicker: '',
-  title: 'Subscribe to Samo Weave',
+  title: 'Subscribe to Samo',
   subtitle:
     'Enter your email or phone number to receive early access to new arrivals, latest offers, and seasonal sales.',
   buttonText: 'Unlock your code',
@@ -2437,7 +2440,7 @@ export function mergeNewsletterPopupConfig(
     typeof stored.title === 'string'
       ? LEGACY_POPUP_TITLES.has(stored.title.trim())
         ? DEFAULT_NEWSLETTER_POPUP_CONFIG.title
-        : stored.title
+        : stored.title.replace(/Samo Weave/gi, 'Samo')
       : DEFAULT_NEWSLETTER_POPUP_CONFIG.title;
 
   const rawSubtitle =
@@ -2445,7 +2448,8 @@ export function mergeNewsletterPopupConfig(
       ? LEGACY_POPUP_SUBTITLES.has(stored.subtitle.trim())
         ? DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle
         : stored.subtitle
-            .replace(/SAMO Atelier/gi, 'SAMO Weave')
+            .replace(/SAMO Atelier/gi, 'SAMO')
+            .replace(/SAMO Weave/gi, 'SAMO')
             .replace(/\bAtelier\b/gi, 'Samo')
       : DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle;
 
@@ -2461,7 +2465,8 @@ export function mergeNewsletterPopupConfig(
       ? LEGACY_POPUP_KICKERS.has(stored.kicker.trim())
         ? ''
         : stored.kicker
-            .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            .replace(/SAMO ATELIER/gi, 'SAMO')
+            .replace(/SAMO WEAVE/gi, 'SAMO')
             .replace(/\bATELIER\b/gi, 'SAMO')
       : DEFAULT_NEWSLETTER_POPUP_CONFIG.kicker;
 

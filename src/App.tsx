@@ -2478,7 +2478,7 @@ export default function App() {
                     THE HOUSE OF SAMO — SINCE 1999
                   </h1>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Founded in 1999, SAMO Weave began as a dedicated leather and suede house crafting architectural outerwear, custom hides, and sculptural silhouettes. For over two decades, the house has remained true to its founding discipline: uncompromising raw materials—full-grain Italian cow leather, velvety calf suede, shearling fur, combed cashmere, and heavy silk—paired with bold, modernist tailoring.
+                    Founded in 1999, SAMO began as a dedicated leather and suede house crafting architectural outerwear, custom hides, and sculptural silhouettes. For over two decades, the house has remained true to its founding discipline: uncompromising raw materials—full-grain Italian cow leather, velvety calf suede, shearling fur, combed cashmere, and heavy silk—paired with bold, modernist tailoring.
                   </p>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
                     Today, the SAMO Showroom brings together our 11-category Women’s ready-to-wear and accessories archive alongside our precision centimeter-graded Kids collection (Baby, Junior, and Teen). Every garment is cut, finished, and inspected to the same exacting standards established in our studio in 1999.
@@ -2999,7 +2999,7 @@ export default function App() {
                             <div className="space-y-1.5">
                               <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300">
                                 {activeCategoryBanner.kicker ||
-                                  'SAMO WEAVE CURATION · HAND-FINISHED IN OUR STUDIO'}
+                                  'SAMO CURATION · HAND-FINISHED IN OUR STUDIO'}
                               </div>
                               <h2 className="font-display text-lg sm:text-2xl md:text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
                                 {activeCategoryBanner.title ||
@@ -3199,7 +3199,7 @@ export default function App() {
         onSubmitOrder={handleSubmitOrder}
       />
 
-      {/* SAMO WEAVE STYLIST MODAL */}
+      {/* SAMO STYLIST MODAL */}
       <AiStylistModal
         isOpen={aiStylistOpen}
         onClose={() => setAiStylistOpen(false)}
@@ -3393,7 +3393,7 @@ export default function App() {
         </div>
 
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-[11px] uppercase tracking-wider text-zinc-800">
-          <span>© 2026 SAMO WEAVE (EST. 1999) — ALL RIGHTS RESERVED</span>
+          <span>© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED</span>
         </div>
       </footer>
     </div>

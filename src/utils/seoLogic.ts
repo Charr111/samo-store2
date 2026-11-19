@@ -19,7 +19,6 @@ export const SAMO_CANONICAL_DOMAIN = 'https://samoweave.com';
 
 export const LUXURY_FASHION_CORE_KEYWORDS: readonly string[] = [
   'SAMO',
-  'SAMO Weave',
   'luxury fashion house',
   'architectural ready-to-wear',
   'Italian cow leather jacket',
@@ -29,7 +28,7 @@ export const LUXURY_FASHION_CORE_KEYWORDS: readonly string[] = [
   'designer leather bags',
   'luxury kids wear',
   'precision centimeter sizing',
-  'fine leather Samo Weave',
+  'fine leather Samo',
   'sport chic luxury',
   'Beirut Paris Milan luxury fashion',
 ];
@@ -48,7 +47,7 @@ export function buildProductImageSeoAlt(params: {
 }): string {
   const rawName = (params.name || params.alt || '').trim();
   if (!rawName) {
-    return 'SAMO Weave (Est. 1999) — Architectural Luxury Ready-to-Wear, Fine Leather, Suede & Fur';
+    return 'SAMO (Est. 1999) — Architectural Luxury Ready-to-Wear, Fine Leather, Suede & Fur';
   }
 
   // If the alt text already includes the full SAMO SEO signature, return as-is
@@ -61,7 +60,7 @@ export function buildProductImageSeoAlt(params: {
       ? 'SAMO Kids'
       : params.department === 'women'
       ? 'SAMO Women'
-      : 'SAMO Weave';
+      : 'SAMO';
 
   const catLabel = (params.category || '').trim();
   const styleLabel = (params.style || '').trim();
@@ -81,7 +80,7 @@ export function buildProductImageSeoAlt(params: {
   } else {
     parts.push('Architectural Luxury Ready-to-Wear');
   }
-  parts.push('SAMO Weave (Est. 1999)');
+  parts.push('SAMO (Est. 1999)');
 
   return parts.join(' — ');
 }
@@ -139,14 +138,14 @@ export function generateCatalogSeoSnapshot(
     }
     const topMaterials = Array.from(materialSet).slice(0, 4);
 
-    const title = `${cleanName} — ${deptTitle} Luxury Collection | SAMO Weave (Est. 1999)`;
+    const title = `${cleanName} — ${deptTitle} Luxury Collection | SAMO (Est. 1999)`;
     const description =
       cat.description && cat.description.trim().length > 20
         ? `${cat.description.trim()} Explore ${matchingProducts.length || 'exclusive'} pieces in ${
             topMaterials.length > 0
               ? topMaterials.join(', ')
               : 'Italian cow leather, suede, cashmere, and silk'
-          } at SAMO Weave.`
+          } at SAMO.`
         : `Discover SAMO ${deptTitle} ${cleanName}. Architectural luxury silhouettes tailored in ${
             topMaterials.length > 0
               ? topMaterials.join(', ')
@@ -159,7 +158,7 @@ export function generateCatalogSeoSnapshot(
         `${deptTitle} ${cleanName}`,
         `luxury ${cleanName.toLowerCase()}`,
         ...topMaterials.map((m) => `${m.toLowerCase()} ${cleanName.toLowerCase()}`),
-        'SAMO Weave',
+        'SAMO',
         'architectural luxury fashion',
         ...activeCoreKeywords.slice(0, 6),
       ])
@@ -195,7 +194,7 @@ export function generateCatalogSeoSnapshot(
       colorName: colorNames[0],
     });
 
-    const title = `${prod.name} — ${deptTitle} ${prod.category} | SAMO Weave`;
+    const title = `${prod.name} — ${deptTitle} ${prod.category} | SAMO`;
     const priceSnippet = hasDiscount
       ? `$${effectivePrice.toLocaleString()} (${discountBadge})`
       : `$${effectivePrice.toLocaleString()}`;
@@ -204,7 +203,7 @@ export function generateCatalogSeoSnapshot(
         ? prod.description.trim()
         : `${prod.name} by ${deptTitle}. Crafted in ${materialsText}.`;
 
-    const description = `${rawDesc} ${priceSnippet} · ${materialsText}. Shop authentic SAMO Weave luxury ready-to-wear.`.slice(
+    const description = `${rawDesc} ${priceSnippet} · ${materialsText}. Shop authentic SAMO luxury ready-to-wear.`.slice(
       0,
       160
     );
@@ -217,7 +216,7 @@ export function generateCatalogSeoSnapshot(
         `${prod.style} ${prod.category}`,
         ...(prod.materials || []).map((m) => `${m} ${prod.category}`),
         ...colorNames.map((c) => `${c} ${prod.name}`),
-        'SAMO Weave',
+        'SAMO',
         ...activeCoreKeywords.slice(0, 5),
       ])
     );
@@ -312,12 +311,12 @@ export function buildDynamicPageSeo(params: {
       activeProduct.department === 'kids' ? 'SAMO Kids' : 'SAMO Women';
     const title =
       snap?.title ||
-      `${activeProduct.name} — ${deptLabel} ${activeProduct.category} | SAMO Weave`;
+      `${activeProduct.name} — ${deptLabel} ${activeProduct.category} | SAMO`;
     const description =
       snap?.description ||
       `${activeProduct.description || activeProduct.name} — Crafted in ${(
         activeProduct.materials || []
-      ).join(', ')}. $${effectivePrice.toLocaleString()} at SAMO Weave.`.slice(
+      ).join(', ')}. $${effectivePrice.toLocaleString()} at SAMO.`.slice(
         0,
         160
       );
@@ -351,7 +350,7 @@ export function buildDynamicPageSeo(params: {
           {
             '@type': 'Organization',
             '@id': `${SAMO_CANONICAL_DOMAIN}/#organization`,
-            name: 'SAMO Weave',
+            name: 'SAMO',
             alternateName: 'SAMO Luxury House',
             foundingDate: '1999',
             url: SAMO_CANONICAL_DOMAIN,
@@ -419,11 +418,11 @@ export function buildDynamicPageSeo(params: {
     const deptTitle = dept === 'kids' ? 'SAMO Kids' : 'SAMO Women';
     const title =
       snap?.title ||
-      `${cleanCat} — ${deptTitle} Luxury Collection | SAMO Weave (Est. 1999)`;
+      `${cleanCat} — ${deptTitle} Luxury Collection | SAMO (Est. 1999)`;
     const description =
       snap?.description ||
       matchedCat?.description ||
-      `Explore ${deptTitle} ${cleanCat} at SAMO Weave. Architectural ready-to-wear in Italian cow leather, calf suede, cashmere, and silk.`;
+      `Explore ${deptTitle} ${cleanCat} at SAMO. Architectural ready-to-wear in Italian cow leather, calf suede, cashmere, and silk.`;
     const keywords = (
       snap?.keywords || [
         `SAMO ${cleanCat}`,
@@ -454,7 +453,7 @@ export function buildDynamicPageSeo(params: {
         url: canonicalUrl,
         isPartOf: {
           '@type': 'WebSite',
-          name: 'SAMO Weave',
+          name: 'SAMO',
           url: SAMO_CANONICAL_DOMAIN,
         },
       },
@@ -475,30 +474,30 @@ export function buildDynamicPageSeo(params: {
     },
     '/women': {
       title:
-        'SAMO Women — Leather Jackets, Trench Coats, Tailoring, Fur & Bags | SAMO Weave',
+        'SAMO Women — Leather Jackets, Trench Coats, Tailoring, Fur & Bags | SAMO',
       description:
         'Shop SAMO Women ready-to-wear: architectural Italian cow leather biker jackets, oversized calf suede trench coats, full sets, silk tops, fur coats, and signature bags.',
       path: '/women',
     },
     '/kids': {
       title:
-        'SAMO Kids — Minis (1–5), Children (6+) & Teen (13+) Luxury Collection | SAMO Weave',
+        'SAMO Kids — Minis (1–5), Children (6+) & Teen (13+) Luxury Collection | SAMO',
       description:
         'Explore SAMO Kids architectural luxury outerwear, cashmere knit sets, leather bombers, and tailored denim graded in precision centimeter sizing (80 cm – 160 cm).',
       path: '/kids',
     },
     '/new-arrivals': {
       title:
-        'New Arrivals — Latest Runway Releases | SAMO Weave (Est. 1999)',
+        'New Arrivals — Latest Runway Releases | SAMO (Est. 1999)',
       description:
-        'Discover the latest SAMO Weave arrivals for Women and Kids in vegetable-tanned leather, cognac calf suede, shearling fur, and heavy silk.',
+        'Discover the latest SAMO arrivals for Women and Kids in vegetable-tanned leather, cognac calf suede, shearling fur, and heavy silk.',
       path: '/new-arrivals',
     },
     '/gifts': {
       title:
-        'SAMO Gifts — Signature Leather Bags, Hourglass Top-Handles & Brass Belts | SAMO Weave',
+        'SAMO Gifts — Signature Leather Bags, Hourglass Top-Handles & Brass Belts | SAMO',
       description:
-        'Curated luxury gifts from SAMO Weave: concave top-handle leather bags, Rodeo totes, and Italian cow leather belts with brushed palladium hardware.',
+        'Curated luxury gifts from SAMO: concave top-handle leather bags, Rodeo totes, and Italian cow leather belts with brushed palladium hardware.',
       path: '/gifts',
     },
     '/showroom': {
@@ -509,8 +508,8 @@ export function buildDynamicPageSeo(params: {
       path: '/showroom',
     },
     '/admin': {
-      title: 'SAMO Weave Admin Portal | Catalog, Inventory & SEO Management',
-      description: 'SAMO Weave internal management portal.',
+      title: 'SAMO Admin Portal | Catalog, Inventory & SEO Management',
+      description: 'SAMO internal management portal.',
       path: '/admin',
     },
   };
@@ -536,7 +535,7 @@ export function buildDynamicPageSeo(params: {
         {
           '@type': 'Organization',
           '@id': `${SAMO_CANONICAL_DOMAIN}/#organization`,
-          name: 'SAMO Weave',
+          name: 'SAMO',
           alternateName: 'SAMO — Architectural Luxury Fashion House',
           foundingDate: '1999',
           url: SAMO_CANONICAL_DOMAIN,
@@ -545,7 +544,7 @@ export function buildDynamicPageSeo(params: {
           '@type': 'WebSite',
           '@id': `${SAMO_CANONICAL_DOMAIN}/#website`,
           url: SAMO_CANONICAL_DOMAIN,
-          name: 'SAMO Weave',
+          name: 'SAMO',
           description: chosen.description,
           publisher: {
             '@id': `${SAMO_CANONICAL_DOMAIN}/#organization`,

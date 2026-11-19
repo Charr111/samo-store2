@@ -662,7 +662,7 @@ async function startServer() {
             .join('\n')
         : '';
 
-      const systemPrompt = `You are the Head Samo Weave Director for SAMO, an architectural luxury fashion house specializing in Women and Kids wear (Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts).
+      const systemPrompt = `You are the Head Samo Director for SAMO, an architectural luxury fashion house specializing in Women and Kids wear (Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts).
 Provide concise, authoritative styling, sizing (Letter XS-XL, European Numeric 34-44, or Kids Centimeters 80 cm - 150 cm), and material care guidance.
 Current department focus: ${department || 'All'}.
 Available catalog items:

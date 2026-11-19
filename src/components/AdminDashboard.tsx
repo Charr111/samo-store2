@@ -737,7 +737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     newsletterPopupConfig.buttonText ?? 'Unlock your code'
   );
   const [popupTitleDraft, setPopupTitleDraft] = useState<string>(
-    newsletterPopupConfig.title ?? 'Subscribe to Samo Weave'
+    (newsletterPopupConfig.title ?? 'Subscribe to Samo').replace(/Samo Weave/gi, 'Samo')
   );
   const [popupSubtitleDraft, setPopupSubtitleDraft] = useState<string>(
     newsletterPopupConfig.subtitle ??
@@ -754,7 +754,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         newsletterPopupConfig.buttonText ?? 'Unlock your code'
       );
       setPopupTitleDraft(
-        newsletterPopupConfig.title ?? 'Subscribe to Samo Weave'
+        (newsletterPopupConfig.title ?? 'Subscribe to Samo').replace(/Samo Weave/gi, 'Samo')
       );
       setPopupSubtitleDraft(
         newsletterPopupConfig.subtitle ??
@@ -2010,7 +2010,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleResetToDefaults = () => {
     if (
       window.confirm(
-        'Reset all size guides and measurement tables to SAMO Weave verified defaults? Any custom sizes or table edits will be restored.'
+        'Reset all size guides and measurement tables to SAMO verified defaults? Any custom sizes or table edits will be restored.'
       )
     ) {
       handleUpdateCurrentSizeConfig(
@@ -2143,7 +2143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               SAMO
             </span>
             <span className="text-xs text-zinc-400 uppercase tracking-widest">
-              /admin · Restricted SAMO Weave Portal
+              /admin · Restricted SAMO Portal
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -2188,7 +2188,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 SAMO Admin Authentication
               </h1>
               <p className="text-xs text-zinc-400">
-                Restricted to Authorized SAMO Weave Administration Accounts
+                Restricted to Authorized SAMO Administration Accounts
               </p>
             </div>
           </div>
@@ -2199,7 +2199,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Unauthorized Account: {currentUser.email}
               </p>
               <p>
-                Only authorized SAMO Weave administration accounts verified in the
+                Only authorized SAMO administration accounts verified in the
                 database can access <code>/admin</code>.
               </p>
             </div>
@@ -2239,7 +2239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="text-center text-[11px] text-zinc-600 uppercase tracking-widest">
-          SAMO Weave Security Active
+          SAMO Security Active
         </div>
       </div>
     );

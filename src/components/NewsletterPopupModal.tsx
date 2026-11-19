@@ -77,7 +77,7 @@ export const NewsletterPopupModal: React.FC<NewsletterPopupModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close SAMO Weave Newsletter"
+          aria-label="Close SAMO Newsletter"
           className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5 z-10 flex h-8 w-8 items-center justify-center border border-[#27272A] bg-[#141416] text-[#A1A1AA] transition-colors hover:border-white hover:text-white cursor-pointer"
         >
           <X className="h-4 w-4" />
@@ -85,7 +85,7 @@ export const NewsletterPopupModal: React.FC<NewsletterPopupModalProps> = ({
 
         <div className="px-5 py-6 sm:px-8 sm:py-8">
           <h2 className="pr-8 font-display text-base sm:text-lg md:text-xl font-bold tracking-[0.1em] uppercase text-white leading-snug">
-            {config.title || 'Subscribe to Samo Weave'}
+            {(config.title || 'Subscribe to Samo').replace(/Samo Weave/gi, 'Samo')}
           </h2>
 
           <p className="mt-2 text-xs leading-relaxed text-[#A1A1AA]">
@@ -139,7 +139,7 @@ export const NewsletterPopupModal: React.FC<NewsletterPopupModalProps> = ({
             <div className="mt-5 border border-[#27272A] bg-[#141416] p-4 sm:p-5 text-center space-y-4">
               <div className="inline-flex items-center gap-1.5 border border-emerald-800/60 bg-emerald-950/40 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] uppercase text-emerald-300">
                 <Check className="h-3.5 w-3.5" />
-                Subscribed to SAMO Weave
+                Subscribed to SAMO
               </div>
 
               <div>
@@ -182,7 +182,7 @@ export const NewsletterPopupModal: React.FC<NewsletterPopupModalProps> = ({
                 onClick={onClose}
                 className="w-full border border-[#3F3F46] bg-transparent py-2.5 text-[10px] font-semibold tracking-[0.2em] uppercase text-white transition-colors hover:border-white hover:bg-white/5 cursor-pointer"
               >
-                CONTINUE TO SAMO WEAVE
+                CONTINUE TO SAMO
               </button>
             </div>
           )}

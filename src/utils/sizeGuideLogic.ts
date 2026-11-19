@@ -145,7 +145,8 @@ export function mergeSizeGuideConfig(
   const normalizedFitNoteTitle =
     typeof incoming.fitNoteTitle === 'string' && incoming.fitNoteTitle.trim()
       ? incoming.fitNoteTitle
-          .replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+          .replace(/SAMO ATELIER/gi, 'SAMO')
+          .replace(/SAMO WEAVE/gi, 'SAMO')
           .replace(/ATELIER FIT NOTE/gi, 'SAMO FIT NOTE')
           .replace(/\bAtelier\b/gi, 'SAMO')
       : def.fitNoteTitle;
@@ -153,7 +154,8 @@ export function mergeSizeGuideConfig(
   const normalizedFitNoteText =
     typeof incoming.fitNoteText === 'string' && incoming.fitNoteText.trim()
       ? incoming.fitNoteText
-          .replace(/SAMO Atelier/gi, 'SAMO Weave')
+          .replace(/SAMO Atelier/gi, 'SAMO')
+          .replace(/SAMO Weave/gi, 'SAMO')
           .replace(/\batelier\b/gi, 'Samo')
       : def.fitNoteText;
 
