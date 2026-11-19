@@ -915,9 +915,15 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
             ? String(body.promoGiftCode)
             : storedBanners.orderEmailPromoCode || 'SAMO10',
         promoGiftDescription:
-          body.promoGiftDescription ||
-          storedBanners.orderEmailPromoDescription ||
-          'Enjoy 10% off your next order at samoweave.com',
+          body.promoGiftDescription !== undefined
+            ? String(body.promoGiftDescription)
+            : storedBanners.orderEmailPromoDescription !== undefined
+            ? String(storedBanners.orderEmailPromoDescription)
+            : 'Enjoy 10% off your next order at samoweave.com',
+        promoGiftBannerUrl:
+          body.promoGiftBannerUrl !== undefined
+            ? String(body.promoGiftBannerUrl).trim()
+            : storedBanners.orderEmailPromoBannerUrl || '',
       });
 
       const resendResponse = await fetch('https://api.resend.com/emails', {

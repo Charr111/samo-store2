@@ -59,6 +59,7 @@ interface OrderEmailPayloadInput {
   promoGiftEnabled?: boolean;
   promoGiftCode?: string;
   promoGiftDescription?: string;
+  promoGiftBannerUrl?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -131,10 +132,14 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
 
   const promoGiftEnabled = Boolean(config.promoGiftEnabled);
   const promoGiftCode = (config.promoGiftCode ?? 'SAMO10').trim().toUpperCase();
-  const promoGiftDescription = (
-    config.promoGiftDescription ||
-    'Enjoy 10% off your next order at samoweave.com'
-  ).trim();
+  const promoGiftDescription =
+    config.promoGiftDescription !== undefined
+      ? config.promoGiftDescription.trim()
+      : 'Enjoy 10% off your next order at samoweave.com';
+  const promoGiftBannerUrl = (config.promoGiftBannerUrl || '').trim();
+  const hasPublicPromoBanner =
+    promoGiftBannerUrl.startsWith('https://') ||
+    promoGiftBannerUrl.startsWith('http://');
   const showPromoGiftSection = promoGiftEnabled && Boolean(promoGiftCode);
 
   const formattedDate = (() => {
@@ -425,17 +430,66 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
 
           ${
             showPromoGiftSection
-              ? `<tr>
+              ? hasPublicPromoBanner
+                ? `<tr>
             <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAFAFA;border:1px solid #09090B;border-collapse:collapse;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border:1px solid #09090B;border-collapse:collapse;">
                 <tr>
-                  <td align="center" style="padding:20px 18px;text-align:center;">
-                    <div style="font-size:10px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;color:#09090B;margin-bottom:6px;">
-                      A PRIVATE GIFT FOR YOUR NEXT VISIT
+                  <td
+                    align="center"
+                    background="${escapeHtml(promoGiftBannerUrl)}"
+                    bgcolor="#18181B"
+                    style="background-image:url('${escapeHtml(promoGiftBannerUrl)}');background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#18181B;padding:0;text-align:center;"
+                  >
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:rgba(9,9,11,0.55);">
+                      <tr>
+                        <td align="center" style="padding:26px 20px;text-align:center;">
+                          <div style="font-size:15px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;margin-bottom:${
+                            promoGiftDescription ? '8px' : '16px'
+                          };">
+                            YOU GOT 10% OFF
+                          </div>
+                          ${
+                            promoGiftDescription
+                              ? `<div style="font-size:12px;line-height:1.5;color:#F4F4F5;margin-bottom:16px;">
+                                  ${escapeHtml(promoGiftDescription)}
+                                </div>`
+                              : ''
+                          }
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
+                            <tr>
+                              <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #FFFFFF;padding:10px 24px;">
+                                <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;user-select:all;">
+                                  ${escapeHtml(promoGiftCode)}
+                                </span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`
+                : `<tr>
+            <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAF9F7;border:1px solid #09090B;border-collapse:collapse;">
+                <tr>
+                  <td align="center" style="padding:22px 18px;text-align:center;">
+                    <div style="font-size:15px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;margin-bottom:${
+                      promoGiftDescription ? '6px' : '14px'
+                    };">
+                      YOU GOT 10% OFF
                     </div>
-                    <div style="font-size:12px;line-height:1.5;color:#3F3F46;margin-bottom:14px;">
-                      ${escapeHtml(promoGiftDescription)}
-                    </div>
+                    ${
+                      promoGiftDescription
+                        ? `<div style="font-size:12px;line-height:1.5;color:#3F3F46;margin-bottom:14px;">
+                            ${escapeHtml(promoGiftDescription)}
+                          </div>`
+                        : ''
+                    }
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
                       <tr>
                         <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #09090B;padding:10px 22px;">
@@ -445,9 +499,6 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
                         </td>
                       </tr>
                     </table>
-                    <div style="font-size:10px;color:#71717A;letter-spacing:0.06em;margin-top:10px;">
-                      Copy and apply this code at checkout on samoweave.com
-                    </div>
                   </td>
                 </tr>
               </table>
@@ -557,9 +608,9 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
     ...(showPromoGiftSection
       ? [
           ``,
-          `A PRIVATE GIFT FOR YOUR NEXT VISIT`,
+          `YOU GOT 10% OFF`,
           `--------------------------------------------------`,
-          `${promoGiftDescription}`,
+          ...(promoGiftDescription ? [`${promoGiftDescription}`] : []),
           `Promo Code: ${promoGiftCode}`,
         ]
       : []),
@@ -646,6 +697,7 @@ export const onRequestPost = async (context: {
       promoGiftEnabled?: boolean;
       promoGiftCode?: string;
       promoGiftDescription?: string;
+      promoGiftBannerUrl?: string;
     };
 
     const order = body?.order;
@@ -751,9 +803,15 @@ export const onRequestPost = async (context: {
           ? body.promoGiftCode
           : storedBanners.orderEmailPromoCode || 'SAMO10',
       promoGiftDescription:
-        body.promoGiftDescription ||
-        storedBanners.orderEmailPromoDescription ||
-        'Enjoy 10% off your next order at samoweave.com',
+        body.promoGiftDescription !== undefined
+          ? String(body.promoGiftDescription)
+          : storedBanners.orderEmailPromoDescription !== undefined
+          ? String(storedBanners.orderEmailPromoDescription)
+          : 'Enjoy 10% off your next order at samoweave.com',
+      promoGiftBannerUrl:
+        body.promoGiftBannerUrl !== undefined
+          ? String(body.promoGiftBannerUrl).trim()
+          : storedBanners.orderEmailPromoBannerUrl || '',
     });
 
     const resendResponse = await fetch('https://api.resend.com/emails', {

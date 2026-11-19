@@ -1664,12 +1664,14 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
     defaultBanners.orderEmailPromoDescription,
     'Enjoy 10% off your next order at samoweave.com'
   );
+  assert.equal(defaultBanners.orderEmailPromoBannerUrl, '');
 
   const mergedWithPromo = mergeSiteBannersConfig(
     {
       orderEmailPromoEnabled: true,
       orderEmailPromoCode: 'VIP15',
       orderEmailPromoDescription: 'Enjoy 15% off your next acquisition at samoweave.com',
+      orderEmailPromoBannerUrl: 'https://images.samoweave.com/banners/promo-bg.jpg',
     },
     INITIAL_CATEGORIES
   );
@@ -1679,11 +1681,15 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
     mergedWithPromo.orderEmailPromoDescription,
     'Enjoy 15% off your next acquisition at samoweave.com'
   );
+  assert.equal(
+    mergedWithPromo.orderEmailPromoBannerUrl,
+    'https://images.samoweave.com/banners/promo-bg.jpg'
+  );
 });
 
 import { buildOrderConfirmationEmailPayload } from './catalogLogic';
 
-test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, optional next-order promo gift card, clickable campaign banner, and dual table CTA buttons', () => {
+test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, optional next-order promo gift card with background banner, clickable campaign banner, and dual table CTA buttons', () => {
   const payload = buildOrderConfirmationEmailPayload({
     order: {
       id: 'ord-9901',
@@ -1718,6 +1724,7 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     promoGiftEnabled: true,
     promoGiftCode: 'SAMOVIP15',
     promoGiftDescription: 'Enjoy 15% off your next order at samoweave.com',
+    promoGiftBannerUrl: 'https://images.samoweave.com/banners/promo-bg.jpg',
   });
 
   assert.equal(payload.from, 'SAMO <orders@samoweave.com>');
@@ -1737,8 +1744,25 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     payload.html.includes('width="56"') && payload.html.includes('height="70"'),
     true
   );
+  assert.equal(payload.html.includes('YOU GOT 10% OFF'), true);
   assert.equal(
     payload.html.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'),
+    false
+  );
+  assert.equal(
+    payload.html.toLowerCase().includes('copy and apply'),
+    false
+  );
+  assert.equal(
+    payload.html.toLowerCase().includes('copy & apply'),
+    false
+  );
+  assert.equal(
+    payload.html.includes('background="https://images.samoweave.com/banners/promo-bg.jpg"'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('rgba(9,9,11,0.55)'),
     true
   );
   assert.equal(payload.html.includes('SAMOVIP15'), true);
@@ -1780,7 +1804,8 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
   assert.equal(payload.html.includes('SAMO10'), true);
   assert.equal(payload.html.includes('$450'), true);
   assert.equal(payload.text.includes('SAMO — ORDER CONFIRMED (#SAMO-9901)'), true);
-  assert.equal(payload.text.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'), true);
+  assert.equal(payload.text.includes('YOU GOT 10% OFF'), true);
+  assert.equal(payload.text.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'), false);
   assert.equal(payload.text.includes('Promo Code: SAMOVIP15'), true);
   assert.equal(
     payload.text.includes(

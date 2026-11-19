@@ -663,6 +663,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authError, setAuthError] = useState<string>('');
   const [orderSearchQuery, setOrderSearchQuery] = useState<string>('');
   const [bannerFeedback, setBannerFeedback] = useState<string>('');
+  const [testEmailRecipient, setTestEmailRecipient] = useState<string>(
+    () =>
+      currentUser?.email ||
+      siteBanners.orderEmailBccAddress ||
+      'orders@samoweave.com'
+  );
+  const [testEmailSending, setTestEmailSending] = useState<boolean>(false);
+  const [testEmailStatus, setTestEmailStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [newsletterSearchQuery, setNewsletterSearchQuery] = useState<string>('');
   const [copiedNewsletter, setCopiedNewsletter] = useState<boolean>(false);
 
@@ -3991,26 +4002,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     {siteBanners.orderEmailPromoEnabled &&
-                      (siteBanners.orderEmailPromoCode || 'SAMO10').trim() && (
-                        <div className="px-4 py-4 bg-white border-b border-zinc-200">
-                          <div className="p-4 bg-[#FAF9F7] border border-zinc-300 text-center space-y-2">
-                            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-zinc-500">
-                              A PRIVATE GIFT FOR YOUR NEXT VISIT
-                            </div>
-                            <div className="text-[11px] text-zinc-800 leading-relaxed">
-                              {siteBanners.orderEmailPromoDescription ||
-                                'Enjoy 10% off your next order at samoweave.com'}
-                            </div>
-                            <div className="pt-1">
-                              <span className="inline-block px-4 py-1.5 border border-dashed border-zinc-950 bg-white font-mono text-xs font-bold tracking-[0.22em] text-zinc-950 uppercase">
-                                {(
-                                  siteBanners.orderEmailPromoCode || 'SAMO10'
-                                ).trim()}
-                              </span>
-                            </div>
+                      (siteBanners.orderEmailPromoCode || 'SAMO10').trim() && (() => {
+                        const previewPromoBg = (
+                          siteBanners.orderEmailPromoBannerUrl || ''
+                        ).trim();
+                        const previewPromoDesc =
+                          siteBanners.orderEmailPromoDescription !== undefined
+                            ? siteBanners.orderEmailPromoDescription.trim()
+                            : 'Enjoy 10% off your next order at samoweave.com';
+                        const hasBg =
+                          previewPromoBg.startsWith('https://') ||
+                          previewPromoBg.startsWith('http://');
+                        return (
+                          <div className="px-4 py-4 bg-white border-b border-zinc-200">
+                            {hasBg ? (
+                              <div
+                                className="relative border border-zinc-950 bg-zinc-900 bg-cover bg-center overflow-hidden"
+                                style={{
+                                  backgroundImage: `url("${previewPromoBg}")`,
+                                }}
+                              >
+                                <div className="p-5 bg-zinc-950/55 text-center space-y-2">
+                                  <div className="text-xs font-extrabold uppercase tracking-[0.2em] text-white">
+                                    YOU GOT 10% OFF
+                                  </div>
+                                  {previewPromoDesc && (
+                                    <div className="text-[11px] text-zinc-100 leading-relaxed">
+                                      {previewPromoDesc}
+                                    </div>
+                                  )}
+                                  <div className="pt-1">
+                                    <span className="inline-block px-4 py-1.5 border border-dashed border-white bg-white font-mono text-xs font-bold tracking-[0.22em] text-zinc-950 uppercase">
+                                      {(
+                                        siteBanners.orderEmailPromoCode ||
+                                        'SAMO10'
+                                      ).trim()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-[#FAF9F7] border border-zinc-950 text-center space-y-2">
+                                <div className="text-xs font-extrabold uppercase tracking-[0.2em] text-zinc-950">
+                                  YOU GOT 10% OFF
+                                </div>
+                                {previewPromoDesc && (
+                                  <div className="text-[11px] text-zinc-700 leading-relaxed">
+                                    {previewPromoDesc}
+                                  </div>
+                                )}
+                                <div className="pt-1">
+                                  <span className="inline-block px-4 py-1.5 border border-dashed border-zinc-950 bg-white font-mono text-xs font-bold tracking-[0.22em] text-zinc-950 uppercase">
+                                    {(
+                                      siteBanners.orderEmailPromoCode ||
+                                      'SAMO10'
+                                    ).trim()}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                     {siteBanners.orderEmailBannerUrl &&
                     siteBanners.orderEmailBannerUrl.trim() ? (
@@ -4254,7 +4307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         <div className="sm:col-span-2">
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                            Reward Description Message
+                            Reward Description Message (Optional)
                           </label>
                           <input
                             type="text"
@@ -4276,147 +4329,270 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           />
                         </div>
                       </div>
+
+                      {/* Promo Code Background Banner Upload (1200 x 450 px · 8:3 Wide JPG) */}
+                      <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                            Promo Code Background Banner (Recommended: 1200 × 450 px · 8:3 Wide · Auto-Converted to .JPG in R2)
+                          </label>
+                          {siteBanners.orderEmailPromoBannerUrl &&
+                            siteBanners.orderEmailPromoBannerUrl.trim() && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const prevUrl =
+                                    siteBanners.orderEmailPromoBannerUrl;
+                                  updateSiteBannerField(
+                                    'orderEmailPromoBannerUrl',
+                                    '',
+                                    'Removed Promo Code Background Banner'
+                                  );
+                                  if (prevUrl) {
+                                    await deleteMediaFromR2(prevUrl);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-red-950/70 hover:bg-red-900 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Remove</span>
+                              </button>
+                            )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          <input
+                            type="text"
+                            value={siteBanners.orderEmailPromoBannerUrl || ''}
+                            onChange={(e) =>
+                              updateSiteBannerField(
+                                'orderEmailPromoBannerUrl',
+                                e.target.value,
+                                'Order Email Promo Background Banner URL'
+                              )
+                            }
+                            placeholder="https://images.samoweave.com/banners/promo-bg-....jpg (optional)"
+                            className="flex-1 px-3 py-2 text-xs bg-zinc-950 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                          />
+                          <R2EmailBannerJpgUploadButton
+                            ariaLabel="Upload Promo Code Background Banner JPG"
+                            label="Upload Promo Banner (.JPG)"
+                            onUploaded={async (url) => {
+                              const oldUrl =
+                                siteBanners.orderEmailPromoBannerUrl;
+                              if (oldUrl && oldUrl !== url) {
+                                await deleteMediaFromR2(oldUrl);
+                              }
+                              updateSiteBannerField(
+                                'orderEmailPromoBannerUrl',
+                                url,
+                                'Order Email Promo Background Banner (.JPG)'
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Live Resend Test Email Sender */}
-                    <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="pt-3 border-t border-zinc-800 space-y-2.5">
                       <div className="text-[11px] text-zinc-400">
-                        Test your live Resend integration and preview the exact HTML order receipt + banner in your inbox:
+                        Test your live Resend integration and preview the exact HTML order receipt + promo card + banner in your inbox:
                       </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const targetEmail = window.prompt(
-                            'Enter recipient email address for the test SAMO Order Confirmation email:',
-                            currentUser?.email ||
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                        <input
+                          type="email"
+                          value={testEmailRecipient}
+                          onChange={(e) => setTestEmailRecipient(e.target.value)}
+                          placeholder="Enter recipient email (e.g. orders@samoweave.com)"
+                          aria-label="Test order email recipient address"
+                          className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-xl text-white focus:border-emerald-400 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={testEmailSending}
+                          onClick={async () => {
+                            const targetEmail = (
+                              testEmailRecipient ||
+                              currentUser?.email ||
                               siteBanners.orderEmailBccAddress ||
                               'orders@samoweave.com'
-                          );
-                          if (!targetEmail || !targetEmail.trim()) return;
-                          setBannerFeedback('Sending test order confirmation email via Resend...');
-                          try {
-                            const sampleOrder = orders[0]
-                              ? {
-                                  ...orders[0],
-                                  customerEmail: targetEmail.trim(),
-                                  orderedItems: Array.isArray(
-                                    orders[0].orderedItems
-                                  )
-                                    ? orders[0].orderedItems.map((it) => {
-                                        if (it.imageUrl) return it;
-                                        const matchedP = products.find(
-                                          (p) => p.id === it.productId
-                                        );
-                                        const varImg =
-                                          it.selectedColor &&
-                                          Array.isArray(matchedP?.colorVariants)
-                                            ? matchedP.colorVariants.find(
-                                                (v) =>
-                                                  v.colorName
-                                                    .trim()
-                                                    .toLowerCase() ===
-                                                  it.selectedColor!
-                                                    .trim()
-                                                    .toLowerCase()
-                                              )?.imageUrl
-                                            : undefined;
-                                        const resolvedImg =
-                                          varImg ||
-                                          matchedP?.imageUrl ||
-                                          orders[0].primaryProductImage ||
-                                          '';
-                                        return resolvedImg
-                                          ? { ...it, imageUrl: resolvedImg }
-                                          : it;
-                                      })
-                                    : undefined,
-                                }
-                              : {
-                                  id: 'ord-test',
-                                  orderNumber: 'SAMO-8492',
-                                  customerName: 'SAMO Client Preview',
-                                  customerEmail: targetEmail.trim(),
-                                  customerPhone: '+961 70 123 456',
-                                  shippingLocation: 'Downtown Beirut, Lebanon',
-                                  deliveryMethod: 'Standard Delivery',
-                                  paymentMethod: 'COD',
-                                  subtotal: 495,
-                                  discountAmount: 0,
-                                  deliveryFee: 0,
-                                  totalPrice: 495,
-                                  primaryProductImage:
-                                    products[0]?.imageUrl || '',
-                                  orderedItems: [
-                                    {
-                                      productId: products[0]?.id || 'samo-sample-1',
-                                      productName:
-                                        products[0]?.name ||
-                                        'ARCHITECTURAL ITALIAN COW LEATHER JACKET',
-                                      imageUrl: products[0]?.imageUrl || '',
-                                      garmentCode: products[0]?.garmentCode || 'W-1042',
-                                      selectedColor: 'Obsidian Black',
-                                      selectedSize: 'M',
-                                      quantity: 1,
-                                      unitPrice: 495,
-                                    },
-                                  ],
-                                  createdAt: new Date().toISOString(),
-                                };
-
-                            const res = await fetch('/api/order-confirmation-email', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                order: sampleOrder,
-                                bannerUrl: siteBanners.orderEmailBannerUrl || '',
-                                bannerLinkUrl:
-                                  siteBanners.orderEmailBannerLinkUrl ||
-                                  'https://samoweave.com/new-arrivals/women',
-                                senderAddress:
-                                  siteBanners.orderEmailSenderAddress ||
-                                  'orders@samoweave.com',
-                                bccAddress:
-                                  siteBanners.orderEmailBccAddress !== undefined
-                                    ? siteBanners.orderEmailBccAddress
-                                    : 'orders@samoweave.com',
-                                replyToAddress:
-                                  siteBanners.orderEmailReplyToAddress ||
-                                  'info@samoweave.com',
-                                promoGiftEnabled: Boolean(
-                                  siteBanners.orderEmailPromoEnabled
-                                ),
-                                promoGiftCode:
-                                  siteBanners.orderEmailPromoCode !== undefined
-                                    ? siteBanners.orderEmailPromoCode
-                                    : 'SAMO10',
-                                promoGiftDescription:
-                                  siteBanners.orderEmailPromoDescription !==
-                                  undefined
-                                    ? siteBanners.orderEmailPromoDescription
-                                    : 'Enjoy 10% off your next order at samoweave.com',
-                              }),
-                            });
-                            const data = await res.json().catch(() => ({}));
-                            if (data?.ok) {
-                              setBannerFeedback(
-                                `✓ Test Order Confirmation Email sent to ${targetEmail.trim()} (Resend ID: ${data.id || 'delivered'})`
-                              );
-                            } else {
-                              setBannerFeedback(
-                                `Notice: ${data?.error || 'Could not send test email. Verify RESEND_API_KEY in Cloudflare secrets.'}`
-                              );
+                            ).trim();
+                            if (!targetEmail || !targetEmail.includes('@')) {
+                              const errMsg =
+                                'Please enter a valid recipient email address to send the test order email.';
+                              setTestEmailStatus({ ok: false, message: errMsg });
+                              setBannerFeedback(`Notice: ${errMsg}`);
+                              return;
                             }
-                          } catch (err) {
+                            setTestEmailSending(true);
+                            setTestEmailStatus(null);
                             setBannerFeedback(
-                              `Notice: ${err instanceof Error ? err.message : 'Failed to reach /api/order-confirmation-email'}`
+                              `Sending test order confirmation email to ${targetEmail} via Resend...`
                             );
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
-                      >
-                        <Mail className="w-3.5 h-3.5" />
-                        <span>Send Test Order Email</span>
-                      </button>
+                            try {
+                              const sampleOrder = orders[0]
+                                ? {
+                                    ...orders[0],
+                                    customerEmail: targetEmail,
+                                    orderedItems: Array.isArray(
+                                      orders[0].orderedItems
+                                    )
+                                      ? orders[0].orderedItems.map((it) => {
+                                          if (it.imageUrl) return it;
+                                          const matchedP = products.find(
+                                            (p) => p.id === it.productId
+                                          );
+                                          const varImg =
+                                            it.selectedColor &&
+                                            Array.isArray(
+                                              matchedP?.colorVariants
+                                            )
+                                              ? matchedP.colorVariants.find(
+                                                  (v) =>
+                                                    v.colorName
+                                                      .trim()
+                                                      .toLowerCase() ===
+                                                    it.selectedColor!
+                                                      .trim()
+                                                      .toLowerCase()
+                                                )?.imageUrl
+                                              : undefined;
+                                          const resolvedImg =
+                                            varImg ||
+                                            matchedP?.imageUrl ||
+                                            orders[0].primaryProductImage ||
+                                            '';
+                                          return resolvedImg
+                                            ? { ...it, imageUrl: resolvedImg }
+                                            : it;
+                                        })
+                                      : undefined,
+                                  }
+                                : {
+                                    id: 'ord-test',
+                                    orderNumber: 'SAMO-8492',
+                                    customerName: 'SAMO Client Preview',
+                                    customerEmail: targetEmail,
+                                    customerPhone: '+961 70 123 456',
+                                    shippingLocation: 'Downtown Beirut, Lebanon',
+                                    deliveryMethod: 'Standard Delivery',
+                                    paymentMethod: 'COD',
+                                    subtotal: 495,
+                                    discountAmount: 0,
+                                    deliveryFee: 0,
+                                    totalPrice: 495,
+                                    primaryProductImage:
+                                      products[0]?.imageUrl || '',
+                                    orderedItems: [
+                                      {
+                                        productId:
+                                          products[0]?.id || 'samo-sample-1',
+                                        productName:
+                                          products[0]?.name ||
+                                          'ARCHITECTURAL ITALIAN COW LEATHER JACKET',
+                                        imageUrl: products[0]?.imageUrl || '',
+                                        garmentCode:
+                                          products[0]?.garmentCode || 'W-1042',
+                                        selectedColor: 'Obsidian Black',
+                                        selectedSize: 'M',
+                                        quantity: 1,
+                                        unitPrice: 495,
+                                      },
+                                    ],
+                                    createdAt: new Date().toISOString(),
+                                  };
+
+                              const res = await fetch(
+                                '/api/order-confirmation-email',
+                                {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({
+                                    order: sampleOrder,
+                                    bannerUrl:
+                                      siteBanners.orderEmailBannerUrl || '',
+                                    bannerLinkUrl:
+                                      siteBanners.orderEmailBannerLinkUrl ||
+                                      'https://samoweave.com/new-arrivals/women',
+                                    senderAddress:
+                                      siteBanners.orderEmailSenderAddress ||
+                                      'orders@samoweave.com',
+                                    bccAddress:
+                                      siteBanners.orderEmailBccAddress !==
+                                      undefined
+                                        ? siteBanners.orderEmailBccAddress
+                                        : 'orders@samoweave.com',
+                                    replyToAddress:
+                                      siteBanners.orderEmailReplyToAddress ||
+                                      'info@samoweave.com',
+                                    promoGiftEnabled: Boolean(
+                                      siteBanners.orderEmailPromoEnabled
+                                    ),
+                                    promoGiftCode:
+                                      siteBanners.orderEmailPromoCode !==
+                                      undefined
+                                        ? siteBanners.orderEmailPromoCode
+                                        : 'SAMO10',
+                                    promoGiftDescription:
+                                      siteBanners.orderEmailPromoDescription !==
+                                      undefined
+                                        ? siteBanners.orderEmailPromoDescription
+                                        : 'Enjoy 10% off your next order at samoweave.com',
+                                    promoGiftBannerUrl:
+                                      siteBanners.orderEmailPromoBannerUrl ||
+                                      '',
+                                  }),
+                                }
+                              );
+                              const data = await res.json().catch(() => ({}));
+                              if (data?.ok) {
+                                const okMsg = `✓ Test Order Confirmation Email sent to ${targetEmail} (Resend ID: ${data.id || 'delivered'})`;
+                                setTestEmailStatus({ ok: true, message: okMsg });
+                                setBannerFeedback(okMsg);
+                              } else {
+                                const errMsg =
+                                  data?.error ||
+                                  'Could not send test email. Verify RESEND_API_KEY in Cloudflare secrets.';
+                                setTestEmailStatus({
+                                  ok: false,
+                                  message: errMsg,
+                                });
+                                setBannerFeedback(`Notice: ${errMsg}`);
+                              }
+                            } catch (err) {
+                              const errMsg =
+                                err instanceof Error
+                                  ? err.message
+                                  : 'Failed to reach /api/order-confirmation-email';
+                              setTestEmailStatus({ ok: false, message: errMsg });
+                              setBannerFeedback(`Notice: ${errMsg}`);
+                            } finally {
+                              setTestEmailSending(false);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-zinc-950 text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>
+                            {testEmailSending
+                              ? 'Sending Test Email...'
+                              : 'Send Test Order Email'}
+                          </span>
+                        </button>
+                      </div>
+                      {testEmailStatus && (
+                        <div
+                          className={`text-[11px] font-medium px-3 py-2 rounded-lg border ${
+                            testEmailStatus.ok
+                              ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300'
+                              : 'bg-amber-950/60 border-amber-700/60 text-amber-300'
+                          }`}
+                        >
+                          {testEmailStatus.message}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

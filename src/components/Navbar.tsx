@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, ShoppingBag, Menu, X, ChevronRight, Sparkles } from 'lucide-react';
 import { CategoryItem, Department, RoutePath } from '../types/samo';
 
@@ -33,6 +33,43 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<Department>('women');
+  const [isScrolledPastHero, setIsScrolledPastHero] = useState(false);
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+
+  useEffect(() => {
+    if (currentRoute !== '/home') {
+      setIsScrolledPastHero(true);
+      setIsHeaderHovered(false);
+      return;
+    }
+
+    const checkScrollPosition = () => {
+      const heroEl = document.getElementById('samo-home-hero-wrapper');
+      if (heroEl) {
+        const rect = heroEl.getBoundingClientRect();
+        // Transition to solid white header as soon as the bottom of the hero video reaches the 64px (h-16) navbar
+        setIsScrolledPastHero(rect.bottom <= 64);
+      } else {
+        const fallbackThreshold = Math.max(200, window.innerHeight * 0.65);
+        setIsScrolledPastHero(window.scrollY > fallbackThreshold);
+      }
+    };
+
+    checkScrollPosition();
+    window.addEventListener('scroll', checkScrollPosition, { passive: true });
+    window.addEventListener('resize', checkScrollPosition, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', checkScrollPosition);
+      window.removeEventListener('resize', checkScrollPosition);
+    };
+  }, [currentRoute]);
+
+  const isHomeHeroOverlay = currentRoute === '/home' && !searchQuery.trim();
+  const isTransparentOverVideo =
+    isHomeHeroOverlay &&
+    !isScrolledPastHero &&
+    !isHeaderHovered &&
+    !drawerOpen;
 
   const activeDepartmentCategories =
     currentRoute === '/women'
@@ -49,12 +86,32 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-950">
+    <header
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') setIsHeaderHovered(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse') setIsHeaderHovered(false);
+      }}
+      className={`${
+        isHomeHeroOverlay ? 'fixed top-0 inset-x-0' : 'sticky top-0'
+      } z-40 w-full transition-colors duration-300 ease-out ${
+        isTransparentOverVideo
+          ? 'bg-transparent border-b border-transparent'
+          : 'bg-white/95 backdrop-blur-md border-b border-zinc-200'
+      }`}
+    >
       {/* Primary Top Bar:
           - Mobile (< lg): Left Menu Hamburger | Center SAMO Logo | Right Compact Bag Icon
           - Desktop (lg+): Left Nav Links (New Arrivals, Women, Kids, Gifts) | Center SAMO Logo | Right Bag & Menu
       */}
-      <div className="relative grid grid-cols-3 items-center justify-between px-4 md:px-8 h-14 border-b border-zinc-200">
+      <div
+        className={`relative grid grid-cols-3 items-center justify-between px-4 md:px-8 h-16 transition-colors duration-300 ease-out ${
+          isTransparentOverVideo
+            ? 'border-b border-transparent'
+            : 'border-b border-zinc-200/80'
+        }`}
+      >
         {/* Zone 1 (Left):
             - On Mobile (< lg): Menu Hamburger Icon on the left
             - On Desktop (lg+): Navigation Links (New Arrivals, Women, Kids, Gifts)
@@ -82,7 +139,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               setDrawerOpen(!drawerOpen);
             }}
             aria-label={drawerOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            className="lg:hidden p-2 -ml-2 text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
+            className={`lg:hidden p-2 -ml-2 transition-colors duration-300 cursor-pointer ${
+              isTransparentOverVideo
+                ? 'text-white hover:bg-white/15'
+                : 'text-zinc-950 hover:bg-zinc-100'
+            }`}
           >
             {drawerOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -90,7 +151,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Desktop (lg+) Left Navigation Links */}
           <nav
             aria-label="Main Storefront Navigation"
-            className="hidden lg:flex items-center gap-6 xl:gap-7 text-xs font-semibold tracking-[0.12em] uppercase text-zinc-700"
+            className={`hidden lg:flex items-center gap-6 xl:gap-7 text-xs font-semibold tracking-[0.12em] uppercase transition-colors duration-300 ${
+              isTransparentOverVideo ? 'text-white' : 'text-zinc-700'
+            }`}
           >
             <a
               href="/new-arrivals/women"
@@ -98,10 +161,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.preventDefault();
                 onNavigate('/new-arrivals', 'women');
               }}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 ${
+              className={`py-1 transition-colors duration-300 whitespace-nowrap shrink-0 ${
                 currentRoute === '/new-arrivals' &&
                 selectedCategory.toLowerCase() !== 'kids'
-                  ? 'text-zinc-950 border-b-2 border-zinc-950'
+                  ? isTransparentOverVideo
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-zinc-950 border-b-2 border-zinc-950'
+                  : isTransparentOverVideo
+                  ? 'text-white/90 hover:text-white'
                   : 'hover:text-zinc-950'
               }`}
             >
@@ -114,9 +181,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onNavigate('/women');
                 onSelectCategory('all');
               }}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 ${
+              className={`py-1 transition-colors duration-300 whitespace-nowrap shrink-0 ${
                 currentRoute === '/women'
-                  ? 'text-zinc-950 border-b-2 border-zinc-950'
+                  ? isTransparentOverVideo
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-zinc-950 border-b-2 border-zinc-950'
+                  : isTransparentOverVideo
+                  ? 'text-white/90 hover:text-white'
                   : 'hover:text-zinc-950'
               }`}
             >
@@ -129,9 +200,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onNavigate('/kids');
                 onSelectCategory('all');
               }}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 ${
+              className={`py-1 transition-colors duration-300 whitespace-nowrap shrink-0 ${
                 currentRoute === '/kids'
-                  ? 'text-zinc-950 border-b-2 border-zinc-950'
+                  ? isTransparentOverVideo
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-zinc-950 border-b-2 border-zinc-950'
+                  : isTransparentOverVideo
+                  ? 'text-white/90 hover:text-white'
                   : 'hover:text-zinc-950'
               }`}
             >
@@ -144,9 +219,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onNavigate('/gifts');
                 onSelectCategory('all');
               }}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 ${
+              className={`py-1 transition-colors duration-300 whitespace-nowrap shrink-0 ${
                 currentRoute === '/gifts'
-                  ? 'text-zinc-950 border-b-2 border-zinc-950'
+                  ? isTransparentOverVideo
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-zinc-950 border-b-2 border-zinc-950'
+                  : isTransparentOverVideo
+                  ? 'text-white/90 hover:text-white'
                   : 'hover:text-zinc-950'
               }`}
             >
@@ -155,7 +234,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
         </div>
 
-        {/* Zone 2 (Middle — Mobile & Desktop): Centered SAMO Logo */}
+        {/* Zone 2 (Middle — Mobile & Desktop): Centered SAMO Logo with Dual-Logo Seamless Crossfade */}
         <div className="flex items-center justify-center">
           <a
             href="/home"
@@ -165,14 +244,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               onSelectCategory('all');
             }}
             aria-label="SAMO Home"
-            className="inline-flex items-center justify-center shrink-0"
+            className="relative inline-flex items-center justify-center shrink-0"
           >
+            {/* Black SAMO Logo (visible on hover, scroll past video, drawer open, or other pages) */}
             <img
               src="https://images.samoweave.com/logo/samo-weave-logo.png"
               alt="SAMO"
               loading="eager"
               decoding="async"
-              className="h-8 sm:h-9 md:h-10 w-auto max-w-[160px] sm:max-w-[190px] md:max-w-[220px] object-contain select-none"
+              className={`h-8 sm:h-9 md:h-10 w-auto max-w-[160px] sm:max-w-[190px] md:max-w-[220px] object-contain select-none transition-opacity duration-300 ease-out ${
+                isTransparentOverVideo ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
+            {/* White Transparent SAMO Logo (visible over homepage hero video) */}
+            <img
+              src="https://images.samoweave.com/logo/white-logo-samo_50.png"
+              alt="SAMO"
+              loading="eager"
+              decoding="async"
+              aria-hidden={!isTransparentOverVideo}
+              className={`absolute inset-0 m-auto h-8 sm:h-9 md:h-10 w-auto max-w-[160px] sm:max-w-[190px] md:max-w-[220px] object-contain select-none transition-opacity duration-300 ease-out ${
+                isTransparentOverVideo ? 'opacity-100' : 'opacity-0'
+              }`}
             />
           </a>
         </div>
@@ -187,11 +280,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             onClick={onOpenCart}
             aria-label={`Shopping Bag (${cartCount} items)`}
-            className="lg:hidden relative p-2 -mr-1.5 text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
+            className={`lg:hidden relative p-2 -mr-1.5 transition-colors duration-300 cursor-pointer ${
+              isTransparentOverVideo
+                ? 'text-white hover:bg-white/15'
+                : 'text-zinc-950 hover:bg-zinc-100'
+            }`}
           >
             <ShoppingBag className="w-5 h-5 stroke-[1.75]" />
             {cartCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[15px] h-[15px] px-1 bg-zinc-950 text-white text-[9px] font-mono-tabular font-bold flex items-center justify-center leading-none">
+              <span
+                className={`absolute top-1 right-1 min-w-[15px] h-[15px] px-1 text-[9px] font-mono-tabular font-bold flex items-center justify-center leading-none transition-colors duration-300 ${
+                  isTransparentOverVideo
+                    ? 'bg-white text-zinc-950'
+                    : 'bg-zinc-950 text-white'
+                }`}
+              >
                 {cartCount}
               </span>
             )}
@@ -202,7 +305,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             onClick={onOpenCart}
             aria-label={`Shopping Bag (${cartCount} items)`}
-            className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold tracking-[0.1em] uppercase bg-zinc-950 text-white hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className={`hidden lg:flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold tracking-[0.1em] uppercase transition-all duration-300 whitespace-nowrap shrink-0 cursor-pointer ${
+              isTransparentOverVideo
+                ? 'bg-transparent text-white border border-white/80 hover:bg-white hover:text-zinc-950'
+                : 'bg-zinc-950 text-white border border-zinc-950 hover:bg-zinc-800'
+            }`}
           >
             <ShoppingBag className="w-3.5 h-3.5" />
             <span>Bag ({cartCount})</span>
@@ -228,7 +335,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               setDrawerOpen(!drawerOpen);
             }}
             aria-label={drawerOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            className="hidden lg:inline-flex p-2 text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
+            className={`hidden lg:inline-flex p-2 transition-colors duration-300 cursor-pointer ${
+              isTransparentOverVideo
+                ? 'text-white hover:bg-white/15'
+                : 'text-zinc-950 hover:bg-zinc-100'
+            }`}
           >
             {drawerOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -328,7 +439,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Slide-out Mega Drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 top-14 z-50 flex bg-black/50 backdrop-blur-[1px]">
+        <div className="fixed inset-0 top-16 z-50 flex bg-black/50 backdrop-blur-[1px]">
           <div className="w-full max-w-md bg-white h-full overflow-y-auto border-r border-zinc-950 flex flex-col justify-between p-6">
             <div>
               {/* Department Switcher Tabs */}

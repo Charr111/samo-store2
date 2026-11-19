@@ -243,6 +243,7 @@ export interface SiteBannersConfig {
   orderEmailPromoEnabled?: boolean;
   orderEmailPromoCode?: string;
   orderEmailPromoDescription?: string;
+  orderEmailPromoBannerUrl?: string;
   categoryBanners: Record<string, CategoryBannerConfig>;
 }
 

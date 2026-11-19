@@ -1336,8 +1336,10 @@ export default function App() {
             promoGiftEnabled: Boolean(siteBanners.orderEmailPromoEnabled),
             promoGiftCode: siteBanners.orderEmailPromoCode || 'SAMO10',
             promoGiftDescription:
-              siteBanners.orderEmailPromoDescription ||
-              'Enjoy 10% off your next order at samoweave.com',
+              siteBanners.orderEmailPromoDescription !== undefined
+                ? siteBanners.orderEmailPromoDescription
+                : 'Enjoy 10% off your next order at samoweave.com',
+            promoGiftBannerUrl: siteBanners.orderEmailPromoBannerUrl || '',
           }),
         });
       } catch (emailErr) {
@@ -2745,15 +2747,17 @@ export default function App() {
             {currentRoute === '/home' && !searchQuery && (
               <>
                 {/* Section 1: Full-Bleed Campaign Video / Image Hero (Configurable in /admin) */}
-                <HeroVideoSection
-                  onNavigate={handleNavigate}
-                  onSelectCategory={handleSelectCategory}
-                  mediaType={siteBanners.homeHeroMediaType}
-                  videoUrl={siteBanners.homeHeroVideoUrl}
-                  imageUrl={siteBanners.homeHeroImageUrl}
-                  kicker={siteBanners.homeHeroKicker}
-                  title={siteBanners.homeHeroTitle}
-                />
+                <div id="samo-home-hero-wrapper">
+                  <HeroVideoSection
+                    onNavigate={handleNavigate}
+                    onSelectCategory={handleSelectCategory}
+                    mediaType={siteBanners.homeHeroMediaType}
+                    videoUrl={siteBanners.homeHeroVideoUrl}
+                    imageUrl={siteBanners.homeHeroImageUrl}
+                    kicker={siteBanners.homeHeroKicker}
+                    title={siteBanners.homeHeroTitle}
+                  />
+                </div>
 
                 {/* Section 2: Prada-Inspired Categories Section under Hero Video (Women | Kids Switcher + 2-Col Mobile / 4-Col Desktop 4:5 Studio Grid) */}
                 <section className="w-full bg-white pt-10 pb-8">

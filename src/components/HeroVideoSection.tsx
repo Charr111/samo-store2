@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { RoutePath } from '../types/samo';
 import { ProductImage } from './ProductImage';
 
@@ -131,19 +131,6 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
     };
   }, [effectiveVideoUrl, showImageBanner, isMuted, attemptAutoplay]);
 
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      userPausedRef.current = false;
-      videoRef.current.play().catch(() => {});
-      setIsPlaying(true);
-    } else {
-      userPausedRef.current = true;
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
-
   const toggleMute = () => {
     if (!videoRef.current) return;
     const nextMuted = !videoRef.current.muted;
@@ -153,7 +140,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   };
 
   return (
-    <section className="relative w-full h-[calc(100svh-3.5rem)] md:h-[74vh] md:min-h-[520px] md:max-h-[820px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
+    <section className="relative w-full h-[calc(100svh-3.5rem)] md:h-[82vh] md:min-h-[565px] md:max-h-[900px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
       {/* Background Video or Admin-Selected Image Banner */}
       {!showImageBanner ? (
         <video
@@ -191,22 +178,14 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
       {/* Measured contrast scrim for 4.5:1 legibility across all frames */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/25" />
 
-      {/* Top-Right Video Controls (Play/Pause & Mute/Unmute when in video mode) */}
+      {/* Bottom-Right Minimalist Volume Control (Mute/Unmute when in video mode) */}
       {!showImageBanner && (
-        <div className="absolute top-5 right-5 z-20 flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={togglePlay}
-            aria-label={isPlaying ? 'Pause campaign video' : 'Play campaign video'}
-            className="w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 text-white border border-white/25 flex items-center justify-center transition-colors cursor-pointer"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </button>
+        <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 flex items-center">
           <button
             type="button"
             onClick={toggleMute}
             aria-label={isMuted ? 'Unmute campaign video' : 'Mute campaign video'}
-            className="w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 text-white border border-white/25 flex items-center justify-center transition-colors cursor-pointer"
+            className="bg-transparent border-0 p-1.5 text-white/90 hover:text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.65)] flex items-center justify-center transition-colors cursor-pointer"
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
