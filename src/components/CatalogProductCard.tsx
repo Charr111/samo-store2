@@ -79,7 +79,9 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
     product.galleryUrls,
   ]);
 
-  const totalQty = sumSizeQuantities(product.sizes, product.sizeQuantities);
+  const totalQty = activeVariant
+    ? sumSizeQuantities(activeVariant.sizes, activeVariant.sizeQuantities)
+    : sumSizeQuantities(product.sizes, product.sizeQuantities);
   const isOutOfStock = totalQty <= 0 || !product.inStock;
   const pricing = getEffectiveProductPrice(product);
 

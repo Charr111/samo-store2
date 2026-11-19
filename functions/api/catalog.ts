@@ -251,11 +251,19 @@ async function readFromD1(
       }
     }
 
+    const deletedOrderIdsList: string[] = Array.isArray(
+      settingsMap.deletedOrderIds
+    )
+      ? settingsMap.deletedOrderIds
+      : [];
+    const deletedOrderSet = new Set(deletedOrderIdsList);
+    const filteredOrders = orders.filter((o) => !deletedOrderSet.has(o.id));
+
     return {
       updatedAt: maxUpdatedAt || Date.now(),
       products,
       categories,
-      orders,
+      orders: filteredOrders,
       preorders,
       newsletterSubscribers,
       promoCodes,
@@ -280,6 +288,7 @@ async function readFromD1(
       customColors: settingsMap.customColors || undefined,
       deletedProductIds: settingsMap.deletedProductIds || [],
       deletedCategoryIds: settingsMap.deletedCategoryIds || [],
+      deletedOrderIds: deletedOrderIdsList,
       newsletterPopupImpressions:
         settingsMap.newsletterPopupImpressions || undefined,
     };
@@ -293,7 +302,8 @@ async function writeToD1(
   db: D1DatabaseBinding,
   patch: Record<string, unknown>,
   mergedDeletedProducts: string[],
-  mergedDeletedCategories: string[]
+  mergedDeletedCategories: string[],
+  mergedDeletedOrders: string[]
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [];
 
@@ -437,8 +447,11 @@ async function writeToD1(
   }
 
   if (Array.isArray(patch.orders)) {
+    const deletedOrderSet = new Set(mergedDeletedOrders);
+    // Replace D1 orders table atomically inside db.batch so any order removed from patch.orders is permanently deleted
+    statements.push(db.prepare('DELETE FROM orders;'));
     for (const o of patch.orders as any[]) {
-      if (!o || !o.id) continue;
+      if (!o || !o.id || deletedOrderSet.has(o.id)) continue;
       const lineItems = Array.isArray(o.orderedItems)
         ? o.orderedItems
         : Array.isArray(o.items)
@@ -491,6 +504,14 @@ async function writeToD1(
             o.updatedAt || new Date().toISOString()
           )
       );
+    }
+  } else if (mergedDeletedOrders.length > 0) {
+    for (const delOrdId of mergedDeletedOrders) {
+      if (delOrdId) {
+        statements.push(
+          db.prepare('DELETE FROM orders WHERE id = ?;').bind(delOrdId)
+        );
+      }
     }
   }
 
@@ -613,6 +634,20 @@ async function writeToD1(
           JSON.stringify(mergedDeletedCategories),
           nowMs
         )
+    );
+  }
+
+  if (mergedDeletedOrders.length > 0) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO settings (key, value, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value=excluded.value,
+             updated_at=excluded.updated_at;`
+        )
+        .bind('deletedOrderIds', JSON.stringify(mergedDeletedOrders), nowMs)
     );
   }
 
@@ -747,6 +782,16 @@ export const onRequestPost = async (context: {
       ])
     );
 
+    const mergedDeletedOrders = Array.from(
+      new Set([
+        ...((current.deletedOrderIds as string[]) || []),
+        ...(Array.isArray(patch.deletedOrderIds)
+          ? (patch.deletedOrderIds as string[])
+          : []),
+      ])
+    );
+    const deletedOrderSet = new Set(mergedDeletedOrders);
+
     // 1. Write to Cloudflare D1 SQL if D1 binding is configured
     if (d1Binding) {
       try {
@@ -754,12 +799,23 @@ export const onRequestPost = async (context: {
           d1Binding,
           patch,
           mergedDeletedProducts,
-          mergedDeletedCategories
+          mergedDeletedCategories,
+          mergedDeletedOrders
         );
       } catch (d1Err) {
         console.error('Failed to write patch to D1 in Pages:', d1Err);
       }
     }
+
+    const nextOrdersList = Array.isArray(patch.orders)
+      ? (patch.orders as Array<{ id?: string }>).filter(
+          (o) => o && o.id && !deletedOrderSet.has(o.id)
+        )
+      : Array.isArray(current.orders)
+      ? (current.orders as Array<{ id?: string }>).filter(
+          (o) => o && o.id && !deletedOrderSet.has(o.id)
+        )
+      : undefined;
 
     const nextState = {
       ...current,
@@ -776,7 +832,7 @@ export const onRequestPost = async (context: {
       ...(Array.isArray(patch.customColors)
         ? { customColors: patch.customColors }
         : {}),
-      ...(Array.isArray(patch.orders) ? { orders: patch.orders } : {}),
+      ...(nextOrdersList !== undefined ? { orders: nextOrdersList } : {}),
       ...(Array.isArray(patch.preorders) ? { preorders: patch.preorders } : {}),
       ...(Array.isArray(patch.admins) ? { admins: patch.admins } : {}),
       ...(patch.siteBanners && typeof patch.siteBanners === 'object'
@@ -803,6 +859,7 @@ export const onRequestPost = async (context: {
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,
+      deletedOrderIds: mergedDeletedOrders,
       updatedAt: Date.now(),
     };
 

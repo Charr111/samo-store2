@@ -122,6 +122,7 @@ const STORAGE_KEYS = {
   materials: 'samo_custom_materials_v1',
   colors: 'samo_custom_colors_v2',
   orders: 'samo_orders_v2',
+  deletedOrders: 'samo_deleted_orders_v1',
   preorders: 'samo_preorders_v2',
   admins: 'samo_admins_v2',
   cart: 'samo_cart_v1',
@@ -414,9 +415,17 @@ export default function App() {
       'White',
     ])
   );
-  const [orders, setOrders] = useState<OrderItem[]>(() =>
-    loadStored(STORAGE_KEYS.orders, INITIAL_ORDERS)
+  const [deletedOrderIds, setDeletedOrderIds] = useState<string[]>(() =>
+    loadStored<string[]>(STORAGE_KEYS.deletedOrders, [])
   );
+  const [orders, setOrders] = useState<OrderItem[]>(() => {
+    const initialDeleted = new Set(
+      loadStored<string[]>(STORAGE_KEYS.deletedOrders, [])
+    );
+    return loadStored(STORAGE_KEYS.orders, INITIAL_ORDERS).filter(
+      (o) => o && o.id && !initialDeleted.has(o.id)
+    );
+  });
   const [preorders, setPreorders] = useState<PreorderItem[]>(() =>
     loadStored(STORAGE_KEYS.preorders, INITIAL_PREORDERS)
   );
@@ -569,6 +578,15 @@ export default function App() {
       localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders));
     } catch {}
   }, [orders]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.deletedOrders,
+        JSON.stringify(deletedOrderIds)
+      );
+    } catch {}
+  }, [deletedOrderIds]);
 
   useEffect(() => {
     try {
@@ -936,8 +954,30 @@ export default function App() {
         if (Array.isArray(data.customColors) && data.customColors.length > 0) {
           setCustomColors(data.customColors as string[]);
         }
+        const remoteDeletedOrderIds: string[] = Array.isArray(
+          data.deletedOrderIds
+        )
+          ? data.deletedOrderIds
+          : [];
+        if (remoteDeletedOrderIds.length > 0) {
+          setDeletedOrderIds((prev) =>
+            Array.from(new Set([...prev, ...remoteDeletedOrderIds]))
+          );
+        }
         if (Array.isArray(data.orders)) {
-          setOrders(data.orders as OrderItem[]);
+          const localDeletedOrders = loadStored<string[]>(
+            STORAGE_KEYS.deletedOrders,
+            []
+          );
+          const allDeletedOrderSet = new Set([
+            ...localDeletedOrders,
+            ...remoteDeletedOrderIds,
+          ]);
+          setOrders(
+            (data.orders as OrderItem[]).filter(
+              (o) => o && o.id && !allDeletedOrderSet.has(o.id)
+            )
+          );
         }
         if (Array.isArray(data.preorders)) {
           setPreorders(data.preorders as PreorderItem[]);
@@ -1224,7 +1264,9 @@ export default function App() {
   ): Promise<OrderItem> => {
     const newId = `ord-${Date.now()}`;
     const nowIso = new Date().toISOString();
-    const initialStatus: OrderStatus = autoAcceptOrders ? 'accepted' : 'pending';
+    // Customer checkout orders are always auto-accepted so item stock (1 -> 0 out-of-stock / pre-order)
+    // is deducted immediately and only restored if an admin clicks Reject.
+    const initialStatus: OrderStatus = 'accepted';
 
     const enrichedOrderedItems = Array.isArray(orderPayload.orderedItems)
       ? orderPayload.orderedItems.map((item) => {
@@ -1258,17 +1300,18 @@ export default function App() {
     setOrders(nextOrders);
     setCartItems([]);
 
-    let catalogSyncPromise: Promise<void>;
-    if (autoAcceptOrders) {
-      const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
-      setProducts(updatedCatalog);
-      catalogSyncPromise = pushServerCatalogPatch({
-        orders: nextOrders,
-        products: updatedCatalog,
-      });
-    } else {
-      catalogSyncPromise = pushServerCatalogPatch({ orders: nextOrders });
-    }
+    const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
+    setProducts(updatedCatalog);
+    setActiveProductModal((prev) => {
+      if (!prev) return null;
+      return updatedCatalog.find((p) => p.id === prev.id) || prev;
+    });
+
+    const catalogSyncPromise = pushServerCatalogPatch({
+      orders: nextOrders,
+      products: updatedCatalog,
+      autoAcceptOrders: true,
+    });
 
     const emailDispatchPromise = (async () => {
       try {
@@ -1290,6 +1333,11 @@ export default function App() {
                 : 'orders@samoweave.com',
             replyToAddress:
               siteBanners.orderEmailReplyToAddress || 'info@samoweave.com',
+            promoGiftEnabled: Boolean(siteBanners.orderEmailPromoEnabled),
+            promoGiftCode: siteBanners.orderEmailPromoCode || 'SAMO10',
+            promoGiftDescription:
+              siteBanners.orderEmailPromoDescription ||
+              'Enjoy 10% off your next order at samoweave.com',
           }),
         });
       } catch (emailErr) {
@@ -1662,7 +1710,22 @@ export default function App() {
           featured: nextIsNew,
         };
 
-        if (updates.sizes || updates.sizeQuantities) {
+        if (
+          updates.colorVariants &&
+          Array.isArray(merged.colorVariants) &&
+          merged.colorVariants.length > 0
+        ) {
+          const synced = syncProductFromColorVariants(
+            merged.colorVariants,
+            merged.sizeType
+          );
+          merged.hasColors = true;
+          merged.sizes = synced.sizes;
+          merged.sizeQuantities = synced.sizeQuantities;
+          merged.quantity = synced.quantity;
+          merged.inStock =
+            updates.inStock !== undefined ? updates.inStock : synced.inStock;
+        } else if (updates.sizes || updates.sizeQuantities) {
           const nextSizes =
             Array.isArray(merged.sizes) && merged.sizes.length > 0
               ? merged.sizes
@@ -1826,17 +1889,25 @@ export default function App() {
         targetOrder
       );
       setProducts(updatedCatalog);
+      setActiveProductModal((prev) => {
+        if (!prev) return null;
+        return updatedCatalog.find((p) => p.id === prev.id) || prev;
+      });
       await pushServerCatalogPatch({
         orders: nextOrders,
         products: updatedCatalog,
       });
-    } else if (targetOrder && wasAlreadyAccepted && status !== 'accepted') {
-      // When admin cancels/rejects (or reverts to pending) an already-accepted order, restore the deducted stock
+    } else if (targetOrder && wasAlreadyAccepted && status === 'rejected') {
+      // Stock is restored ONLY when admin explicitly clicks Reject on an accepted order
       const updatedCatalog = restoreStockForCanceledOrder(
         products,
         targetOrder
       );
       setProducts(updatedCatalog);
+      setActiveProductModal((prev) => {
+        if (!prev) return null;
+        return updatedCatalog.find((p) => p.id === prev.id) || prev;
+      });
       await pushServerCatalogPatch({
         orders: nextOrders,
         products: updatedCatalog,
@@ -1847,24 +1918,27 @@ export default function App() {
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    const targetOrder = orders.find((o) => o.id === orderId);
-    const wasAccepted = targetOrder?.status === 'accepted';
+    // Clicking Delete permanently removes the order from React state, localStorage, and Cloudflare D1
+    // WITHOUT restoring stock (stock is restored ONLY when admin clicks Reject).
     const nextOrders = orders.filter((o) => o.id !== orderId);
+    const nextDeletedOrders = Array.from(
+      new Set([...deletedOrderIds, orderId])
+    );
     setOrders(nextOrders);
+    setDeletedOrderIds(nextDeletedOrders);
 
-    if (targetOrder && wasAccepted) {
-      const updatedCatalog = restoreStockForCanceledOrder(
-        products,
-        targetOrder
+    try {
+      localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(nextOrders));
+      localStorage.setItem(
+        STORAGE_KEYS.deletedOrders,
+        JSON.stringify(nextDeletedOrders)
       );
-      setProducts(updatedCatalog);
-      await pushServerCatalogPatch({
-        orders: nextOrders,
-        products: updatedCatalog,
-      });
-    } else {
-      await pushServerCatalogPatch({ orders: nextOrders });
-    }
+    } catch {}
+
+    await pushServerCatalogPatch({
+      orders: nextOrders,
+      deletedOrderIds: nextDeletedOrders,
+    });
   };
 
   const handleToggleAutoAcceptOrders = async (nextEnabled: boolean) => {

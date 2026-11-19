@@ -240,6 +240,9 @@ export interface SiteBannersConfig {
   orderEmailSenderAddress?: string;
   orderEmailBccAddress?: string;
   orderEmailReplyToAddress?: string;
+  orderEmailPromoEnabled?: boolean;
+  orderEmailPromoCode?: string;
+  orderEmailPromoDescription?: string;
   categoryBanners: Record<string, CategoryBannerConfig>;
 }
 

@@ -56,6 +56,9 @@ interface OrderEmailPayloadInput {
   senderAddress?: string;
   bccAddress?: string;
   replyToAddress?: string;
+  promoGiftEnabled?: boolean;
+  promoGiftCode?: string;
+  promoGiftDescription?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -125,6 +128,14 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
   const bannerTargetLink = rawBannerLink.includes('utm_source=')
     ? rawBannerLink
     : `${rawBannerLink}${rawBannerLink.includes('?') ? '&' : '?'}utm_source=order_email&utm_medium=email`;
+
+  const promoGiftEnabled = Boolean(config.promoGiftEnabled);
+  const promoGiftCode = (config.promoGiftCode ?? 'SAMO10').trim().toUpperCase();
+  const promoGiftDescription = (
+    config.promoGiftDescription ||
+    'Enjoy 10% off your next order at samoweave.com'
+  ).trim();
+  const showPromoGiftSection = promoGiftEnabled && Boolean(promoGiftCode);
 
   const formattedDate = (() => {
     try {
@@ -412,6 +423,39 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
             </td>
           </tr>
 
+          ${
+            showPromoGiftSection
+              ? `<tr>
+            <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAFAFA;border:1px solid #09090B;border-collapse:collapse;">
+                <tr>
+                  <td align="center" style="padding:20px 18px;text-align:center;">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;color:#09090B;margin-bottom:6px;">
+                      A PRIVATE GIFT FOR YOUR NEXT VISIT
+                    </div>
+                    <div style="font-size:12px;line-height:1.5;color:#3F3F46;margin-bottom:14px;">
+                      ${escapeHtml(promoGiftDescription)}
+                    </div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
+                      <tr>
+                        <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #09090B;padding:10px 22px;">
+                          <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;user-select:all;">
+                            ${escapeHtml(promoGiftCode)}
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="font-size:10px;color:#71717A;letter-spacing:0.06em;margin-top:10px;">
+                      Copy and apply this code at checkout on samoweave.com
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`
+              : ''
+          }
+
           <tr>
             <td style="padding:0;border-top:1px solid #E5E5E5;background-color:#FFFFFF;">
               ${
@@ -510,6 +554,15 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
     `Phone: ${customerPhone}`,
     ...(customerEmail ? [`Email: ${customerEmail}`] : []),
     `Address / Location: ${shippingLocation}`,
+    ...(showPromoGiftSection
+      ? [
+          ``,
+          `A PRIVATE GIFT FOR YOUR NEXT VISIT`,
+          `--------------------------------------------------`,
+          `${promoGiftDescription}`,
+          `Promo Code: ${promoGiftCode}`,
+        ]
+      : []),
     ``,
     `Explore New Arrivals: ${bannerTargetLink}`,
     `Contact Us: https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0`,
@@ -590,6 +643,9 @@ export const onRequestPost = async (context: {
       senderAddress?: string;
       bccAddress?: string;
       replyToAddress?: string;
+      promoGiftEnabled?: boolean;
+      promoGiftCode?: string;
+      promoGiftDescription?: string;
     };
 
     const order = body?.order;
@@ -603,7 +659,7 @@ export const onRequestPost = async (context: {
       );
     }
 
-    let storedBanners: Record<string, string> = {};
+    let storedBanners: Record<string, any> = {};
     const db = context.env.DB || context.env.SAMO_D1;
     if (db) {
       try {
@@ -686,6 +742,18 @@ export const onRequestPost = async (context: {
         body.replyToAddress ||
         storedBanners.orderEmailReplyToAddress ||
         'info@samoweave.com',
+      promoGiftEnabled:
+        typeof body.promoGiftEnabled === 'boolean'
+          ? body.promoGiftEnabled
+          : Boolean(storedBanners.orderEmailPromoEnabled),
+      promoGiftCode:
+        body.promoGiftCode !== undefined
+          ? body.promoGiftCode
+          : storedBanners.orderEmailPromoCode || 'SAMO10',
+      promoGiftDescription:
+        body.promoGiftDescription ||
+        storedBanners.orderEmailPromoDescription ||
+        'Enjoy 10% off your next order at samoweave.com',
     });
 
     const resendResponse = await fetch('https://api.resend.com/emails', {

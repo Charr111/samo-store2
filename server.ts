@@ -37,6 +37,7 @@ interface PersistedCatalogState {
   customMaterials?: string[];
   customColors?: string[];
   orders?: unknown[];
+  deletedOrderIds?: string[];
   preorders?: unknown[];
   admins?: unknown[];
   siteBanners?: Record<string, unknown>;
@@ -255,6 +256,20 @@ async function startServer() {
         ...(Array.isArray(body.deletedCategoryIds) ? body.deletedCategoryIds : []),
       ])
     );
+    const mergedDeletedOrders = Array.from(
+      new Set([
+        ...(current.deletedOrderIds || []),
+        ...(Array.isArray(body.deletedOrderIds) ? body.deletedOrderIds : []),
+      ])
+    );
+    const deletedOrdSet = new Set(mergedDeletedOrders);
+    const nextOrders = Array.isArray(body.orders)
+      ? body.orders.filter((o: any) => o && o.id && !deletedOrdSet.has(o.id))
+      : Array.isArray(current.orders)
+      ? (current.orders as any[]).filter(
+          (o: any) => o && o.id && !deletedOrdSet.has(o.id)
+        )
+      : undefined;
 
     const updated = await writeCatalogState({
       ...(Array.isArray(body.products) ? { products: body.products } : {}),
@@ -266,7 +281,7 @@ async function startServer() {
       ...(Array.isArray(body.customColors)
         ? { customColors: body.customColors }
         : {}),
-      ...(Array.isArray(body.orders) ? { orders: body.orders } : {}),
+      ...(nextOrders !== undefined ? { orders: nextOrders } : {}),
       ...(Array.isArray(body.preorders) ? { preorders: body.preorders } : {}),
       ...(Array.isArray(body.admins) ? { admins: body.admins } : {}),
       ...(body.siteBanners && typeof body.siteBanners === 'object'
@@ -301,6 +316,7 @@ async function startServer() {
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,
+      deletedOrderIds: mergedDeletedOrders,
     });
     res.json(updated);
   });
@@ -829,7 +845,7 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
 
       const currentCatalog = await readCatalogState();
       const storedBanners =
-        (currentCatalog.siteBanners as Record<string, string> | undefined) || {};
+        (currentCatalog.siteBanners as Record<string, any> | undefined) || {};
       const catalogProducts = Array.isArray(currentCatalog.products)
         ? (currentCatalog.products as Array<{
             id?: string;
@@ -890,6 +906,18 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
           body.replyToAddress ||
           storedBanners.orderEmailReplyToAddress ||
           'info@samoweave.com',
+        promoGiftEnabled:
+          typeof body.promoGiftEnabled === 'boolean'
+            ? body.promoGiftEnabled
+            : Boolean(storedBanners.orderEmailPromoEnabled),
+        promoGiftCode:
+          body.promoGiftCode !== undefined
+            ? String(body.promoGiftCode)
+            : storedBanners.orderEmailPromoCode || 'SAMO10',
+        promoGiftDescription:
+          body.promoGiftDescription ||
+          storedBanners.orderEmailPromoDescription ||
+          'Enjoy 10% off your next order at samoweave.com',
       });
 
       const resendResponse = await fetch('https://api.resend.com/emails', {

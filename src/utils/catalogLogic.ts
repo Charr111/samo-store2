@@ -949,7 +949,7 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
       sizes: primaryPiece?.sizes || prod.sizes,
       sizeQuantities: primaryPiece?.sizeQuantities || prod.sizeQuantities,
       quantity: minPieceTotal,
-      inStock: prod.inStock === false ? false : allPiecesHaveStock,
+      inStock: allPiecesHaveStock,
     };
   });
 }
@@ -1265,15 +1265,28 @@ export function decrementStockForAcceptedOrder(
             : undefined) || nextVariants[0];
 
         if (targetVariant) {
+          const matchedVariantSize = line.selectedSize
+            ? targetVariant.sizes.find(
+                (s) =>
+                  s.trim().toLowerCase() ===
+                  line.selectedSize!.trim().toLowerCase()
+              )
+            : undefined;
+          const matchedPrimarySize = order.primaryProductSize
+            ? targetVariant.sizes.find(
+                (s) =>
+                  s.trim().toLowerCase() ===
+                  order.primaryProductSize!.trim().toLowerCase()
+              )
+            : undefined;
           const targetSize =
-            (line.selectedSize && targetVariant.sizes.includes(line.selectedSize)
-              ? line.selectedSize
-              : order.primaryProductSize &&
-                targetVariant.sizes.includes(order.primaryProductSize)
-              ? order.primaryProductSize
-              : targetVariant.sizes.find(
-                  (s) => (targetVariant.sizeQuantities[s] ?? 5) > 0
-                ) || targetVariant.sizes[0]) || '';
+            (matchedVariantSize ||
+              matchedPrimarySize ||
+              targetVariant.sizes.find(
+                (s) => (targetVariant.sizeQuantities[s] ?? 5) > 0
+              ) ||
+              targetVariant.sizes[0]) ||
+            '';
 
           if (targetSize && targetSize in targetVariant.sizeQuantities) {
             targetVariant.sizeQuantities[targetSize] = Math.max(
@@ -1300,12 +1313,26 @@ export function decrementStockForAcceptedOrder(
     const currentSizeMap = buildSizeQuantitiesMap(prod.sizes, prod.sizeQuantities);
     for (const line of matchingLines) {
       const qtyBought = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      const matchedLineSize = line.selectedSize
+        ? prod.sizes.find(
+            (s) =>
+              s.trim().toLowerCase() ===
+              line.selectedSize!.trim().toLowerCase()
+          )
+        : undefined;
+      const matchedOrderSize = order.primaryProductSize
+        ? prod.sizes.find(
+            (s) =>
+              s.trim().toLowerCase() ===
+              order.primaryProductSize!.trim().toLowerCase()
+          )
+        : undefined;
       const targetSize =
-        (line.selectedSize && prod.sizes.includes(line.selectedSize)
-          ? line.selectedSize
-          : order.primaryProductSize && prod.sizes.includes(order.primaryProductSize)
-          ? order.primaryProductSize
-          : prod.sizes.find((s) => (currentSizeMap[s] ?? 5) > 0) || prod.sizes[0]) || '';
+        (matchedLineSize ||
+          matchedOrderSize ||
+          prod.sizes.find((s) => (currentSizeMap[s] ?? 5) > 0) ||
+          prod.sizes[0]) ||
+        '';
 
       if (targetSize && targetSize in currentSizeMap) {
         currentSizeMap[targetSize] = Math.max(0, currentSizeMap[targetSize] - qtyBought);
@@ -1486,13 +1513,25 @@ export function restoreStockForCanceledOrder(
             : undefined) || nextVariants[0];
 
         if (targetVariant) {
+          const matchedVariantSize = line.selectedSize
+            ? targetVariant.sizes.find(
+                (s) =>
+                  s.trim().toLowerCase() ===
+                  line.selectedSize!.trim().toLowerCase()
+              )
+            : undefined;
+          const matchedPrimarySize = order.primaryProductSize
+            ? targetVariant.sizes.find(
+                (s) =>
+                  s.trim().toLowerCase() ===
+                  order.primaryProductSize!.trim().toLowerCase()
+              )
+            : undefined;
           const targetSize =
-            (line.selectedSize && targetVariant.sizes.includes(line.selectedSize)
-              ? line.selectedSize
-              : order.primaryProductSize &&
-                targetVariant.sizes.includes(order.primaryProductSize)
-              ? order.primaryProductSize
-              : targetVariant.sizes[0]) || '';
+            (matchedVariantSize ||
+              matchedPrimarySize ||
+              targetVariant.sizes[0]) ||
+            '';
 
           if (targetSize && targetSize in targetVariant.sizeQuantities) {
             targetVariant.sizeQuantities[targetSize] = Math.max(
@@ -1519,12 +1558,22 @@ export function restoreStockForCanceledOrder(
     const currentSizeMap = buildSizeQuantitiesMap(prod.sizes, prod.sizeQuantities);
     for (const line of matchingLines) {
       const qtyRestored = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      const matchedLineSize = line.selectedSize
+        ? prod.sizes.find(
+            (s) =>
+              s.trim().toLowerCase() ===
+              line.selectedSize!.trim().toLowerCase()
+          )
+        : undefined;
+      const matchedOrderSize = order.primaryProductSize
+        ? prod.sizes.find(
+            (s) =>
+              s.trim().toLowerCase() ===
+              order.primaryProductSize!.trim().toLowerCase()
+          )
+        : undefined;
       const targetSize =
-        (line.selectedSize && prod.sizes.includes(line.selectedSize)
-          ? line.selectedSize
-          : order.primaryProductSize && prod.sizes.includes(order.primaryProductSize)
-          ? order.primaryProductSize
-          : prod.sizes[0]) || '';
+        (matchedLineSize || matchedOrderSize || prod.sizes[0]) || '';
 
       if (targetSize && targetSize in currentSizeMap) {
         currentSizeMap[targetSize] = Math.max(0, currentSizeMap[targetSize] + qtyRestored);
@@ -2121,6 +2170,10 @@ export function buildDefaultSiteBanners(
     orderEmailSenderAddress: 'orders@samoweave.com',
     orderEmailBccAddress: 'orders@samoweave.com',
     orderEmailReplyToAddress: 'info@samoweave.com',
+    orderEmailPromoEnabled: false,
+    orderEmailPromoCode: 'SAMO10',
+    orderEmailPromoDescription:
+      'Enjoy 10% off your next order at samoweave.com',
     categoryBanners,
   };
 }
@@ -2274,6 +2327,20 @@ export function mergeSiteBannersConfig(
       stored.orderEmailReplyToAddress.trim()
         ? stored.orderEmailReplyToAddress.trim()
         : defaults.orderEmailReplyToAddress,
+    orderEmailPromoEnabled:
+      typeof stored.orderEmailPromoEnabled === 'boolean'
+        ? stored.orderEmailPromoEnabled
+        : defaults.orderEmailPromoEnabled,
+    orderEmailPromoCode:
+      typeof stored.orderEmailPromoCode === 'string' &&
+      stored.orderEmailPromoCode.trim()
+        ? stored.orderEmailPromoCode.trim().toUpperCase()
+        : defaults.orderEmailPromoCode,
+    orderEmailPromoDescription:
+      typeof stored.orderEmailPromoDescription === 'string' &&
+      stored.orderEmailPromoDescription.trim()
+        ? stored.orderEmailPromoDescription.trim()
+        : defaults.orderEmailPromoDescription,
     categoryBanners: mergedCategoryBanners,
   };
 }
@@ -2732,6 +2799,9 @@ export interface OrderConfirmationEmailConfig {
   senderAddress?: string;
   bccAddress?: string;
   replyToAddress?: string;
+  promoGiftEnabled?: boolean;
+  promoGiftCode?: string;
+  promoGiftDescription?: string;
 }
 
 /**
@@ -2791,6 +2861,14 @@ export function buildOrderConfirmationEmailPayload(
   const bannerTargetLink = rawBannerLink.includes('utm_source=')
     ? rawBannerLink
     : `${rawBannerLink}${rawBannerLink.includes('?') ? '&' : '?'}utm_source=order_email&utm_medium=email`;
+
+  const promoGiftEnabled = Boolean(config.promoGiftEnabled);
+  const promoGiftCode = (config.promoGiftCode ?? 'SAMO10').trim().toUpperCase();
+  const promoGiftDescription = (
+    config.promoGiftDescription ||
+    'Enjoy 10% off your next order at samoweave.com'
+  ).trim();
+  const showPromoGiftSection = promoGiftEnabled && Boolean(promoGiftCode);
 
   const formattedDate = (() => {
     try {
@@ -3088,6 +3166,40 @@ export function buildOrderConfirmationEmailPayload(
             </td>
           </tr>
 
+          ${
+            showPromoGiftSection
+              ? `<!-- Next-Order VIP Promo Gift Card Section -->
+          <tr>
+            <td style="padding:0 24px 26px 24px;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAFAFA;border:1px solid #09090B;border-collapse:collapse;">
+                <tr>
+                  <td align="center" style="padding:20px 18px;text-align:center;">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;color:#09090B;margin-bottom:6px;">
+                      A PRIVATE GIFT FOR YOUR NEXT VISIT
+                    </div>
+                    <div style="font-size:12px;line-height:1.5;color:#3F3F46;margin-bottom:14px;">
+                      ${escapeHtmlEmailText(promoGiftDescription)}
+                    </div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:collapse;">
+                      <tr>
+                        <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px dashed #09090B;padding:10px 22px;">
+                          <span style="font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:800;letter-spacing:0.22em;color:#09090B;user-select:all;">
+                            ${escapeHtmlEmailText(promoGiftCode)}
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="font-size:10px;color:#71717A;letter-spacing:0.06em;margin-top:10px;">
+                      Copy and apply this code at checkout on samoweave.com
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`
+              : ''
+          }
+
           <!-- Bottom Editorial Campaign Banner & Dual Table CTA Buttons -->
           <tr>
             <td style="padding:0;border-top:1px solid #E5E5E5;background-color:#FFFFFF;">
@@ -3190,6 +3302,15 @@ export function buildOrderConfirmationEmailPayload(
     `Phone: ${customerPhone}`,
     ...(customerEmail ? [`Email: ${customerEmail}`] : []),
     `Address / Location: ${shippingLocation}`,
+    ...(showPromoGiftSection
+      ? [
+          ``,
+          `A PRIVATE GIFT FOR YOUR NEXT VISIT`,
+          `--------------------------------------------------`,
+          `${promoGiftDescription}`,
+          `Promo Code: ${promoGiftCode}`,
+        ]
+      : []),
     ``,
     `Explore New Arrivals: ${bannerTargetLink}`,
     `Contact Us: https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0`,

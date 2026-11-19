@@ -1032,7 +1032,7 @@ test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords),
     products: INITIAL_PRODUCTS,
     seoConfig: snapshot,
   });
-  assert.equal(homeSeo.title.includes('SAMO'), true);
+  assert.equal(homeSeo.title, 'SAMO | Official Website');
   assert.equal(homeSeo.canonicalUrl, 'https://samoweave.com/home');
   assert.equal(homeSeo.keywords.includes('bespoke leather coat'), true);
 
@@ -1658,11 +1658,32 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
   assert.equal(defaultBanners.orderEmailSenderAddress, 'orders@samoweave.com');
   assert.equal(defaultBanners.orderEmailBccAddress, 'orders@samoweave.com');
   assert.equal(defaultBanners.orderEmailReplyToAddress, 'info@samoweave.com');
+  assert.equal(defaultBanners.orderEmailPromoEnabled, false);
+  assert.equal(defaultBanners.orderEmailPromoCode, 'SAMO10');
+  assert.equal(
+    defaultBanners.orderEmailPromoDescription,
+    'Enjoy 10% off your next order at samoweave.com'
+  );
+
+  const mergedWithPromo = mergeSiteBannersConfig(
+    {
+      orderEmailPromoEnabled: true,
+      orderEmailPromoCode: 'VIP15',
+      orderEmailPromoDescription: 'Enjoy 15% off your next acquisition at samoweave.com',
+    },
+    INITIAL_CATEGORIES
+  );
+  assert.equal(mergedWithPromo.orderEmailPromoEnabled, true);
+  assert.equal(mergedWithPromo.orderEmailPromoCode, 'VIP15');
+  assert.equal(
+    mergedWithPromo.orderEmailPromoDescription,
+    'Enjoy 15% off your next acquisition at samoweave.com'
+  );
 });
 
 import { buildOrderConfirmationEmailPayload } from './catalogLogic';
 
-test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, clickable campaign banner, and dual table CTA buttons', () => {
+test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, optional next-order promo gift card, clickable campaign banner, and dual table CTA buttons', () => {
   const payload = buildOrderConfirmationEmailPayload({
     order: {
       id: 'ord-9901',
@@ -1694,6 +1715,9 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     },
     bannerUrl: 'https://images.samoweave.com/banners/order-email-banner-1.jpg',
     bannerLinkUrl: 'https://samoweave.com/new-arrivals/women',
+    promoGiftEnabled: true,
+    promoGiftCode: 'SAMOVIP15',
+    promoGiftDescription: 'Enjoy 15% off your next order at samoweave.com',
   });
 
   assert.equal(payload.from, 'SAMO <orders@samoweave.com>');
@@ -1711,6 +1735,15 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
   );
   assert.equal(
     payload.html.includes('width="56"') && payload.html.includes('height="70"'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'),
+    true
+  );
+  assert.equal(payload.html.includes('SAMOVIP15'), true);
+  assert.equal(
+    payload.html.includes('Enjoy 15% off your next order at samoweave.com'),
     true
   );
   assert.equal(
@@ -1747,6 +1780,8 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
   assert.equal(payload.html.includes('SAMO10'), true);
   assert.equal(payload.html.includes('$450'), true);
   assert.equal(payload.text.includes('SAMO — ORDER CONFIRMED (#SAMO-9901)'), true);
+  assert.equal(payload.text.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'), true);
+  assert.equal(payload.text.includes('Promo Code: SAMOVIP15'), true);
   assert.equal(
     payload.text.includes(
       'Contact Us: https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0'
@@ -1760,5 +1795,6 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     true
   );
 });
+
 
 

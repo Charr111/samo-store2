@@ -232,6 +232,7 @@ export interface PersistedCatalogState {
   customMaterials?: string[];
   customColors?: string[];
   orders?: unknown[];
+  deletedOrderIds?: string[];
   preorders?: unknown[];
   admins?: unknown[];
   siteBanners?: Record<string, unknown>;
@@ -251,6 +252,15 @@ export interface NewsletterSubscriberRecord {
   phone?: string;
   source?: 'footer' | 'popup';
   subscribedAt: string;
+}
+
+function safeParseJson<T = any>(raw: unknown, fallback: T): T {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -331,25 +341,60 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
     }));
 
     // Parse orders
-    const orders = ordersRes.results.map((o) => ({
-      id: o.id,
-      customerName: o.customer_name,
-      customerEmail: o.customer_email || '',
-      customerPhone: o.customer_phone || '',
-      customerAddress: o.customer_address || '',
-      customerCity: o.customer_city || '',
-      deliveryMethod: o.delivery_method || 'delivery',
-      totalPrice: o.total_price,
-      subtotal: o.subtotal,
-      discountAmount: o.discount_amount || 0,
-      deliveryFee: o.delivery_fee || 0,
-      status: o.status,
-      promoCode: o.promo_code || undefined,
-      orderNotes: o.order_notes || undefined,
-      items: o.items ? JSON.parse(o.items) : [],
-      createdAt: o.created_at,
-      updatedAt: o.updated_at,
-    }));
+    const orders = ordersRes.results.map((o) => {
+      const parsedItems = safeParseJson<any[]>(o.items, []);
+      const parsedMeta = safeParseJson<Record<string, any> | null>(
+        o.order_notes,
+        null
+      );
+      const shippingLoc =
+        parsedMeta?.shippingLocation ||
+        o.customer_address ||
+        o.customer_city ||
+        '';
+      return {
+        id: o.id,
+        orderNumber: parsedMeta?.orderNumber || o.id,
+        customerName: o.customer_name,
+        customerEmail: o.customer_email || '',
+        customerPhone: o.customer_phone || '',
+        shippingLocation: shippingLoc,
+        customerAddress: o.customer_address || shippingLoc,
+        customerCity: o.customer_city || '',
+        deliveryMethod: o.delivery_method || 'Standard Delivery',
+        paymentMethod: parsedMeta?.paymentMethod || 'COD',
+        totalPrice: Number(o.total_price) || 0,
+        subtotal: Number(o.subtotal) || 0,
+        discountAmount: Number(o.discount_amount) || 0,
+        deliveryFee: Number(o.delivery_fee) || 0,
+        status: o.status,
+        promoCode: o.promo_code || undefined,
+        itemsSummary: parsedMeta?.itemsSummary || '',
+        itemsCount:
+          Number(parsedMeta?.itemsCount) ||
+          parsedItems.reduce(
+            (sum, it) => sum + (Number(it?.quantity) || 1),
+            0
+          ) ||
+          1,
+        primaryProductName:
+          parsedMeta?.primaryProductName ||
+          parsedItems[0]?.productName ||
+          'SAMO Order',
+        primaryProductSize:
+          parsedMeta?.primaryProductSize ||
+          parsedItems[0]?.selectedSize ||
+          'OS',
+        primaryProductImage:
+          parsedMeta?.primaryProductImage ||
+          parsedItems[0]?.imageUrl ||
+          '',
+        orderedItems: parsedItems,
+        items: parsedItems,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+      };
+    });
 
     // Parse preorders
     const preorders = preordersRes.results.map((pr) => ({
@@ -407,11 +452,19 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       }
     }
 
+    const deletedOrderIdsList: string[] = Array.isArray(
+      settingsMap.deletedOrderIds
+    )
+      ? settingsMap.deletedOrderIds
+      : [];
+    const deletedOrderSet = new Set(deletedOrderIdsList);
+    const filteredOrders = orders.filter((o) => !deletedOrderSet.has(o.id));
+
     return {
       updatedAt: maxUpdatedAt || Date.now(),
       products,
       categories,
-      orders,
+      orders: filteredOrders,
       preorders,
       newsletterSubscribers,
       promoCodes,
@@ -420,7 +473,7 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       autoAcceptOrders:
         typeof settingsMap.autoAcceptOrders === 'boolean'
           ? settingsMap.autoAcceptOrders
-          : false,
+          : true,
       showLowStockCount:
         typeof settingsMap.showLowStockCount === 'boolean'
           ? settingsMap.showLowStockCount
@@ -436,6 +489,7 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       customColors: settingsMap.customColors || undefined,
       deletedProductIds: settingsMap.deletedProductIds || [],
       deletedCategoryIds: settingsMap.deletedCategoryIds || [],
+      deletedOrderIds: deletedOrderIdsList,
       newsletterPopupImpressions:
         settingsMap.newsletterPopupImpressions || undefined,
     };
@@ -558,6 +612,21 @@ export async function upsertD1Category(c: any): Promise<void> {
  * Atomically upsert an order in D1 SQL.
  */
 export async function upsertD1Order(o: any): Promise<void> {
+  const lineItems = Array.isArray(o.orderedItems)
+    ? o.orderedItems
+    : Array.isArray(o.items)
+    ? o.items
+    : [];
+  const orderMetaJson = JSON.stringify({
+    orderNumber: o.orderNumber || o.id,
+    shippingLocation: o.shippingLocation || o.customerAddress || '',
+    paymentMethod: o.paymentMethod || 'COD',
+    itemsSummary: o.itemsSummary || '',
+    itemsCount: o.itemsCount ?? lineItems.length,
+    primaryProductName: o.primaryProductName || '',
+    primaryProductSize: o.primaryProductSize || '',
+    primaryProductImage: o.primaryProductImage || '',
+  });
   const sql = `INSERT INTO orders (
     id, customer_name, customer_email, customer_phone, customer_address, customer_city,
     delivery_method, total_price, subtotal, discount_amount, delivery_fee, status,
@@ -568,6 +637,8 @@ export async function upsertD1Order(o: any): Promise<void> {
     ?, ?, ?, ?, ?
   ) ON CONFLICT(id) DO UPDATE SET
     status=excluded.status,
+    order_notes=excluded.order_notes,
+    items=excluded.items,
     updated_at=excluded.updated_at;`;
 
   const params = [
@@ -575,17 +646,17 @@ export async function upsertD1Order(o: any): Promise<void> {
     o.customerName || '',
     o.customerEmail || '',
     o.customerPhone || '',
-    o.customerAddress || '',
+    o.shippingLocation || o.customerAddress || '',
     o.customerCity || '',
-    o.deliveryMethod || 'delivery',
+    o.deliveryMethod || 'Standard Delivery',
     o.totalPrice ?? 0,
     o.subtotal ?? 0,
     o.discountAmount ?? 0,
     o.deliveryFee ?? 0,
-    o.status || 'pending',
+    o.status || 'accepted',
     o.promoCode ?? null,
-    o.orderNotes ?? null,
-    JSON.stringify(Array.isArray(o.items) ? o.items : []),
+    orderMetaJson,
+    JSON.stringify(lineItems),
     o.createdAt || new Date().toISOString(),
     o.updatedAt || new Date().toISOString(),
   ];
@@ -725,13 +796,25 @@ export async function writeD1CatalogPatch(
     await upsertD1Setting('deletedCategoryIds', patch.deletedCategoryIds);
   }
 
-  // 5. Orders
+  // 5. Orders & Deleted Orders
+  const deletedOrdIds: string[] = Array.isArray((patch as any).deletedOrderIds)
+    ? (patch as any).deletedOrderIds
+    : [];
+  const deletedOrdSet = new Set(deletedOrdIds);
   if (Array.isArray(patch.orders)) {
+    await d1Query('DELETE FROM orders;');
     for (const ord of patch.orders as any[]) {
-      if (ord && ord.id) {
+      if (ord && ord.id && !deletedOrdSet.has(ord.id)) {
         await upsertD1Order(ord);
       }
     }
+  } else if (deletedOrdIds.length > 0) {
+    for (const id of deletedOrdIds) {
+      await d1Query('DELETE FROM orders WHERE id = ?;', [id]);
+    }
+  }
+  if (deletedOrdIds.length > 0) {
+    await upsertD1Setting('deletedOrderIds', deletedOrdIds);
   }
 
   // 6. Preorders
