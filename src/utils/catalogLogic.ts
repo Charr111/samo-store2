@@ -2109,6 +2109,11 @@ export function buildDefaultSiteBanners(
     homeBottomGiftsUrl: 'studio://women-bags-hourglass-burgundy',
     homeBottomShowroomUrl: 'studio://women-trench-suede-coat',
     showroomHeroBannerUrl: 'studio://women-trench-suede-coat',
+    orderEmailBannerUrl: '',
+    orderEmailBannerLinkUrl: 'https://samoweave.com/new-arrivals/women',
+    orderEmailSenderAddress: 'orders@samoweave.com',
+    orderEmailBccAddress: 'orders@samoweave.com',
+    orderEmailReplyToAddress: 'info@samoweave.com',
     categoryBanners,
   };
 }
@@ -2235,6 +2240,29 @@ export function mergeSiteBannersConfig(
       stored.showroomHeroBannerUrl.trim()
         ? stored.showroomHeroBannerUrl.trim()
         : defaults.showroomHeroBannerUrl,
+    orderEmailBannerUrl:
+      typeof stored.orderEmailBannerUrl === 'string'
+        ? stored.orderEmailBannerUrl.trim()
+        : defaults.orderEmailBannerUrl,
+    orderEmailBannerLinkUrl:
+      typeof stored.orderEmailBannerLinkUrl === 'string' &&
+      stored.orderEmailBannerLinkUrl.trim()
+        ? stored.orderEmailBannerLinkUrl.trim()
+        : defaults.orderEmailBannerLinkUrl,
+    orderEmailSenderAddress:
+      typeof stored.orderEmailSenderAddress === 'string' &&
+      stored.orderEmailSenderAddress.trim()
+        ? stored.orderEmailSenderAddress.trim()
+        : defaults.orderEmailSenderAddress,
+    orderEmailBccAddress:
+      typeof stored.orderEmailBccAddress === 'string'
+        ? stored.orderEmailBccAddress.trim()
+        : defaults.orderEmailBccAddress,
+    orderEmailReplyToAddress:
+      typeof stored.orderEmailReplyToAddress === 'string' &&
+      stored.orderEmailReplyToAddress.trim()
+        ? stored.orderEmailReplyToAddress.trim()
+        : defaults.orderEmailReplyToAddress,
     categoryBanners: mergedCategoryBanners,
   };
 }
@@ -2589,7 +2617,7 @@ export function validateNewsletterPopupInputs(
       cleanEmail: '',
       cleanPhone: '',
       errorMessage:
-        'Please enter your email address or phone number (e.g., johndoe@gmail.com, 70 123 456).',
+        'Please enter your email address or phone number (e.g., samoweave@gmail.com, 70 123 456).',
     };
   }
 
@@ -2618,7 +2646,7 @@ export function validateNewsletterPopupInputs(
       cleanEmail: candidateEmail,
       cleanPhone: '',
       errorMessage:
-        'Please enter a valid email address (e.g., johndoe@gmail.com) or an 8-digit phone number (e.g., 70 123 456).',
+        'Please enter a valid email address (e.g., samoweave@gmail.com) or an 8-digit phone number (e.g., 70 123 456).',
     };
   }
 
@@ -2630,7 +2658,7 @@ export function validateNewsletterPopupInputs(
       cleanEmail: '',
       cleanPhone: remainderWithoutEmail,
       errorMessage:
-        'Please enter a valid email address or a phone number with at least 8 digits (e.g., johndoe@gmail.com, 70 123 456).',
+        'Please enter a valid email address or a phone number with at least 8 digits (e.g., samoweave@gmail.com, 70 123 456).',
     };
   }
 
@@ -2641,6 +2669,517 @@ export function validateNewsletterPopupInputs(
     cleanEmail: emailValid ? candidateEmail : '',
     cleanPhone: phoneValid ? remainderWithoutEmail : '',
   };
+}
+
+function escapeHtmlEmailText(input: unknown): string {
+  const str = String(input ?? '');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export interface OrderConfirmationEmailConfig {
+  order: Partial<OrderItem> & {
+    orderNumber?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    shippingLocation?: string;
+    deliveryMethod?: string;
+    paymentMethod?: string;
+    deliveryFee?: number;
+    subtotal?: number;
+    discountAmount?: number;
+    promoCode?: string;
+    totalPrice?: number;
+    itemsSummary?: string;
+    orderedItems?: Array<{
+      productId?: string;
+      productName?: string;
+      selectedColor?: string;
+      selectedSize?: string;
+      selectedSetSizes?: Array<{
+        productName?: string;
+        pieceLabel?: string;
+        selectedSize?: string;
+        selectedColor?: string;
+        garmentCode?: string;
+      }>;
+      garmentCode?: string;
+      quantity?: number;
+      unitPrice?: number;
+    }>;
+    createdAt?: string;
+  };
+  bannerUrl?: string;
+  bannerLinkUrl?: string;
+  senderAddress?: string;
+  bccAddress?: string;
+  replyToAddress?: string;
+}
+
+/**
+ * Builds the Resend REST API payload (from, to, bcc, reply_to, subject, html, text)
+ * for a SAMO luxury order confirmation receipt using 100% email-safe inline CSS and HTML <table> layout.
+ */
+export function buildOrderConfirmationEmailPayload(
+  config: OrderConfirmationEmailConfig
+): {
+  from: string;
+  to: string[];
+  bcc?: string[];
+  reply_to?: string;
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const { order } = config;
+  const orderRef = (order.orderNumber || order.id || 'SAMO-ORDER').trim();
+  const customerName = (order.customerName || 'Valued Client').trim();
+  const customerEmail = (order.customerEmail || '').trim();
+  const customerPhone = (order.customerPhone || '—').trim();
+  const shippingLocation = (order.shippingLocation || '—').trim();
+  const deliveryMethod = (order.deliveryMethod || 'Standard Delivery').trim();
+  const paymentMethod = (order.paymentMethod || 'COD').trim();
+  const subtotal = Number(order.subtotal) || 0;
+  const discountAmount = Number(order.discountAmount) || 0;
+  const promoCode = (order.promoCode || '').trim().toUpperCase();
+  const deliveryFee = Number(order.deliveryFee) || 0;
+  const totalPrice =
+    Number(order.totalPrice) || Math.max(0, subtotal - discountAmount + deliveryFee);
+
+  const rawSender = (config.senderAddress || 'orders@samoweave.com').trim();
+  const fromField = rawSender.includes('<') ? rawSender : `SAMO <${rawSender}>`;
+
+  const rawBcc = (
+    config.bccAddress !== undefined ? config.bccAddress : 'orders@samoweave.com'
+  ).trim();
+  const bccList = rawBcc
+    ? rawBcc
+        .split(/[,;]+/)
+        .map((e) => e.trim())
+        .filter((e) => e.includes('@'))
+    : [];
+
+  const replyTo = (config.replyToAddress || 'info@samoweave.com').trim();
+  const bannerUrl = (config.bannerUrl || '').trim();
+  const hasPublicBanner =
+    bannerUrl.startsWith('https://') || bannerUrl.startsWith('http://');
+  const rawBannerLink = (
+    config.bannerLinkUrl || 'https://samoweave.com/new-arrivals/women'
+  ).trim();
+  const bannerTargetLink = rawBannerLink.includes('utm_source=')
+    ? rawBannerLink
+    : `${rawBannerLink}${rawBannerLink.includes('?') ? '&' : '?'}utm_source=order_email&utm_medium=email`;
+
+  const formattedDate = (() => {
+    try {
+      const d = order.createdAt ? new Date(order.createdAt) : new Date();
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+
+  const isShowroomPickup = deliveryMethod
+    .toLowerCase()
+    .includes('showroom pickup');
+
+  const orderedItems = Array.isArray(order.orderedItems)
+    ? order.orderedItems
+    : [];
+
+  // Build HTML rows and plain-text lines for ordered items
+  let itemsHtmlRows = '';
+  const itemsTextLines: string[] = [];
+
+  if (orderedItems.length > 0) {
+    orderedItems.forEach((item, index) => {
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const name = (item.productName || `SAMO Garment #${index + 1}`).trim();
+      const refCode = item.garmentCode
+        ? formatGarmentCodeRef(item.garmentCode)
+        : '';
+      const color = (item.selectedColor || '').trim();
+      const size = (item.selectedSize || 'OS').trim();
+      const setPieces = Array.isArray(item.selectedSetSizes)
+        ? item.selectedSetSizes
+        : [];
+      const unitPrice =
+        typeof item.unitPrice === 'number' && Number.isFinite(item.unitPrice)
+          ? item.unitPrice
+          : orderedItems.length === 1
+          ? Math.round(subtotal / qty)
+          : undefined;
+      const lineTotal =
+        unitPrice !== undefined ? `$${(unitPrice * qty).toLocaleString()}` : '';
+
+      const metaParts: string[] = [];
+      if (refCode) metaParts.push(refCode);
+      if (color) metaParts.push(`Color: ${color}`);
+      if (setPieces.length > 0) {
+        const pieceDesc = setPieces
+          .map((sp) => {
+            const pName = sp.pieceLabel || sp.productName || 'Piece';
+            const pColor = sp.selectedColor ? `${sp.selectedColor} · ` : '';
+            const pSize = sp.selectedSize || 'OS';
+            return `${pName}: ${pColor}Size ${pSize}`;
+          })
+          .join(' | ');
+        metaParts.push(pieceDesc);
+      } else if (size) {
+        metaParts.push(`Size: ${size === 'OS' ? 'One Size' : size}`);
+      }
+
+      const metaLine = metaParts.join(' · ');
+
+      itemsHtmlRows += `
+        <tr>
+          <td style="padding:14px 0;border-bottom:1px solid #E5E5E5;vertical-align:top;">
+            <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#09090B;line-height:1.4;">
+              ${escapeHtmlEmailText(name)}
+            </div>
+            ${
+              metaLine
+                ? `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#52525B;letter-spacing:0.04em;margin-top:4px;line-height:1.5;">
+                    ${escapeHtmlEmailText(metaLine)}
+                  </div>`
+                : ''
+            }
+          </td>
+          <td align="center" style="padding:14px 8px;border-bottom:1px solid #E5E5E5;vertical-align:top;font-family:'Courier New',Courier,monospace;font-size:12px;color:#27272A;white-space:nowrap;">
+            Qty: ${qty}
+          </td>
+          <td align="right" style="padding:14px 0;border-bottom:1px solid #E5E5E5;vertical-align:top;font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:#09090B;white-space:nowrap;">
+            ${lineTotal ? escapeHtmlEmailText(lineTotal) : 'Included'}
+          </td>
+        </tr>`;
+
+      itemsTextLines.push(
+        `- ${qty}x ${name}${metaLine ? ` (${metaLine})` : ''}${
+          lineTotal ? ` — ${lineTotal}` : ''
+        }`
+      );
+    });
+  } else {
+    const fallbackSummary = (
+      order.itemsSummary ||
+      `${order.primaryProductName || 'SAMO Order'} (${order.primaryProductSize || 'Standard'})`
+    )
+      .replace(/\s*\[Payment:[^\]]+\]\s*$/i, '')
+      .trim();
+
+    itemsHtmlRows = `
+      <tr>
+        <td colspan="3" style="padding:14px 0;border-bottom:1px solid #E5E5E5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#09090B;line-height:1.6;">
+          ${escapeHtmlEmailText(fallbackSummary)}
+        </td>
+      </tr>`;
+    itemsTextLines.push(`- ${fallbackSummary}`);
+  }
+
+  const deliveryFeeText =
+    isShowroomPickup
+      ? 'Showroom Pickup — Complimentary'
+      : deliveryFee <= 0
+      ? 'Complimentary'
+      : `$${deliveryFee.toLocaleString()}`;
+
+  const preheaderText = `Your SAMO order #${orderRef} is confirmed. View your itemized receipt and delivery details.`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Order Confirmed — SAMO (#${escapeHtmlEmailText(orderRef)})</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EFEFEF;color:#09090B;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <!-- Hidden Inbox Preheader -->
+  <div style="display:none;font-size:1px;color:#EFEFEF;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">
+    ${escapeHtmlEmailText(preheaderText)}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#EFEFEF;width:100%;margin:0;padding:20px 0;">
+    <tr>
+      <td align="center" style="padding:0 10px;">
+        <!-- Main 600px Architectural Container -->
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #09090B;border-collapse:collapse;">
+          
+          <!-- Top Header: Dark-Mode-Safe #FFFFFF Studio Plate with Centered SAMO Logo -->
+          <tr>
+            <td align="center" style="background-color:#FFFFFF;padding:26px 24px 22px 24px;border-bottom:1px solid #09090B;text-align:center;">
+              <a href="https://samoweave.com/home?utm_source=order_email&utm_medium=email" target="_blank" style="text-decoration:none;display:inline-block;">
+                <img
+                  src="https://images.samoweave.com/logo/samo-weave-logo.png"
+                  alt="SAMO"
+                  width="150"
+                  style="display:block;margin:0 auto;width:150px;max-width:170px;height:auto;border:0;outline:none;text-decoration:none;"
+                />
+              </a>
+            </td>
+          </tr>
+
+          <!-- Order Confirmation Status & Reference Strip -->
+          <tr>
+            <td style="padding:28px 24px 20px 24px;background-color:#FFFFFF;">
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#71717A;margin-bottom:8px;">
+                ORDER CONFIRMATION · EST. 1999
+              </div>
+              <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#09090B;line-height:1.25;">
+                THANK YOU FOR YOUR ORDER, ${escapeHtmlEmailText(customerName)}
+              </h1>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#3F3F46;">
+                We have received your SAMO order <strong style="color:#09090B;">#${escapeHtmlEmailText(orderRef)}</strong>. Our studio is preparing your garments for ${
+    isShowroomPickup ? 'pickup at the SAMO Flagship Showroom' : 'dispatch to your delivery address'
+  }.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Order Meta Table (Order ID, Date, Fulfillment, Payment) -->
+          <tr>
+            <td style="padding:0 24px 22px 24px;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#F4F4F5;border:1px solid #E4E4E7;border-collapse:collapse;">
+                <tr>
+                  <td width="50%" style="padding:12px 14px;border-bottom:1px solid #E4E4E7;border-right:1px solid #E4E4E7;vertical-align:top;">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717A;">ORDER NUMBER</div>
+                    <div style="font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:#09090B;margin-top:4px;">#${escapeHtmlEmailText(orderRef)}</div>
+                  </td>
+                  <td width="50%" style="padding:12px 14px;border-bottom:1px solid #E4E4E7;vertical-align:top;">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717A;">ORDER DATE</div>
+                    <div style="font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:#09090B;margin-top:4px;">${escapeHtmlEmailText(formattedDate)}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding:12px 14px;border-right:1px solid #E4E4E7;vertical-align:top;">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717A;">FULFILLMENT</div>
+                    <div style="font-size:12px;font-weight:700;color:#09090B;margin-top:4px;">${escapeHtmlEmailText(deliveryMethod)}</div>
+                  </td>
+                  <td width="50%" style="padding:12px 14px;vertical-align:top;">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717A;">PAYMENT METHOD</div>
+                    <div style="font-size:12px;font-weight:700;color:#09090B;margin-top:4px;">${escapeHtmlEmailText(paymentMethod)}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Itemized Garment Receipt Table -->
+          <tr>
+            <td style="padding:0 24px 20px 24px;background-color:#FFFFFF;">
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#09090B;padding-bottom:8px;border-bottom:2px solid #09090B;">
+                ITEMIZED RECEIPT
+              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+                ${itemsHtmlRows}
+              </table>
+
+              <!-- Financial Totals Breakdown -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:14px;border-collapse:collapse;">
+                <tr>
+                  <td style="padding:5px 0;font-size:12px;color:#52525B;">Subtotal</td>
+                  <td align="right" style="padding:5px 0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#09090B;">$${subtotal.toLocaleString()}</td>
+                </tr>
+                ${
+                  discountAmount > 0
+                    ? `<tr>
+                        <td style="padding:5px 0;font-size:12px;color:#4A080C;font-weight:700;">Privilege Discount${
+                          promoCode ? ` (${escapeHtmlEmailText(promoCode)})` : ''
+                        }</td>
+                        <td align="right" style="padding:5px 0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#4A080C;font-weight:700;">-$${discountAmount.toLocaleString()}</td>
+                      </tr>`
+                    : ''
+                }
+                <tr>
+                  <td style="padding:5px 0;font-size:12px;color:#52525B;">Delivery</td>
+                  <td align="right" style="padding:5px 0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#09090B;">${escapeHtmlEmailText(deliveryFeeText)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 0 4px 0;border-top:1px solid #09090B;font-size:13px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#09090B;">TOTAL (USD)</td>
+                  <td align="right" style="padding:12px 0 4px 0;border-top:1px solid #09090B;font-family:'Courier New',Courier,monospace;font-size:16px;font-weight:800;color:#09090B;">$${totalPrice.toLocaleString()}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Client & Delivery Block -->
+          <tr>
+            <td style="padding:0 24px 28px 24px;background-color:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAFAFA;border:1px solid #E5E5E5;border-collapse:collapse;">
+                <tr>
+                  <td style="padding:16px;">
+                    <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#09090B;margin-bottom:8px;">
+                      CLIENT &amp; ${isShowroomPickup ? 'SHOWROOM PICKUP' : 'DELIVERY'} DETAILS
+                    </div>
+                    <div style="font-size:12px;line-height:1.6;color:#27272A;">
+                      <strong>Client:</strong> ${escapeHtmlEmailText(customerName)}<br />
+                      <strong>Phone:</strong> ${escapeHtmlEmailText(customerPhone)}<br />
+                      ${
+                        customerEmail
+                          ? `<strong>Email:</strong> ${escapeHtmlEmailText(customerEmail)}<br />`
+                          : ''
+                      }
+                      <strong>${isShowroomPickup ? 'Pickup Location / Notes' : 'Delivery Address'}:</strong> ${escapeHtmlEmailText(shippingLocation)}
+                    </div>
+                    ${
+                      isShowroomPickup
+                        ? `<div style="margin-top:10px;font-size:11px;line-height:1.5;color:#3F3F46;">
+                            Your order will be reserved at the <strong>SAMO Flagship Showroom</strong>. <a href="https://samoweave.com/showroom?utm_source=order_email&utm_medium=email" target="_blank" style="color:#09090B;font-weight:700;text-decoration:underline;">View Showroom Hours &amp; Map</a>
+                          </div>`
+                        : ''
+                    }
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Bottom Editorial Campaign Banner & Dual Table CTA Buttons -->
+          <tr>
+            <td style="padding:0;border-top:1px solid #E5E5E5;background-color:#FFFFFF;">
+              ${
+                hasPublicBanner
+                  ? `<a href="${escapeHtmlEmailText(bannerTargetLink)}" target="_blank" style="display:block;text-decoration:none;border:0;">
+                      <img
+                        src="${escapeHtmlEmailText(bannerUrl)}"
+                        alt="SAMO Editorial Campaign"
+                        width="600"
+                        style="width:100%;max-width:600px;height:auto;display:block;border:0;outline:none;text-decoration:none;"
+                      />
+                    </a>`
+                  : ''
+              }
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:#FFFFFF;">
+                <tr>
+                  <td align="center" style="padding:22px 24px 26px 24px;">
+                    <!-- Primary Solid Black Button: EXPLORE NEW ARRIVALS -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+                      <tr>
+                        <td align="center" bgcolor="#09090B" style="background-color:#09090B;border:1px solid #09090B;">
+                          <a
+                            href="https://samoweave.com/new-arrivals/women?utm_source=order_email&utm_medium=email"
+                            target="_blank"
+                            style="display:block;padding:14px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;text-decoration:none;text-align:center;"
+                          >
+                            EXPLORE NEW ARRIVALS
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Secondary Outlined Black-on-White Button: DISCOVER THE HOUSE -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+                      <tr>
+                        <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid #09090B;">
+                          <a
+                            href="https://samoweave.com/home?utm_source=order_email&utm_medium=email"
+                            target="_blank"
+                            style="display:block;padding:13px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;text-decoration:none;text-align:center;"
+                          >
+                            DISCOVER THE HOUSE
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="background-color:#D4D4D4;padding:20px 24px;border-top:1px solid #09090B;text-align:center;">
+              <div style="font-size:11px;line-height:1.6;color:#27272A;margin-bottom:8px;">
+                Questions regarding your order or sizing? Contact our client concierge at
+                <a href="mailto:info@samoweave.com" style="color:#09090B;font-weight:700;text-decoration:underline;">info@samoweave.com</a>
+                or
+                <a href="mailto:support@samoweave.com" style="color:#09090B;font-weight:700;text-decoration:underline;">support@samoweave.com</a>.
+              </div>
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#09090B;">
+                &copy; 2026 SAMO (EST. 1999) &mdash; ALL RIGHTS RESERVED
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    `SAMO — ORDER CONFIRMED (#${orderRef})`,
+    `==================================================`,
+    `Thank you for your order, ${customerName}.`,
+    ``,
+    `Order Number: #${orderRef}`,
+    `Order Date: ${formattedDate}`,
+    `Fulfillment: ${deliveryMethod}`,
+    `Payment Method: ${paymentMethod}`,
+    ``,
+    `ITEMIZED RECEIPT`,
+    `--------------------------------------------------`,
+    ...itemsTextLines,
+    `--------------------------------------------------`,
+    `Subtotal: $${subtotal.toLocaleString()}`,
+    ...(discountAmount > 0
+      ? [
+          `Privilege Discount${promoCode ? ` (${promoCode})` : ''}: -$${discountAmount.toLocaleString()}`,
+        ]
+      : []),
+    `Delivery: ${deliveryFeeText}`,
+    `TOTAL (USD): $${totalPrice.toLocaleString()}`,
+    ``,
+    `CLIENT & DELIVERY DETAILS`,
+    `--------------------------------------------------`,
+    `Client: ${customerName}`,
+    `Phone: ${customerPhone}`,
+    ...(customerEmail ? [`Email: ${customerEmail}`] : []),
+    `Address / Location: ${shippingLocation}`,
+    ``,
+    `Explore New Arrivals: https://samoweave.com/new-arrivals/women?utm_source=order_email&utm_medium=email`,
+    `Discover the House: https://samoweave.com/home?utm_source=order_email&utm_medium=email`,
+    ``,
+    `Client Concierge: info@samoweave.com | support@samoweave.com`,
+    `© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED`,
+  ].join('\n');
+
+  const payload: {
+    from: string;
+    to: string[];
+    bcc?: string[];
+    reply_to?: string;
+    subject: string;
+    html: string;
+    text: string;
+  } = {
+    from: fromField,
+    to: [customerEmail || rawSender],
+    subject: `Order Confirmed — SAMO (#${orderRef})`,
+    html,
+    text,
+  };
+
+  if (bccList.length > 0) {
+    payload.bcc = bccList;
+  }
+  if (replyTo) {
+    payload.reply_to = replyTo;
+  }
+
+  return payload;
 }
 
 

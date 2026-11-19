@@ -26,6 +26,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const userPausedRef = useRef<boolean>(false);
+  const playInFlightRef = useRef<boolean>(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [customVideoFailed, setCustomVideoFailed] = useState(false);
@@ -40,33 +41,53 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
 
   const attemptAutoplay = React.useCallback(() => {
     const vid = videoRef.current;
-    if (!vid || showImageBanner || userPausedRef.current) return;
+    if (
+      !vid ||
+      showImageBanner ||
+      userPausedRef.current ||
+      !vid.paused ||
+      playInFlightRef.current
+    ) {
+      return;
+    }
     if (isMuted) {
       vid.defaultMuted = true;
       vid.muted = true;
     }
     vid.playsInline = true;
+    playInFlightRef.current = true;
     const playPromise = vid.play();
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
+          playInFlightRef.current = false;
           setIsPlaying(true);
         })
         .catch(() => {
-          if (!vid || userPausedRef.current) return;
+          playInFlightRef.current = false;
+          if (!vid || userPausedRef.current || !vid.paused) return;
           vid.defaultMuted = true;
           vid.muted = true;
           setIsMuted(true);
+          playInFlightRef.current = true;
           vid
             .play()
-            .then(() => setIsPlaying(true))
-            .catch(() => {});
+            .then(() => {
+              playInFlightRef.current = false;
+              setIsPlaying(true);
+            })
+            .catch(() => {
+              playInFlightRef.current = false;
+            });
         });
+    } else {
+      playInFlightRef.current = false;
     }
   }, [isMuted, showImageBanner]);
 
   useEffect(() => {
     userPausedRef.current = false;
+    playInFlightRef.current = false;
     setCustomVideoFailed(false);
     setVideoFailed(false);
     setIsPlaying(true);
@@ -83,7 +104,9 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
     vid.setAttribute('playsinline', '');
     vid.setAttribute('webkit-playsinline', '');
 
-    attemptAutoplay();
+    if (vid.readyState >= 2) {
+      attemptAutoplay();
+    }
 
     // One-time passive touchstart/scroll fallback for iOS Low Power Mode or Android Data Saver
     const handleFirstInteraction = () => {
@@ -142,7 +165,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
           muted={isMuted}
           playsInline
           preload="auto"
-          onLoadedMetadata={attemptAutoplay}
+          onLoadedData={attemptAutoplay}
           onCanPlay={attemptAutoplay}
           onPlay={() => setIsPlaying(true)}
           onError={(e) => {

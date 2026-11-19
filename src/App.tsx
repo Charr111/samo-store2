@@ -1247,6 +1247,33 @@ export default function App() {
       await pushServerCatalogPatch({ orders: nextOrders });
     }
 
+    // Trigger automated transactional order confirmation email via Resend REST API (non-blocking)
+    void (async () => {
+      try {
+        await fetch('/api/order-confirmation-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order: newOrder,
+            bannerUrl: siteBanners.orderEmailBannerUrl || '',
+            bannerLinkUrl:
+              siteBanners.orderEmailBannerLinkUrl ||
+              'https://samoweave.com/new-arrivals/women',
+            senderAddress:
+              siteBanners.orderEmailSenderAddress || 'orders@samoweave.com',
+            bccAddress:
+              siteBanners.orderEmailBccAddress !== undefined
+                ? siteBanners.orderEmailBccAddress
+                : 'orders@samoweave.com',
+            replyToAddress:
+              siteBanners.orderEmailReplyToAddress || 'info@samoweave.com',
+          }),
+        });
+      } catch (emailErr) {
+        console.warn('[SAMO] Non-blocking order email trigger notice:', emailErr);
+      }
+    })();
+
     return newOrder;
   };
 

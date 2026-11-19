@@ -242,6 +242,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
             selectedSetSizes: ci.selectedSetSizes,
             garmentCode: resolvedCode,
             quantity: ci.quantity,
+            unitPrice: getEffectiveProductPrice(ci.product).effectivePrice,
           };
         }),
       });

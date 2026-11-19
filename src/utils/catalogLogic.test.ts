@@ -1655,5 +1655,74 @@ test('New Arrivals department routes (/new-arrivals/women and /new-arrivals/kids
     defaultBanners.categoryBanners['collection:new-arrivals-kids'].categoryName,
     'New Arrival (Kids)'
   );
+  assert.equal(defaultBanners.orderEmailSenderAddress, 'orders@samoweave.com');
+  assert.equal(defaultBanners.orderEmailBccAddress, 'orders@samoweave.com');
+  assert.equal(defaultBanners.orderEmailReplyToAddress, 'info@samoweave.com');
 });
+
+import { buildOrderConfirmationEmailPayload } from './catalogLogic';
+
+test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receipt with SAMO logo, itemized receipt, clickable campaign banner, and dual table CTA buttons', () => {
+  const payload = buildOrderConfirmationEmailPayload({
+    order: {
+      id: 'ord-9901',
+      orderNumber: 'SAMO-9901',
+      customerName: 'Layla Khoury',
+      customerEmail: 'layla@example.com',
+      customerPhone: '+961 70 123 456',
+      shippingLocation: 'Achrafieh, Beirut',
+      deliveryMethod: 'Standard Delivery',
+      paymentMethod: 'COD',
+      subtotal: 500,
+      discountAmount: 50,
+      promoCode: 'SAMO10',
+      deliveryFee: 0,
+      totalPrice: 450,
+      orderedItems: [
+        {
+          productId: 'w-jkt-1',
+          productName: 'AVENUE HEAVY COW LEATHER BIKER JACKET',
+          garmentCode: 'W-1042',
+          selectedColor: 'Obsidian Black',
+          selectedSize: 'M',
+          quantity: 1,
+          unitPrice: 500,
+        },
+      ],
+      createdAt: '2026-11-19T06:00:00.000Z',
+    },
+    bannerUrl: 'https://images.samoweave.com/banners/order-email-banner-1.jpg',
+    bannerLinkUrl: 'https://samoweave.com/new-arrivals/women',
+  });
+
+  assert.equal(payload.from, 'SAMO <orders@samoweave.com>');
+  assert.deepEqual(payload.to, ['layla@example.com']);
+  assert.deepEqual(payload.bcc, ['orders@samoweave.com']);
+  assert.equal(payload.reply_to, 'info@samoweave.com');
+  assert.equal(payload.subject, 'Order Confirmed — SAMO (#SAMO-9901)');
+  assert.equal(
+    payload.html.includes('https://images.samoweave.com/logo/samo-weave-logo.png'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('https://images.samoweave.com/banners/order-email-banner-1.jpg'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('width="600"'),
+    true
+  );
+  assert.equal(
+    payload.html.includes('width:100%;max-width:600px;height:auto;display:block;border:0;'),
+    true
+  );
+  assert.equal(payload.html.includes('EXPLORE NEW ARRIVALS'), true);
+  assert.equal(payload.html.includes('DISCOVER THE HOUSE'), true);
+  assert.equal(payload.html.includes('AVENUE HEAVY COW LEATHER BIKER JACKET'), true);
+  assert.equal(payload.html.includes('Ref. W-1042'), true);
+  assert.equal(payload.html.includes('SAMO10'), true);
+  assert.equal(payload.html.includes('$450'), true);
+  assert.equal(payload.text.includes('SAMO — ORDER CONFIRMED (#SAMO-9901)'), true);
+});
+
 

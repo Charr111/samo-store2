@@ -109,6 +109,7 @@ import {
 } from '../utils/sizeGuideLogic';
 import { ProductImage } from './ProductImage';
 import {
+  compressAndUploadEmailBannerJpg,
   deleteMediaFromR2,
   getShrinkUploadsEnabled,
   ImageCompressionOptions,
@@ -279,6 +280,84 @@ const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
       )}
       {errorMessage && (
         <span className="text-[10px] font-semibold text-red-400 mt-1 max-w-[220px] text-right">
+          {errorMessage}
+        </span>
+      )}
+    </div>
+  );
+};
+
+interface R2EmailBannerJpgUploadButtonProps {
+  onUploaded: (url: string) => void;
+  ariaLabel: string;
+  label?: string;
+}
+
+const R2EmailBannerJpgUploadButton: React.FC<R2EmailBannerJpgUploadButtonProps> = ({
+  onUploaded,
+  ariaLabel,
+  label = 'Upload Email Banner (.JPG)',
+}) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    try {
+      const result = await compressAndUploadEmailBannerJpg(file);
+      onUploaded(result.url);
+      setStatusMessage(
+        `✓ Email-Safe JPG (${result.width}×${result.height}px · ${result.compressedSizeKB} KB)`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to upload email banner.';
+      setErrorMessage(msg);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  return (
+    <div className="inline-flex flex-col items-end shrink-0">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
+        onChange={handleFileChange}
+        aria-label={`${ariaLabel} File Input`}
+        className="hidden"
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => fileInputRef.current?.click()}
+        aria-label={ariaLabel}
+        className="px-3.5 py-2 text-[11px] bg-white text-zinc-950 font-bold uppercase tracking-wider rounded-lg hover:bg-zinc-200 disabled:opacity-60 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-sm"
+      >
+        <Upload className="w-3.5 h-3.5 shrink-0" />
+        <span>
+          {uploading ? 'Converting to Email JPG & Uploading...' : label}
+        </span>
+      </button>
+      {statusMessage && (
+        <span className="text-[10px] font-mono-tabular font-bold text-emerald-400 mt-1">
+          {statusMessage}
+        </span>
+      )}
+      {errorMessage && (
+        <span className="text-[10px] font-semibold text-red-400 mt-1 max-w-[240px] text-right">
           {errorMessage}
         </span>
       )}
@@ -3865,6 +3944,314 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )
                         }
                       />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BANNER #5: ORDER CONFIRMATION EMAIL BANNER & RESEND SETTINGS */}
+              <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-5 sm:p-6 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+                  <div>
+                    <span className="text-[10px] font-mono-tabular uppercase tracking-widest text-emerald-400 block">
+                      BANNER SLOT #5 · TRANSACTIONAL ORDER CONFIRMATION EMAIL (RESEND)
+                    </span>
+                    <h2 className="text-base sm:text-lg font-bold text-white mt-0.5 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-zinc-300" />
+                      <span>5. Order Confirmation Email Banner &amp; Resend Settings</span>
+                    </h2>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      One single campaign banner automatically scales edge-to-edge across iPhone, Samsung, Google Pixel, and laptop email apps. Uploaded images are automatically converted to a 1200px email-safe <strong className="text-white">.JPG (&lt; 200 KB)</strong> in Cloudflare R2 so Gmail, Apple Mail, and Outlook render it with 100% reliability.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Live Email Preview Card */}
+                  <div className="lg:col-span-5 bg-white text-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-white px-4 py-3 border-b border-zinc-950 text-center">
+                      <img
+                        src="https://images.samoweave.com/logo/samo-weave-logo.png"
+                        alt="SAMO"
+                        className="h-6 w-auto mx-auto object-contain"
+                      />
+                    </div>
+                    <div className="p-3.5 border-b border-zinc-200 text-[11px] space-y-1 bg-zinc-50">
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        ORDER RECEIPT PREVIEW · 600PX FLUID EMAIL
+                      </div>
+                      <div className="font-bold text-zinc-950 uppercase">
+                        ORDER CONFIRMED — SAMO (#SAMO-8492)
+                      </div>
+                      <div className="text-[10px] text-zinc-600">
+                        Itemized Garment Receipt · Subtotal · Delivery · Total (USD)
+                      </div>
+                    </div>
+
+                    {siteBanners.orderEmailBannerUrl &&
+                    siteBanners.orderEmailBannerUrl.trim() ? (
+                      <div className="relative bg-zinc-100 border-b border-zinc-200">
+                        <img
+                          src={siteBanners.orderEmailBannerUrl}
+                          alt="Order Email Campaign Banner Preview"
+                          className="w-full h-auto block object-cover max-h-56"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const prevUrl = siteBanners.orderEmailBannerUrl;
+                            updateSiteBannerField(
+                              'orderEmailBannerUrl',
+                              '',
+                              'Removed Order Email Campaign Banner'
+                            );
+                            if (prevUrl) {
+                              await deleteMediaFromR2(prevUrl);
+                            }
+                          }}
+                          className="absolute top-2 right-2 px-2.5 py-1 rounded bg-black/80 hover:bg-red-900 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove Banner</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-10 px-4 text-center bg-zinc-100 border-b border-zinc-200 text-xs text-zinc-500">
+                        No email campaign banner uploaded yet. Upload a 4:3 (1200×900) banner on the right to display it above the email CTA buttons.
+                      </div>
+                    )}
+
+                    <div className="p-3.5 space-y-2 bg-white">
+                      <div className="w-full py-2.5 bg-zinc-950 text-white text-center text-[10px] font-bold uppercase tracking-[0.18em]">
+                        EXPLORE NEW ARRIVALS
+                      </div>
+                      <div className="w-full py-2.5 bg-white text-zinc-950 border border-zinc-950 text-center text-[10px] font-bold uppercase tracking-[0.18em]">
+                        DISCOVER THE HOUSE
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email Banner Upload & Resend Settings Controls */}
+                  <div className="lg:col-span-7 space-y-4">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                        Order Email Campaign Banner URL (Auto-Converted to 1200px .JPG in R2)
+                      </label>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                        <input
+                          type="text"
+                          value={siteBanners.orderEmailBannerUrl || ''}
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'orderEmailBannerUrl',
+                              e.target.value,
+                              'Order Email Banner URL'
+                            )
+                          }
+                          placeholder="https://images.samoweave.com/banners/order-email-banner-....jpg"
+                          className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                        <R2EmailBannerJpgUploadButton
+                          ariaLabel="Upload Order Confirmation Email Banner JPG"
+                          onUploaded={async (url) => {
+                            const oldUrl = siteBanners.orderEmailBannerUrl;
+                            if (oldUrl && oldUrl !== url) {
+                              await deleteMediaFromR2(oldUrl);
+                            }
+                            updateSiteBannerField(
+                              'orderEmailBannerUrl',
+                              url,
+                              'Order Email Campaign Banner (.JPG)'
+                            );
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                        Banner Click Destination URL (Where Customers Go When Tapping the Banner)
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          siteBanners.orderEmailBannerLinkUrl ||
+                          'https://samoweave.com/new-arrivals/women'
+                        }
+                        onChange={(e) =>
+                          updateSiteBannerField(
+                            'orderEmailBannerLinkUrl',
+                            e.target.value,
+                            'Order Email Banner Link URL'
+                          )
+                        }
+                        placeholder="https://samoweave.com/new-arrivals/women"
+                        className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                          Sender Address (From)
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            siteBanners.orderEmailSenderAddress ||
+                            'orders@samoweave.com'
+                          }
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'orderEmailSenderAddress',
+                              e.target.value,
+                              'Order Email Sender Address'
+                            )
+                          }
+                          placeholder="orders@samoweave.com"
+                          className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                          BCC Store Copy Address
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            siteBanners.orderEmailBccAddress !== undefined
+                              ? siteBanners.orderEmailBccAddress
+                              : 'orders@samoweave.com'
+                          }
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'orderEmailBccAddress',
+                              e.target.value,
+                              'Order Email BCC Address'
+                            )
+                          }
+                          placeholder="orders@samoweave.com"
+                          className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                          Reply-To Concierge
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            siteBanners.orderEmailReplyToAddress ||
+                            'info@samoweave.com'
+                          }
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'orderEmailReplyToAddress',
+                              e.target.value,
+                              'Order Email Reply-To Address'
+                            )
+                          }
+                          placeholder="info@samoweave.com"
+                          className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Resend Test Email Sender */}
+                    <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="text-[11px] text-zinc-400">
+                        Test your live Resend integration and preview the exact HTML order receipt + banner in your inbox:
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const targetEmail = window.prompt(
+                            'Enter recipient email address for the test SAMO Order Confirmation email:',
+                            currentUser?.email ||
+                              siteBanners.orderEmailBccAddress ||
+                              'orders@samoweave.com'
+                          );
+                          if (!targetEmail || !targetEmail.trim()) return;
+                          setBannerFeedback('Sending test order confirmation email via Resend...');
+                          try {
+                            const sampleOrder = orders[0]
+                              ? {
+                                  ...orders[0],
+                                  customerEmail: targetEmail.trim(),
+                                }
+                              : {
+                                  id: 'ord-test',
+                                  orderNumber: 'SAMO-8492',
+                                  customerName: 'SAMO Client Preview',
+                                  customerEmail: targetEmail.trim(),
+                                  customerPhone: '+961 70 123 456',
+                                  shippingLocation: 'Downtown Beirut, Lebanon',
+                                  deliveryMethod: 'Standard Delivery',
+                                  paymentMethod: 'COD',
+                                  subtotal: 495,
+                                  discountAmount: 0,
+                                  deliveryFee: 0,
+                                  totalPrice: 495,
+                                  orderedItems: [
+                                    {
+                                      productId: products[0]?.id || 'samo-sample-1',
+                                      productName:
+                                        products[0]?.name ||
+                                        'ARCHITECTURAL ITALIAN COW LEATHER JACKET',
+                                      garmentCode: products[0]?.garmentCode || 'W-1042',
+                                      selectedColor: 'Obsidian Black',
+                                      selectedSize: 'M',
+                                      quantity: 1,
+                                      unitPrice: 495,
+                                    },
+                                  ],
+                                  createdAt: new Date().toISOString(),
+                                };
+
+                            const res = await fetch('/api/order-confirmation-email', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                order: sampleOrder,
+                                bannerUrl: siteBanners.orderEmailBannerUrl || '',
+                                bannerLinkUrl:
+                                  siteBanners.orderEmailBannerLinkUrl ||
+                                  'https://samoweave.com/new-arrivals/women',
+                                senderAddress:
+                                  siteBanners.orderEmailSenderAddress ||
+                                  'orders@samoweave.com',
+                                bccAddress:
+                                  siteBanners.orderEmailBccAddress !== undefined
+                                    ? siteBanners.orderEmailBccAddress
+                                    : 'orders@samoweave.com',
+                                replyToAddress:
+                                  siteBanners.orderEmailReplyToAddress ||
+                                  'info@samoweave.com',
+                              }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (data?.ok) {
+                              setBannerFeedback(
+                                `✓ Test Order Confirmation Email sent to ${targetEmail.trim()} (Resend ID: ${data.id || 'delivered'})`
+                              );
+                            } else {
+                              setBannerFeedback(
+                                `Notice: ${data?.error || 'Could not send test email. Verify RESEND_API_KEY in Cloudflare secrets.'}`
+                              );
+                            }
+                          } catch (err) {
+                            setBannerFeedback(
+                              `Notice: ${err instanceof Error ? err.message : 'Failed to reach /api/order-confirmation-email'}`
+                            );
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Send Test Order Email</span>
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -20,6 +20,7 @@ import {
   deleteD1NewsletterSubscriber,
   type NewsletterSubscriberRecord,
 } from './server/d1.ts';
+import { buildResendEmailPayload } from './functions/api/order-confirmation-email.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -398,7 +399,11 @@ async function startServer() {
       const finalFileName = isRecognizedExt
         ? safeFileName
         : `${safeFileName.replace(/\.[^/.]+$/, '')}${defaultExt}`;
-      const objectKey = isVideo
+      const isBannerAsset =
+        isVideo ||
+        req.body?.folder === 'banners' ||
+        finalFileName.startsWith('order-email-banner-');
+      const objectKey = isBannerAsset
         ? `banners/${finalFileName}`
         : `products/${finalFileName}`;
 
@@ -794,6 +799,117 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Quick filter failed';
       res.status(500).json({ error: message });
+    }
+  });
+
+  // 4. Transactional Order Confirmation Email via Resend REST API
+  app.options('/api/order-confirmation-email', (_req, res) => {
+    res.set(R2_CORS_HEADERS).status(204).end();
+  });
+
+  app.post('/api/order-confirmation-email', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const apiKey = (process.env.RESEND_API_KEY || '').trim();
+      if (!apiKey) {
+        res.status(200).json({
+          ok: false,
+          skipped: true,
+          error: 'RESEND_API_KEY is not configured in server environment.',
+        });
+        return;
+      }
+
+      const body = req.body || {};
+      const order = body.order;
+      if (!order || typeof order !== 'object') {
+        res.status(400).json({ ok: false, error: 'Missing order payload.' });
+        return;
+      }
+
+      const recipientEmail = String(order.customerEmail || '').trim();
+      if (!recipientEmail || !recipientEmail.includes('@')) {
+        res.status(200).json({
+          ok: false,
+          skipped: true,
+          error: 'Customer email address is missing or invalid.',
+        });
+        return;
+      }
+
+      const currentCatalog = await readCatalogState();
+      const storedBanners =
+        (currentCatalog.siteBanners as Record<string, string> | undefined) || {};
+
+      const emailPayload = buildResendEmailPayload({
+        order,
+        bannerUrl:
+          body.bannerUrl !== undefined
+            ? body.bannerUrl
+            : storedBanners.orderEmailBannerUrl || '',
+        bannerLinkUrl:
+          body.bannerLinkUrl ||
+          storedBanners.orderEmailBannerLinkUrl ||
+          'https://samoweave.com/new-arrivals/women',
+        senderAddress:
+          body.senderAddress ||
+          storedBanners.orderEmailSenderAddress ||
+          'orders@samoweave.com',
+        bccAddress:
+          body.bccAddress !== undefined
+            ? body.bccAddress
+            : storedBanners.orderEmailBccAddress !== undefined
+            ? storedBanners.orderEmailBccAddress
+            : 'orders@samoweave.com',
+        replyToAddress:
+          body.replyToAddress ||
+          storedBanners.orderEmailReplyToAddress ||
+          'info@samoweave.com',
+      });
+
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailPayload),
+      });
+
+      const resendData = (await resendResponse.json().catch(() => ({}))) as {
+        id?: string;
+        message?: string;
+      };
+
+      if (!resendResponse.ok) {
+        const errMsg =
+          resendData?.message ||
+          `Resend API returned HTTP ${resendResponse.status}`;
+        console.warn('[SAMO] Resend API error:', errMsg);
+        res.status(200).json({
+          ok: false,
+          error: errMsg,
+          status: resendResponse.status,
+        });
+        return;
+      }
+
+      res.status(200).json({
+        ok: true,
+        id: resendData.id || null,
+        to: emailPayload.to,
+        bcc: emailPayload.bcc || [],
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Unexpected error sending order confirmation email.';
+      console.warn('[SAMO] Order email handler error:', message);
+      res.status(200).json({
+        ok: false,
+        error: message,
+      });
     }
   });
 

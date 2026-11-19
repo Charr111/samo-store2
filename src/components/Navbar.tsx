@@ -172,7 +172,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               alt="SAMO"
               loading="eager"
               decoding="async"
-              fetchPriority="high"
               className="h-8 sm:h-9 md:h-10 w-auto max-w-[160px] sm:max-w-[190px] md:max-w-[220px] object-contain select-none"
             />
           </a>

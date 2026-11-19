@@ -148,7 +148,11 @@ export const onRequestPost = async (context: {
     const finalFileName = isRecognizedExt
       ? safeFileName
       : `${safeFileName.replace(/\.[^/.]+$/, '')}${defaultExt}`;
-    const objectKey = isVideo
+    const isBannerAsset =
+      isVideo ||
+      (body as Record<string, unknown>)?.folder === 'banners' ||
+      finalFileName.startsWith('order-email-banner-');
+    const objectKey = isBannerAsset
       ? `banners/${finalFileName}`
       : `products/${finalFileName}`;
 

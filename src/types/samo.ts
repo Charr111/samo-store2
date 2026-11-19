@@ -158,6 +158,7 @@ export interface OrderedLineItem {
   selectedSetSizes?: SelectedSetPieceSize[];
   garmentCode?: string;
   quantity: number;
+  unitPrice?: number;
 }
 
 export interface OrderItem {
@@ -233,6 +234,11 @@ export interface SiteBannersConfig {
   homeBottomGiftsUrl: string;
   homeBottomShowroomUrl: string;
   showroomHeroBannerUrl: string;
+  orderEmailBannerUrl?: string;
+  orderEmailBannerLinkUrl?: string;
+  orderEmailSenderAddress?: string;
+  orderEmailBccAddress?: string;
+  orderEmailReplyToAddress?: string;
   categoryBanners: Record<string, CategoryBannerConfig>;
 }
 

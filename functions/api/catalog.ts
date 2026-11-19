@@ -33,6 +33,7 @@ export interface Env {
   SAMO_R2_BUCKET?: R2BucketBinding;
   DB?: D1DatabaseBinding;
   SAMO_D1?: D1DatabaseBinding;
+  RESEND_API_KEY?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {

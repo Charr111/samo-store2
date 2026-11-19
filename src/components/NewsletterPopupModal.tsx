@@ -108,7 +108,7 @@ export const NewsletterPopupModal: React.FC<NewsletterPopupModalProps> = ({
                       setContactInput(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
-                    placeholder="johndoe@gmail.com, 70 123 456"
+                    placeholder="samoweave@gmail.com, 70 123 456"
                     autoComplete="email"
                     className="w-full border border-[#27272A] bg-[#141416] py-3 pl-9 pr-3.5 text-base sm:text-xs text-white placeholder-[#71717A] focus:border-white focus:outline-none rounded-none"
                   />

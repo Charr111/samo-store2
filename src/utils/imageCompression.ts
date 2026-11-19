@@ -516,6 +516,122 @@ export async function uploadCompressedImageToR2(
 }
 
 /**
+ * Converts any admin-uploaded Order Confirmation Email Banner image into an email-client-safe
+ * 1200px-max-width JPEG (image/jpeg, quality ~0.88, under 200 KB) and uploads it to Cloudflare R2
+ * under `banners/order-email-banner-...jpg` so it renders reliably in Gmail, Apple Mail, and Outlook.
+ */
+export async function compressAndUploadEmailBannerJpg(file: File): Promise<{
+  url: string;
+  sizeBytes: number;
+  originalSizeKB: number;
+  compressedSizeKB: number;
+  width: number;
+  height: number;
+}> {
+  if (!file) {
+    throw new Error('No image file selected.');
+  }
+
+  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.94);
+  const objectUrl = URL.createObjectURL(decodedBlob);
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () =>
+        reject(new Error('Unable to decode image for email banner JPEG conversion.'));
+      el.src = objectUrl;
+    });
+
+    const maxWidth = 1200;
+    const maxHeight = 1200;
+    let { width, height } = calculateCLimitDimensions(
+      img.naturalWidth || maxWidth,
+      img.naturalHeight || 900,
+      maxWidth,
+      maxHeight
+    );
+
+    let canvas = renderToCanvas(img, width, height);
+    const maxEmailBannerBytes = 195 * 1024; // strictly under 200 KB
+    const qualities = [0.88, 0.82, 0.76, 0.70, 0.62];
+    let chosenBlob: Blob | null = null;
+
+    for (const q of qualities) {
+      const jpegBlob = await encodeCanvasSingleFormat(canvas, 'image/jpeg', q);
+      if (jpegBlob) {
+        chosenBlob = jpegBlob;
+        if (jpegBlob.size <= maxEmailBannerBytes) {
+          break;
+        }
+      }
+    }
+
+    if (!chosenBlob || chosenBlob.size > maxEmailBannerBytes) {
+      width = Math.max(600, Math.round(width * 0.82));
+      height = Math.max(450, Math.round(height * 0.82));
+      canvas = renderToCanvas(img, width, height);
+      const fallbackBlob = await encodeCanvasSingleFormat(canvas, 'image/jpeg', 0.76);
+      if (fallbackBlob) {
+        chosenBlob = fallbackBlob;
+      }
+    }
+
+    if (!chosenBlob) {
+      throw new Error('Failed to encode Order Email Banner as JPEG.');
+    }
+
+    const base64Data = await blobToBase64Data(chosenBlob);
+    const cleanStem = (file.name || 'order-banner')
+      .replace(/\.[^/.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 36) || 'campaign';
+    const fileName = `order-email-banner-${Date.now()}-${cleanStem}.jpg`;
+
+    const response = await fetch('/api/r2-upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName,
+        folder: 'banners',
+        contentType: 'image/jpeg',
+        base64Data,
+      }),
+    });
+
+    let payload: { url?: string; sizeBytes?: number; error?: string } = {};
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error(`Email banner upload failed with HTTP ${response.status}.`);
+    }
+
+    if (!response.ok || !payload.url) {
+      throw new Error(
+        payload.error || `Email banner upload failed with status ${response.status}.`
+      );
+    }
+
+    const finalBytes = payload.sizeBytes || chosenBlob.size;
+    return {
+      url: payload.url,
+      sizeBytes: finalBytes,
+      originalSizeKB: Math.max(1, Math.round(file.size / 1024)),
+      compressedSizeKB: Math.max(1, Math.round(finalBytes / 1024)),
+      width,
+      height,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
  * Extracts the R2 object key (e.g., "products/173000-jacket.webp" or "banners/...") from a public R2 URL.
  */
 export function extractR2ObjectKey(url: string): string | null {
