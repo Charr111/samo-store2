@@ -301,10 +301,10 @@ export async function prepareOriginalQualityImage(
 }
 
 /**
- * Compresses an image File in the browser by ~77% to 88% of its original size
- * (retaining ~10% to 22% of the original file size and capping at ~360 KB — e.g., a 2.8 MB image becomes ~220 KB to 350 KB).
- * Preserves sharp retina resolution (up to 1280x1706) with high-quality bicubic smoothing
- * while stepping WebP/JPEG quality (0.75 -> 0.72 -> 0.68 -> 0.64 -> 0.62, never dropping below 0.62).
+ * Compresses an image File in the browser by ~60% to 70% of its original size
+ * (retaining ~25% to 40% of the original file size — e.g., a 2 MB image becomes ~500 KB to 800 KB).
+ * Preserves high studio resolution (up to 2400x3000) while adaptively selecting the JPEG/WebP
+ * quality level that lands inside the 60%–70% reduction window.
  */
 export async function compressImageToWebP(
   file: File,
@@ -320,25 +320,18 @@ export async function compressImageToWebP(
   }
 
   const originalBytes = Math.max(1024, file.size);
-  const maxWidth = options?.maxWidth ?? 1280;
-  const maxHeight = options?.maxHeight ?? 1706;
+  const maxWidth = options?.maxWidth ?? 2400;
+  const maxHeight = options?.maxHeight ?? 3000;
 
-  // Target 77% to 88% reduction => resulting file is ~10% to 22% of original size,
-  // with an upper ceiling of 360 KB (368,640 bytes) so a 2.8 MB upload lands cleanly around ~220 KB – 350 KB.
-  const hardCeilingBytes = 360 * 1024;
+  // Target 60% to 70% reduction => resulting file is ~25% to 40% of original size
+  // (For a 2 MB / 2,048 KB file: min ~512 KB, ideal ~675 KB, max ~819 KB)
+  const minTargetBytes = Math.max(30 * 1024, Math.round(originalBytes * 0.25));
   const maxTargetBytes =
     options?.targetMaxBytes ??
-    Math.min(
-      hardCeilingBytes,
-      Math.max(45 * 1024, Math.round(originalBytes * 0.22))
-    );
-  const minTargetBytes = Math.min(
-    Math.round(maxTargetBytes * 0.55),
-    Math.max(25 * 1024, Math.round(originalBytes * 0.10))
-  );
+    Math.max(60 * 1024, Math.round(originalBytes * 0.40));
   const idealTargetBytes = Math.round((minTargetBytes + maxTargetBytes) / 2);
 
-  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.92);
+  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.94);
   const objectUrl = URL.createObjectURL(decodedBlob);
 
   try {
@@ -359,17 +352,9 @@ export async function compressImageToWebP(
 
     let canvas = renderToCanvas(img, width, height);
 
-    // Start at 0.75 and step down progressively while strictly protecting visual sharpness (never below 0.62)
     const candidateQualities = options?.quality
-      ? [
-          Math.max(0.62, options.quality),
-          0.75,
-          0.72,
-          0.68,
-          0.64,
-          0.62,
-        ]
-      : [0.75, 0.72, 0.68, 0.64, 0.62];
+      ? [options.quality, 0.92, 0.85, 0.78, 0.70, 0.60]
+      : [0.95, 0.92, 0.88, 0.84, 0.80, 0.75, 0.70, 0.64, 0.56, 0.48];
 
     let bestInWindow: { blob: Blob; contentType: string; diff: number } | null =
       null;
@@ -378,14 +363,14 @@ export async function compressImageToWebP(
     let smallestOverall: { blob: Blob; contentType: string } | null = null;
 
     for (const q of candidateQualities) {
-      const [webpBlob, jpegBlob] = await Promise.all([
-        encodeCanvasSingleFormat(canvas, 'image/webp', q),
+      const [jpegBlob, webpBlob] = await Promise.all([
         encodeCanvasSingleFormat(canvas, 'image/jpeg', q),
+        encodeCanvasSingleFormat(canvas, 'image/webp', q),
       ]);
 
       const candidates: Array<{ blob: Blob; contentType: string }> = [];
-      if (webpBlob) candidates.push({ blob: webpBlob, contentType: 'image/webp' });
       if (jpegBlob) candidates.push({ blob: jpegBlob, contentType: 'image/jpeg' });
+      if (webpBlob) candidates.push({ blob: webpBlob, contentType: 'image/webp' });
 
       for (const cand of candidates) {
         const sz = cand.blob.size;
@@ -408,7 +393,7 @@ export async function compressImageToWebP(
         }
       }
 
-      if (bestInWindow && bestInWindow.diff <= idealTargetBytes * 0.14) {
+      if (bestInWindow && bestInWindow.diff <= idealTargetBytes * 0.12) {
         break;
       }
     }
@@ -417,38 +402,21 @@ export async function compressImageToWebP(
       bestInWindow ||
       bestUnderMax ||
       (smallestOverall
-        ? {
-            ...smallestOverall,
-            diff: Math.abs(smallestOverall.blob.size - idealTargetBytes),
-          }
+        ? { ...smallestOverall, diff: Math.abs(smallestOverall.blob.size - idealTargetBytes) }
         : null);
 
-    // If still above maxTargetBytes (~360 KB / 22% of original), step dimensions down proportionally
-    // while keeping quality >= 0.64 so visual texture remains razor-sharp and file size lands in ~200–350 KB.
-    const dimensionScaleSteps = [0.85, 0.74] as const;
-    for (const scaleStep of dimensionScaleSteps) {
-      if (chosen && chosen.blob.size <= maxTargetBytes) {
-        break;
-      }
-      width = Math.max(600, Math.round(width * scaleStep));
-      height = Math.max(750, Math.round(height * scaleStep));
+    // If still above maxTargetBytes (e.g., ultra-dense image), scale down dimensions slightly so it shrinks by at least 60%
+    if (!chosen || chosen.blob.size > maxTargetBytes) {
+      width = Math.max(480, Math.round(width * 0.78));
+      height = Math.max(600, Math.round(height * 0.78));
       canvas = renderToCanvas(img, width, height);
-      for (const q of [0.72, 0.68, 0.64]) {
-        const scaled = await encodeSmallestCanvasBlob(canvas, q);
-        if (!chosen || scaled.blob.size < chosen.blob.size) {
-          chosen = {
-            ...scaled,
-            diff: Math.abs(scaled.blob.size - idealTargetBytes),
-          };
-        }
-        if (chosen.blob.size <= maxTargetBytes) {
-          break;
-        }
+      const scaled = await encodeSmallestCanvasBlob(canvas, 0.76);
+      if (!chosen || scaled.blob.size < chosen.blob.size) {
+        chosen = {
+          ...scaled,
+          diff: Math.abs(scaled.blob.size - idealTargetBytes),
+        };
       }
-    }
-
-    if (!chosen) {
-      throw new Error('Browser canvas failed to compress image.');
     }
 
     const base64Data = await blobToBase64Data(chosen.blob);

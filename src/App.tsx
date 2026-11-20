@@ -752,6 +752,7 @@ export default function App() {
     }
     const onPopState = (event: PopStateEvent) => {
       setCartDrawerOpen(false);
+      setSearchQuery('');
       const stateObj = (event.state || {}) as {
         modalOpen?: boolean;
         productId?: string;
@@ -1077,6 +1078,7 @@ export default function App() {
 
   // Navigation handler updating browser URL (supporting /<department>/<category-slug>)
   const handleNavigate = (route: RoutePath, categoryName?: string) => {
+    setSearchQuery('');
     if (activeProductModal) {
       setActiveProductModal(null);
     }
@@ -1097,6 +1099,7 @@ export default function App() {
 
   // Category tab selection handler updating URL to /<department>/<category-slug>
   const handleSelectCategory = (categoryName: string) => {
+    setSearchQuery('');
     if (activeProductModal) {
       setActiveProductModal(null);
     }
