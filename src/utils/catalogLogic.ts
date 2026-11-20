@@ -2177,9 +2177,10 @@ export function buildDefaultSiteBanners(
     homeHeroMediaType: 'video',
     homeHeroVideoUrl: 'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4',
     homeHeroImageUrl: 'studio://women-jacket-black-leather-biker',
-    homeHeroKicker:
-      'SAMO · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
-    homeHeroTitle: 'NEW ARRIVALS',
+    homeHeroKicker: '',
+    homeHeroTitle: 'WINTER EDITION',
+    heroHeadlineText: 'WINTER EDITION',
+    heroHeadlineSize: 'md',
     homeMiddleBannerUrl: 'studio://kids-junior-leather-bomber',
     homeMiddleKicker:
       'SAMO KIDS · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)',
@@ -2257,6 +2258,22 @@ export function mergeSiteBannersConfig(
     }
   }
 
+  const resolvedHeadlineText =
+    typeof stored.heroHeadlineText === 'string'
+      ? stored.heroHeadlineText
+      : typeof stored.homeHeroTitle === 'string'
+      ? stored.homeHeroTitle.trim().toUpperCase() === 'NEW ARRIVALS'
+        ? 'WINTER EDITION'
+        : stored.homeHeroTitle
+      : 'WINTER EDITION';
+
+  const validHeroSizes = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
+  const resolvedHeadlineSize =
+    typeof stored.heroHeadlineSize === 'string' &&
+    (validHeroSizes as readonly string[]).includes(stored.heroHeadlineSize)
+      ? (stored.heroHeadlineSize as SiteBannersConfig['heroHeadlineSize'])
+      : 'md';
+
   return {
     homeHeroMediaType:
       stored.homeHeroMediaType === 'image' ? 'image' : 'video',
@@ -2271,16 +2288,15 @@ export function mergeSiteBannersConfig(
         ? stored.homeHeroImageUrl.trim()
         : defaults.homeHeroImageUrl,
     homeHeroKicker:
-      typeof stored.homeHeroKicker === 'string' && stored.homeHeroKicker.trim()
+      typeof stored.homeHeroKicker === 'string'
         ? stored.homeHeroKicker
             .replace(/SAMO ATELIER/gi, 'SAMO')
             .replace(/SAMO WEAVE/gi, 'SAMO')
             .replace(/\bATELIER\b/gi, 'SAMO')
         : defaults.homeHeroKicker,
-    homeHeroTitle:
-      typeof stored.homeHeroTitle === 'string' && stored.homeHeroTitle.trim()
-        ? stored.homeHeroTitle
-        : defaults.homeHeroTitle,
+    homeHeroTitle: resolvedHeadlineText,
+    heroHeadlineText: resolvedHeadlineText,
+    heroHeadlineSize: resolvedHeadlineSize,
     homeMiddleBannerUrl:
       typeof stored.homeMiddleBannerUrl === 'string' &&
       stored.homeMiddleBannerUrl.trim()

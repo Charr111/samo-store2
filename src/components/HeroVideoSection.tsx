@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import { RoutePath } from '../types/samo';
+import { HeroHeadlineSize, RoutePath } from '../types/samo';
 import { ProductImage } from './ProductImage';
 
 interface HeroVideoSectionProps {
@@ -11,9 +11,18 @@ interface HeroVideoSectionProps {
   imageUrl?: string;
   kicker?: string;
   title?: string;
+  headlineSize?: HeroHeadlineSize;
 }
 
 export const DEFAULT_HERO_VIDEO = 'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4';
+
+const HERO_HEADLINE_SIZE_CLASSES: Record<HeroHeadlineSize, string> = {
+  xs: 'text-sm sm:text-lg md:text-2xl',
+  sm: 'text-base sm:text-2xl md:text-3xl',
+  md: 'text-xl sm:text-3xl md:text-[40px]',
+  lg: 'text-2xl sm:text-4xl md:text-5xl',
+  xl: 'text-3xl sm:text-5xl md:text-6xl',
+};
 
 export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   onNavigate,
@@ -21,8 +30,8 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   mediaType = 'video',
   videoUrl = DEFAULT_HERO_VIDEO,
   imageUrl = 'studio://women-jacket-black-leather-biker',
-  kicker = 'SAMO · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
-  title = 'NEW ARRIVALS',
+  title = 'WINTER EDITION',
+  headlineSize = 'md',
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const userPausedRef = useRef<boolean>(false);
@@ -196,25 +205,26 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
         </div>
       )}
 
-      {/* Bottom-Center Campaign Title & Dual Rectangular White CTA Buttons */}
+      {/* Bottom-Center Campaign Title & Dual Underlined Text CTA Buttons */}
       <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
-        <p className="text-[11px] font-semibold tracking-[0.25em] uppercase text-zinc-200 mb-2">
-          {kicker}
-        </p>
-        <h1
-          className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-6"
-          style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', textWrap: 'balance' }}
-        >
-          {title}
-        </h1>
-        <div className="flex flex-wrap items-center justify-center gap-3.5">
+        {typeof title === 'string' && title.trim().length > 0 && (
+          <h1
+            className={`font-display text-white font-extrabold tracking-[0.14em] uppercase mb-5 leading-tight ${
+              HERO_HEADLINE_SIZE_CLASSES[headlineSize] ||
+              HERO_HEADLINE_SIZE_CLASSES.md
+            }`}
+          >
+            {title.trim()}
+          </h1>
+        )}
+        <div className="flex flex-wrap items-center justify-center gap-7">
           <button
             type="button"
             onClick={() => {
               onNavigate('/women');
               onSelectCategory('all');
             }}
-            className="min-w-[168px] px-7 py-3.5 bg-white text-zinc-950 border border-zinc-950 text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-950 hover:text-white hover:border-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="pb-1 border-b border-white text-white hover:text-white/80 hover:border-white/80 text-[11px] font-bold tracking-[0.16em] uppercase transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             Shop Women
           </button>
@@ -224,7 +234,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
               onNavigate('/kids');
               onSelectCategory('all');
             }}
-            className="min-w-[168px] px-7 py-3.5 bg-white text-zinc-950 border border-zinc-950 text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-950 hover:text-white hover:border-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="pb-1 border-b border-white text-white hover:text-white/80 hover:border-white/80 text-[11px] font-bold tracking-[0.16em] uppercase transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             Shop Kids
           </button>

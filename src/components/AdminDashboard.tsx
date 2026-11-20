@@ -3582,38 +3582,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-3 pt-1">
                       <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                          Hero Headline Text
-                        </label>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Hero Headline Text (Leave empty or click Clear to
+                            hide text on homepage)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {(
+                              typeof siteBanners.heroHeadlineText === 'string'
+                                ? siteBanners.heroHeadlineText
+                                : siteBanners.homeHeroTitle || ''
+                            ).trim().length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onUpdateSiteBanners({
+                                    ...siteBanners,
+                                    homeHeroTitle: '',
+                                    heroHeadlineText: '',
+                                  });
+                                  setBannerFeedback(
+                                    '✓ Cleared & Hidden Hero Headline Text'
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                              >
+                                Clear / Hide Text
+                              </button>
+                            )}
+                            {(
+                              typeof siteBanners.heroHeadlineText === 'string'
+                                ? siteBanners.heroHeadlineText
+                                : siteBanners.homeHeroTitle || ''
+                            ).trim() !== 'WINTER EDITION' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onUpdateSiteBanners({
+                                    ...siteBanners,
+                                    homeHeroTitle: 'WINTER EDITION',
+                                    heroHeadlineText: 'WINTER EDITION',
+                                  });
+                                  setBannerFeedback(
+                                    '✓ Set Hero Headline to WINTER EDITION'
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                              >
+                                Reset to WINTER EDITION
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <input
                           type="text"
-                          value={siteBanners.homeHeroTitle}
-                          onChange={(e) =>
-                            updateSiteBannerField(
-                              'homeHeroTitle',
-                              e.target.value
-                            )
+                          value={
+                            typeof siteBanners.heroHeadlineText === 'string'
+                              ? siteBanners.heroHeadlineText
+                              : siteBanners.homeHeroTitle ?? ''
                           }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            onUpdateSiteBanners({
+                              ...siteBanners,
+                              homeHeroTitle: val,
+                              heroHeadlineText: val,
+                            });
+                            setBannerFeedback(
+                              '✓ Updated Site Banner Configuration'
+                            );
+                          }}
+                          placeholder="e.g. WINTER EDITION (leave empty to hide headline)"
                           className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                          Hero Top Subtitle Kicker
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                          Hero Headline Text Size (5 Pre-Built Sizes)
                         </label>
-                        <input
-                          type="text"
-                          value={siteBanners.homeHeroKicker}
-                          onChange={(e) =>
-                            updateSiteBannerField(
-                              'homeHeroKicker',
-                              e.target.value
-                            )
-                          }
-                          className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
-                        />
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {(
+                            [
+                              { id: 'xs', label: 'XS' },
+                              { id: 'sm', label: 'SM' },
+                              { id: 'md', label: 'MD (Default)' },
+                              { id: 'lg', label: 'LG' },
+                              { id: 'xl', label: 'XL (Biggest)' },
+                            ] as const
+                          ).map((szOpt) => {
+                            const activeSize =
+                              siteBanners.heroHeadlineSize || 'md';
+                            const isSelected = activeSize === szOpt.id;
+                            return (
+                              <button
+                                key={szOpt.id}
+                                type="button"
+                                onClick={() => {
+                                  onUpdateSiteBanners({
+                                    ...siteBanners,
+                                    heroHeadlineSize: szOpt.id,
+                                  });
+                                  setBannerFeedback(
+                                    `✓ Set Hero Headline Size to ${szOpt.label}`
+                                  );
+                                }}
+                                className={`px-2 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-white text-zinc-950 border-white'
+                                    : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-zinc-500 hover:text-white'
+                                }`}
+                              >
+                                {szOpt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>

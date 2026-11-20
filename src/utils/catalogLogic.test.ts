@@ -641,6 +641,8 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
 
   const defaults = buildDefaultSiteBanners(INITIAL_CATEGORIES);
   assert.equal(defaults.homeHeroMediaType, 'video');
+  assert.equal(defaults.heroHeadlineText, 'WINTER EDITION');
+  assert.equal(defaults.heroHeadlineSize, 'md');
   assert.equal(Boolean(defaults.categoryBanners['women:jacket']?.enabled), true);
   assert.equal(Boolean(defaults.categoryBanners['kids:minis-1-to-5']?.enabled), true);
 
@@ -648,6 +650,8 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
     {
       homeHeroMediaType: 'image',
       homeHeroImageUrl: 'https://images.samoweave.com/products/custom-hero.webp',
+      heroHeadlineText: '',
+      heroHeadlineSize: 'xl',
       categoryBanners: {
         'women:jacket': {
           categoryKey: 'women:jacket',
@@ -664,6 +668,8 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
     INITIAL_CATEGORIES
   );
   assert.equal(merged.homeHeroMediaType, 'image');
+  assert.equal(merged.heroHeadlineText, '');
+  assert.equal(merged.heroHeadlineSize, 'xl');
   assert.equal(
     merged.categoryBanners['women:jacket'].imageUrl,
     'https://images.samoweave.com/products/jacket-banner.webp'

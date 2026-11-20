@@ -2834,8 +2834,12 @@ export default function App() {
                     mediaType={siteBanners.homeHeroMediaType}
                     videoUrl={siteBanners.homeHeroVideoUrl}
                     imageUrl={siteBanners.homeHeroImageUrl}
-                    kicker={siteBanners.homeHeroKicker}
-                    title={siteBanners.homeHeroTitle}
+                    title={
+                      typeof siteBanners.heroHeadlineText === 'string'
+                        ? siteBanners.heroHeadlineText
+                        : siteBanners.homeHeroTitle
+                    }
+                    headlineSize={siteBanners.heroHeadlineSize || 'md'}
                   />
                 </div>
 
@@ -3535,7 +3539,7 @@ export default function App() {
                   onClick={() => handleNavigate('/showroom')}
                   className="hover:underline cursor-pointer"
                 >
-                  Showroom — Since 1999
+                  Showroom
                 </button>
               </li>
             </ul>

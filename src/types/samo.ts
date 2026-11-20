@@ -228,12 +228,16 @@ export interface CategoryBannerConfig {
   updatedAt?: string;
 }
 
+export type HeroHeadlineSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+
 export interface SiteBannersConfig {
   homeHeroMediaType: 'video' | 'image';
   homeHeroVideoUrl: string;
   homeHeroImageUrl: string;
   homeHeroKicker: string;
   homeHeroTitle: string;
+  heroHeadlineText?: string;
+  heroHeadlineSize?: HeroHeadlineSize;
   homeMiddleBannerUrl: string;
   homeMiddleKicker: string;
   homeMiddleTitle: string;
