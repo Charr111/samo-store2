@@ -34,7 +34,36 @@ export const LUXURY_FASHION_CORE_KEYWORDS: readonly string[] = [
 ];
 
 /**
- * Generates an industry-standard luxury fashion SEO alt & title attribute for any product or editorial image.
+ * Formats a category name strictly for browser tab titles (<title>):
+ * - Strips age suffixes ("1 To 5", "6+", "13+") from Kids subcategories while keeping on-page category names unchanged
+ * - Converts Kids subcategory names ("MINIS", "CHILDREN", "Teen") to clean Title Case ("Minis", "Children", "Teen")
+ */
+export function formatCategoryNameForTabTitle(
+  department: Department | string,
+  categoryName: string
+): string {
+  const raw = (categoryName || '').trim();
+  if (!raw) return '';
+  if (department === 'kids') {
+    const normalized = normalizeKidsCategoryName(raw);
+    const stripped = normalized
+      .replace(/\b1\s*to\s*5\b/gi, '')
+      .replace(/\b6\s*\+/g, '')
+      .replace(/\b13\s*\+/g, '')
+      .replace(/\(\s*\)/g, '')
+      .trim();
+    const baseWord = stripped || normalized;
+    return baseWord
+      .split(/\s+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return raw;
+}
+
+/**
+ * Generates an industry-standard fashion SEO alt attribute for any product or editorial image
+ * (without "Est. 1999" or "Luxury").
  */
 export function buildProductImageSeoAlt(params: {
   name?: string;
@@ -47,12 +76,15 @@ export function buildProductImageSeoAlt(params: {
 }): string {
   const rawName = (params.name || params.alt || '').trim();
   if (!rawName) {
-    return 'SAMO (Est. 1999) — Architectural Luxury Ready-to-Wear, Fine Leather, Suede & Fur';
+    return 'SAMO — Architectural Ready-to-Wear, Fine Leather, Suede & Fur';
   }
 
-  // If the alt text already includes the full SAMO SEO signature, return as-is
-  if (rawName.includes('SAMO') && rawName.includes('Luxury Ready-to-Wear')) {
-    return rawName;
+  // If the alt text already includes the full SAMO SEO signature, return as-is (stripped of Est. 1999 / Luxury)
+  if (rawName.includes('SAMO') && rawName.includes('Ready-to-Wear')) {
+    return rawName
+      .replace(/\s*\(Est\.\s*1999\)/gi, '')
+      .replace(/\bLuxury\s+/gi, '')
+      .trim();
   }
 
   const deptLabel =
@@ -76,11 +108,11 @@ export function buildProductImageSeoAlt(params: {
     parts.push(`Crafted in ${materialsList.slice(0, 3).join(', ')}`);
   }
   if (styleLabel) {
-    parts.push(`${styleLabel} Luxury Ready-to-Wear`);
+    parts.push(`${styleLabel} Ready-to-Wear`);
   } else {
-    parts.push('Architectural Luxury Ready-to-Wear');
+    parts.push('Architectural Ready-to-Wear');
   }
-  parts.push('SAMO (Est. 1999)');
+  parts.push('SAMO');
 
   return parts.join(' — ');
 }
@@ -113,10 +145,15 @@ export function generateCatalogSeoSnapshot(
 
   for (const cat of allValidCategories) {
     const deptTitle = cat.department === 'kids' ? 'SAMO Kids' : 'SAMO Women';
+    const deptTabPrefix = cat.department === 'kids' ? 'Kids' : 'Women';
     const cleanName =
       cat.department === 'kids'
         ? normalizeKidsCategoryName(cat.name)
         : cat.name.trim();
+    const cleanTabCategory = formatCategoryNameForTabTitle(
+      cat.department,
+      cleanName
+    );
     const slug = createSafeSlug(cleanName);
     const key = `${cat.department}:${slug}`;
     const canonicalPath = buildCategoryUrl(cat.department, cleanName);
@@ -138,7 +175,7 @@ export function generateCatalogSeoSnapshot(
     }
     const topMaterials = Array.from(materialSet).slice(0, 4);
 
-    const title = `${cleanName} — ${deptTitle} Luxury Collection | SAMO (Est. 1999)`;
+    const title = `${deptTabPrefix}, ${cleanTabCategory} — Official Website | SAMO`;
     const description =
       cat.description && cat.description.trim().length > 20
         ? `${cat.description.trim()} Explore ${matchingProducts.length || 'exclusive'} pieces in ${
@@ -146,7 +183,7 @@ export function generateCatalogSeoSnapshot(
               ? topMaterials.join(', ')
               : 'Italian cow leather, suede, cashmere, and silk'
           } at SAMO.`
-        : `Discover SAMO ${deptTitle} ${cleanName}. Architectural luxury silhouettes tailored in ${
+        : `Discover ${deptTitle} ${cleanName}. Architectural silhouettes tailored in ${
             topMaterials.length > 0
               ? topMaterials.join(', ')
               : 'fine leather, brushed suede, and couture fabrics'
@@ -156,10 +193,10 @@ export function generateCatalogSeoSnapshot(
       new Set([
         `SAMO ${cleanName}`,
         `${deptTitle} ${cleanName}`,
-        `luxury ${cleanName.toLowerCase()}`,
+        `${cleanName.toLowerCase()}`,
         ...topMaterials.map((m) => `${m.toLowerCase()} ${cleanName.toLowerCase()}`),
         'SAMO',
-        'architectural luxury fashion',
+        'architectural fashion',
         ...activeCoreKeywords.slice(0, 6),
       ])
     );
@@ -180,7 +217,7 @@ export function generateCatalogSeoSnapshot(
     const materialsText =
       Array.isArray(prod.materials) && prod.materials.length > 0
         ? prod.materials.join(', ')
-        : 'Luxury Weave Fabrics';
+        : 'SAMO Weave Fabrics';
     const colorNames = Array.isArray(prod.colorVariants)
       ? prod.colorVariants.map((v) => v.colorName).filter(Boolean)
       : [];
@@ -194,7 +231,7 @@ export function generateCatalogSeoSnapshot(
       colorName: colorNames[0],
     });
 
-    const title = `${prod.name} — ${deptTitle} ${prod.category} | SAMO`;
+    const title = `${prod.name} — Official Website | SAMO`;
     const priceSnippet = hasDiscount
       ? `$${effectivePrice.toLocaleString()} (${discountBadge})`
       : `$${effectivePrice.toLocaleString()}`;
@@ -203,7 +240,7 @@ export function generateCatalogSeoSnapshot(
         ? prod.description.trim()
         : `${prod.name} by ${deptTitle}. Crafted in ${materialsText}.`;
 
-    const description = `${rawDesc} ${priceSnippet} · ${materialsText}. Shop authentic SAMO luxury ready-to-wear.`.slice(
+    const description = `${rawDesc} ${priceSnippet} · ${materialsText}. Shop authentic SAMO ready-to-wear.`.slice(
       0,
       160
     );
@@ -254,9 +291,9 @@ export function generateCatalogSeoSnapshot(
 
   return {
     lastUpdatedAt: new Date().toISOString(),
-    siteTitleSuffix: 'SAMO Official Website',
+    siteTitleSuffix: 'Official Website | SAMO',
     defaultDescription:
-      'SAMO (Est. 1999) — Architectural luxury ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.',
+      'SAMO — Architectural ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.',
     defaultKeywords: activeCoreKeywords,
     customKeywords: activeCoreKeywords,
     indexedProductsCount: products.length,
@@ -309,9 +346,7 @@ export function buildDynamicPageSeo(params: {
     const snap = seoConfig?.productSeoMap?.[activeProduct.id];
     const deptLabel =
       activeProduct.department === 'kids' ? 'SAMO Kids' : 'SAMO Women';
-    const title =
-      snap?.title ||
-      `${activeProduct.name} — ${deptLabel} ${activeProduct.category} | SAMO`;
+    const title = `${activeProduct.name} — Official Website | SAMO`;
     const description =
       snap?.description ||
       `${activeProduct.description || activeProduct.name} — Crafted in ${(
@@ -351,7 +386,7 @@ export function buildDynamicPageSeo(params: {
             '@type': 'Organization',
             '@id': `${SAMO_CANONICAL_DOMAIN}/#organization`,
             name: 'SAMO',
-            alternateName: 'SAMO Luxury House',
+            alternateName: 'SAMO House',
             foundingDate: '1999',
             url: SAMO_CANONICAL_DOMAIN,
           },
@@ -408,6 +443,7 @@ export function buildDynamicPageSeo(params: {
       dept === 'kids'
         ? normalizeKidsCategoryName(selectedCategory)
         : selectedCategory.trim();
+    const cleanTabCategory = formatCategoryNameForTabTitle(dept, cleanCat);
     const slug = createSafeSlug(cleanCat);
     const key = `${dept}:${slug}`;
     const snap = seoConfig?.categorySeoMap?.[key];
@@ -416,9 +452,8 @@ export function buildDynamicPageSeo(params: {
     );
 
     const deptTitle = dept === 'kids' ? 'SAMO Kids' : 'SAMO Women';
-    const title =
-      snap?.title ||
-      `${cleanCat} — ${deptTitle} Luxury Collection | SAMO (Est. 1999)`;
+    const deptTabPrefix = dept === 'kids' ? 'Kids' : 'Women';
+    const title = `${deptTabPrefix}, ${cleanTabCategory} — Official Website | SAMO`;
     const description =
       snap?.description ||
       matchedCat?.description ||
@@ -461,48 +496,55 @@ export function buildDynamicPageSeo(params: {
   }
 
   // 3. Route-level SEO (/home, /women, /kids, /new-arrivals, /gifts, /showroom, /admin)
+  const newArrivalsSubdept =
+    route === '/new-arrivals' &&
+    selectedCategory &&
+    selectedCategory.toLowerCase() === 'kids'
+      ? 'Kids, New Arrivals — Official Website | SAMO'
+      : route === '/new-arrivals' &&
+        selectedCategory &&
+        selectedCategory.toLowerCase() === 'women'
+      ? 'Women, New Arrivals — Official Website | SAMO'
+      : 'New Arrivals — Official Website | SAMO';
+
   const routeMetaMap: Record<
     RoutePath,
     { title: string; description: string; path: string }
   > = {
     '/home': {
-      title: 'SAMO Official Website',
-      description:
+      title: 'Official Website | SAMO',
+      description: (
         seoConfig?.defaultDescription ||
-        'SAMO (Est. 1999) — Architectural luxury ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.',
+        'SAMO — Architectural ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.'
+      ).replace(/\s*\(Est\.\s*1999\)/gi, ''),
       path: '/home',
     },
     '/women': {
-      title:
-        'SAMO Women — Leather Jackets, Trench Coats, Tailoring, Fur & Bags | SAMO',
+      title: 'Women — Official Website | SAMO',
       description:
         'Shop SAMO Women ready-to-wear: architectural Italian cow leather biker jackets, oversized calf suede trench coats, full sets, silk tops, fur coats, and signature bags.',
       path: '/women',
     },
     '/kids': {
-      title:
-        'SAMO Kids — Minis (1–5), Children (6+) & Teen (13+) Luxury Collection | SAMO',
+      title: 'Kids — Official Website | SAMO',
       description:
-        'Explore SAMO Kids architectural luxury outerwear, cashmere knit sets, leather bombers, and tailored denim graded in precision centimeter sizing (80 cm – 160 cm).',
+        'Explore SAMO Kids architectural outerwear, cashmere knit sets, leather bombers, and tailored denim graded in precision centimeter sizing (80 cm – 160 cm).',
       path: '/kids',
     },
     '/new-arrivals': {
-      title:
-        'New Arrivals — Latest Runway Releases | SAMO (Est. 1999)',
+      title: newArrivalsSubdept,
       description:
         'Discover the latest SAMO arrivals for Women and Kids in vegetable-tanned leather, cognac calf suede, shearling fur, and heavy silk.',
       path: '/new-arrivals',
     },
     '/gifts': {
-      title:
-        'SAMO Gifts — Signature Leather Bags, Hourglass Top-Handles & Brass Belts | SAMO',
+      title: 'Gifts — Official Website | SAMO',
       description:
-        'Curated luxury gifts from SAMO: concave top-handle leather bags, Rodeo totes, and Italian cow leather belts with brushed palladium hardware.',
+        'Curated gifts from SAMO: concave top-handle leather bags, Rodeo totes, and Italian cow leather belts with brushed palladium hardware.',
       path: '/gifts',
     },
     '/showroom': {
-      title:
-        'SAMO Showroom & Private Client Appointments | Architecture & Heritage (Est. 1999)',
+      title: 'Showroom — Official Website | SAMO',
       description:
         'Visit the SAMO flagship showroom for private fittings, bespoke leather and fur consultations, and same-day showroom pickup reservations.',
       path: '/showroom',

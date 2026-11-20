@@ -15,14 +15,14 @@ const FAQ_ENTRIES: FaqEntry[] = [
     id: 'refund-policy',
     question: 'Refund Policy',
     paragraphs: [
-      'Clients have 24 hours after purchase or after receiving the product to request a refund. Full refunds are also covered if the garment has a manufacturing defect from the enterprise. The original SAMO price tag must remain attached to the item at all times to qualify for a refund.',
+      'A refund is issued only if the package was lost during shipment and/or was never received (claimed) within 3 days past the shipping time policy, in which case the refund will be settled after 14 days from the time of purchase.',
     ],
   },
   {
-    id: 'return-policy',
-    question: 'Return Policy',
+    id: 'exchange-policy',
+    question: 'Exchange Policy',
     paragraphs: [
-      'Items can be returned within 7 days after receiving your order. The original price tag must stay attached on the item throughout these 7 days.',
+      'Items can be exchanged within 7 days after receiving your order. The original price tag must stay attached on the item throughout these 7 days.',
     ],
   },
   {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Trash2, Plus, Minus, CheckCircle2, ArrowRight, Tag } from 'lucide-react';
 import {
   CartItem,
@@ -27,6 +27,7 @@ interface CartCheckoutDrawerProps {
   promoCodes: PromoCodeItem[];
   orders?: OrderItem[];
   onClose: () => void;
+  onSwipeBack?: () => void;
   onUpdateQuantity: (
     productId: string,
     size: string,
@@ -52,6 +53,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   promoCodes,
   orders = [],
   onClose,
+  onSwipeBack,
   onUpdateQuantity,
   onRemoveItem,
   onAddToCart,
@@ -73,6 +75,11 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<OrderItem | null>(null);
 
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchCurrentXRef = useRef<number | null>(null);
+  const touchCurrentYRef = useRef<number | null>(null);
+
   React.useEffect(() => {
     if (isOpen) {
       setStep(initialStep);
@@ -82,6 +89,43 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   }, [isOpen, initialStep]);
 
   if (!isOpen) return null;
+
+  const handleDrawerTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    touchCurrentXRef.current = e.touches[0].clientX;
+    touchCurrentYRef.current = e.touches[0].clientY;
+  };
+
+  const handleDrawerTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    touchCurrentXRef.current = e.touches[0].clientX;
+    touchCurrentYRef.current = e.touches[0].clientY;
+  };
+
+  const handleDrawerTouchEnd = () => {
+    if (
+      touchStartXRef.current !== null &&
+      touchStartYRef.current !== null &&
+      touchCurrentXRef.current !== null &&
+      touchCurrentYRef.current !== null
+    ) {
+      const deltaX = touchCurrentXRef.current - touchStartXRef.current;
+      const deltaY = Math.abs(touchCurrentYRef.current - touchStartYRef.current);
+      if (deltaX > 75 && deltaX > deltaY * 1.2) {
+        if (onSwipeBack) {
+          onSwipeBack();
+        } else {
+          onClose();
+        }
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    touchCurrentXRef.current = null;
+    touchCurrentYRef.current = null;
+  };
 
   const totals = calculateOrderTotals(
     cartItems.map((ci) => ({
@@ -314,9 +358,16 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="SAMO Shopping Bag and Checkout"
+      onClick={onClose}
       className="fixed inset-0 z-50 flex justify-end bg-black/60"
     >
-      <div className="w-full max-w-lg bg-white h-full border-l border-zinc-950 flex flex-col justify-between overflow-hidden">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleDrawerTouchStart}
+        onTouchMove={handleDrawerTouchMove}
+        onTouchEnd={handleDrawerTouchEnd}
+        className="w-full max-w-lg bg-white h-full border-l border-zinc-950 flex flex-col justify-between overflow-hidden"
+      >
         {/* Top Drawer Bar */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-zinc-950 shrink-0">
           <div className="flex items-center gap-3">

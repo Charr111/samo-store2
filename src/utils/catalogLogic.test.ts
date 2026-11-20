@@ -1002,7 +1002,7 @@ test('validateNewsletterPopupInputs supports single-box Email Or Number (e.g. jo
   assert.equal(invalidSingle.valid, false);
 });
 
-test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords), and buildDynamicPageSeo generate luxury fashion SEO metadata', () => {
+test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords), and buildDynamicPageSeo generate clean fashion SEO metadata', () => {
   const altText = buildProductImageSeoAlt({
     alt: 'Biker Jacket',
     category: 'Jacket',
@@ -1012,8 +1012,10 @@ test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords),
   assert.equal(altText.includes('SAMO'), true);
   assert.equal(altText.includes('Jacket'), true);
   assert.equal(altText.includes('SAMO Atelier'), false);
+  assert.equal(altText.includes('1999'), false);
+  assert.equal(altText.toLowerCase().includes('luxury'), false);
 
-  const customKeywords = ['SAMO Weave', 'bespoke leather coat', 'Beirut luxury house'];
+  const customKeywords = ['SAMO Weave', 'bespoke leather coat', 'Beirut fashion house'];
   const snapshot = generateCatalogSeoSnapshot(
     INITIAL_PRODUCTS,
     INITIAL_CATEGORIES,
@@ -1033,9 +1035,29 @@ test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords),
     products: INITIAL_PRODUCTS,
     seoConfig: snapshot,
   });
-  assert.equal(homeSeo.title, 'SAMO Official Website');
+  assert.equal(homeSeo.title, 'Official Website | SAMO');
   assert.equal(homeSeo.canonicalUrl, 'https://samoweave.com/home');
   assert.equal(homeSeo.keywords.includes('bespoke leather coat'), true);
+
+  const womenCatSeo = buildDynamicPageSeo({
+    route: '/women',
+    selectedCategory: 'Jacket',
+    activeProduct: null,
+    categories: INITIAL_CATEGORIES,
+    products: INITIAL_PRODUCTS,
+    seoConfig: snapshot,
+  });
+  assert.equal(womenCatSeo.title, 'Women, Jacket — Official Website | SAMO');
+
+  const kidsMinisSeo = buildDynamicPageSeo({
+    route: '/kids',
+    selectedCategory: 'MINIS 1 To 5',
+    activeProduct: null,
+    categories: INITIAL_CATEGORIES,
+    products: INITIAL_PRODUCTS,
+    seoConfig: snapshot,
+  });
+  assert.equal(kidsMinisSeo.title, 'Kids, Minis — Official Website | SAMO');
 
   const productSeo = buildDynamicPageSeo({
     route: '/women',
@@ -1045,7 +1067,10 @@ test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords),
     products: INITIAL_PRODUCTS,
     seoConfig: snapshot,
   });
-  assert.equal(productSeo.title.includes(INITIAL_PRODUCTS[0].name), true);
+  assert.equal(
+    productSeo.title,
+    `${INITIAL_PRODUCTS[0].name} — Official Website | SAMO`
+  );
   assert.equal(
     Array.isArray((productSeo.jsonLd as Record<string, unknown>)['@graph']),
     true

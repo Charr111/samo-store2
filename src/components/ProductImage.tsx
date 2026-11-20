@@ -59,7 +59,6 @@ export const ProductImage: React.FC<ProductImageProps> = ({
           key={normalizedSrc}
           src={normalizedSrc}
           alt={seoAltText}
-          title={seoAltText}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"

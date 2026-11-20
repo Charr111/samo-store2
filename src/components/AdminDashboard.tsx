@@ -557,25 +557,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<AdminSectionTab>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [adminTheme, setAdminTheme] = useState<'dark' | 'light'>(() => {
-    try {
-      return localStorage.getItem('samo_admin_theme_v1') === 'light'
-        ? 'light'
-        : 'dark';
-    } catch {
-      return 'dark';
-    }
-  });
+  const adminTheme = 'dark' as const;
 
-  const toggleAdminTheme = () => {
-    setAdminTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      try {
-        localStorage.setItem('samo_admin_theme_v1', next);
-      } catch {}
-      return next;
-    });
-  };
+  useEffect(() => {
+    try {
+      localStorage.setItem('samo_admin_theme_v1', 'dark');
+    } catch {}
+  }, []);
 
   // Toggle ON/OFF for Auto-Shrink Image Upload (Synced with Firebase & R2 Catalog)
   const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
@@ -2236,11 +2224,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // LOCKED GATE IF NOT YET AUTHENTICATED
   if (!isAuthorized) {
     return (
-      <div
-        className={`samo-admin-root ${
-          adminTheme === 'light' ? 'samo-admin-light' : 'samo-admin-dark'
-        } min-h-screen bg-[#0E0E10] text-white flex flex-col justify-between p-6 md:p-12`}
-      >
+      <div className="samo-admin-root samo-admin-dark min-h-screen bg-[#0E0E10] text-white flex flex-col justify-between p-6 md:p-12">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-3">
             <span className="font-display text-2xl font-extrabold tracking-[0.16em] uppercase">
@@ -2251,28 +2235,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={toggleAdminTheme}
-              aria-label={
-                adminTheme === 'light'
-                  ? 'Switch Admin to Dark Mode'
-                  : 'Switch Admin to Light Mode'
-              }
-              className="px-3 py-1.5 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
-            >
-              {adminTheme === 'light' ? (
-                <>
-                  <Moon className="w-3.5 h-3.5" />
-                  <span>Dark Mode</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="w-3.5 h-3.5" />
-                  <span>Light Mode</span>
-                </>
-              )}
-            </button>
             <button
               type="button"
               onClick={() => onNavigateHome('/home')}
@@ -2600,11 +2562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   return (
-    <div
-      className={`samo-admin-root ${
-        adminTheme === 'light' ? 'samo-admin-light' : 'samo-admin-dark'
-      } min-h-screen bg-[#0E0E10] text-zinc-100 flex flex-col lg:flex-row pb-20 lg:pb-0 transition-colors duration-200`}
-    >
+    <div className="samo-admin-root samo-admin-dark min-h-screen bg-[#0E0E10] text-zinc-100 flex flex-col lg:flex-row pb-20 lg:pb-0 transition-colors duration-200">
       {/* MOBILE SLIDE-OVER SIDEBAR DRAWER BACKDROP */}
       {mobileSidebarOpen && (
         <div
@@ -2702,28 +2660,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Theme Toggle, Storefront & Logout Actions */}
+        {/* Bottom Storefront & Logout Actions */}
         <div className="p-4 border-t border-zinc-800/80 space-y-2">
-          <button
-            type="button"
-            onClick={toggleAdminTheme}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
-          >
-            <span className="flex items-center gap-2.5">
-              {adminTheme === 'light' ? (
-                <Moon className="w-4 h-4 shrink-0" />
-              ) : (
-                <Sun className="w-4 h-4 shrink-0" />
-              )}
-              <span>
-                {adminTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-              </span>
-            </span>
-            <span className="text-[10px] font-mono-tabular uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
-              {adminTheme === 'light' ? 'Light' : 'Dark'}
-            </span>
-          </button>
-
           <button
             type="button"
             onClick={() => onNavigateHome('/home')}
@@ -2770,7 +2708,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Right: Search Bar + Light/Dark Mode Toggle + Notification Bell + Admin Profile */}
+            {/* Right: Search Bar + Notification Bell + Admin Profile */}
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="relative w-32 sm:w-60">
                 <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2783,36 +2721,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#18181C] border border-zinc-800 rounded-lg text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
                 />
               </div>
-
-              {/* Admin Light / Dark Mode Toggle Button */}
-              <button
-                type="button"
-                onClick={toggleAdminTheme}
-                data-testid="admin-theme-toggle"
-                aria-label={
-                  adminTheme === 'light'
-                    ? 'Switch Admin Dashboard to Dark Mode'
-                    : 'Switch Admin Dashboard to Light Mode'
-                }
-                title={
-                  adminTheme === 'light'
-                    ? 'Switch Admin Dashboard to Dark Mode'
-                    : 'Switch Admin Dashboard to Light Mode'
-                }
-                className="px-2.5 py-1.5 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-200 hover:text-white text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
-              >
-                {adminTheme === 'light' ? (
-                  <>
-                    <Moon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Dark Mode</span>
-                  </>
-                ) : (
-                  <>
-                    <Sun className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Light Mode</span>
-                  </>
-                )}
-              </button>
 
               <button
                 type="button"

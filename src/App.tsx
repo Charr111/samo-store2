@@ -131,7 +131,7 @@ const STORAGE_KEYS = {
   autoAcceptOrders: 'samo_auto_accept_orders_v2',
   showLowStockCount: 'samo_show_low_stock_v1',
   newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
-  seoConfig: 'samo_seo_config_v1',
+  seoConfig: 'samo_seo_config_v2',
   sizeGuideConfig: 'samo_size_guide_cfg_v1',
 };
 
@@ -457,6 +457,7 @@ export default function App() {
   const [cartDrawerInitialStep, setCartDrawerInitialStep] = useState<
     'cart' | 'checkout'
   >('cart');
+  const cartReturnProductRef = useRef<ProductItem | null>(null);
   const [aiStylistOpen, setAiStylistOpen] = useState<boolean>(false);
   const [newsletterEmail, setNewsletterEmail] = useState<string>('');
   const [newsletterSubscribed, setNewsletterSubscribed] =
@@ -751,7 +752,14 @@ export default function App() {
     if (window.location.pathname === '/' || window.location.pathname === '') {
       window.history.replaceState({}, '', '/home');
     }
-    const onPopState = () => {
+    const onPopState = (event: PopStateEvent) => {
+      setCartDrawerOpen(false);
+      const stateObj = (event.state || {}) as {
+        modalOpen?: boolean;
+        productId?: string;
+        samoBagOpen?: boolean;
+        previousProductId?: string | null;
+      };
       const search = new URLSearchParams(window.location.search);
       const parsed = parseCatalogUrlState(
         window.location.pathname,
@@ -761,7 +769,22 @@ export default function App() {
       );
       setCurrentRoute(parsed.route);
       setSelectedCategory(parsed.selectedCategory);
-      setActiveProductModal(parsed.matchedProduct);
+
+      if (parsed.matchedProduct) {
+        setActiveProductModal(parsed.matchedProduct);
+      } else if (stateObj.modalOpen && stateObj.productId) {
+        const matchedFromState =
+          products.find((p) => p.id === stateObj.productId) || null;
+        setActiveProductModal(matchedFromState);
+      } else if (cartReturnProductRef.current) {
+        const restoredProd =
+          products.find((p) => p.id === cartReturnProductRef.current?.id) ||
+          cartReturnProductRef.current;
+        cartReturnProductRef.current = null;
+        setActiveProductModal(restoredProd);
+      } else {
+        setActiveProductModal(null);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -1104,6 +1127,51 @@ export default function App() {
     }
   };
 
+  // Shopping Bag Drawer open/close handlers with browser history & mobile edge back-swipe support
+  const handleOpenCartDrawer = (
+    step: 'cart' | 'checkout' = 'cart',
+    fromProduct?: ProductItem | null
+  ) => {
+    const returnProduct =
+      fromProduct !== undefined ? fromProduct : activeProductModal;
+    cartReturnProductRef.current = returnProduct || null;
+    if (activeProductModal) {
+      setActiveProductModal(null);
+    }
+    setCartDrawerInitialStep(step);
+    setCartDrawerOpen(true);
+    const currentHistState = (window.history.state || {}) as {
+      samoBagOpen?: boolean;
+    };
+    if (!currentHistState.samoBagOpen) {
+      window.history.pushState(
+        {
+          samoBagOpen: true,
+          previousProductId: returnProduct ? returnProduct.id : null,
+        },
+        '',
+        window.location.pathname + window.location.search
+      );
+    }
+  };
+
+  const handleCloseCartDrawer = (restorePreviousIfSwipe = false) => {
+    setCartDrawerOpen(false);
+    const currentHistState = (window.history.state || {}) as {
+      samoBagOpen?: boolean;
+      previousProductId?: string | null;
+    };
+    if (restorePreviousIfSwipe && currentHistState.samoBagOpen) {
+      window.history.back();
+      return;
+    }
+    cartReturnProductRef.current = null;
+    if (currentHistState.samoBagOpen) {
+      const categoryUrl = buildCategoryUrl(currentRoute, selectedCategory);
+      window.history.replaceState({ modalOpen: false }, '', categoryUrl);
+    }
+  };
+
   // Cart & Buy Now Handlers (validating per-size, per-color, and 2-piece Full Set stock)
   const getMaxAvailableForCartSelection = (
     product: ProductItem,
@@ -1213,9 +1281,7 @@ export default function App() {
       selectedColorImage,
       selectedSetSizes
     );
-    handleCloseProductModal();
-    setCartDrawerInitialStep('cart');
-    setCartDrawerOpen(true);
+    handleOpenCartDrawer('cart', product);
   };
 
   const handleUpdateCartQuantity = (
@@ -2664,8 +2730,7 @@ export default function App() {
         onAiQuickSearch={handleAiQuickSearch}
         cartCount={totalCartCount}
         onOpenCart={() => {
-          setCartDrawerInitialStep('cart');
-          setCartDrawerOpen(true);
+          handleOpenCartDrawer('cart', activeProductModal);
         }}
         onOpenAiStylist={() => setAiStylistOpen(true)}
       />
@@ -3280,7 +3345,7 @@ export default function App() {
                           siteBanners.homeBottomShowroomUrl ||
                           'studio://women-trench-suede-coat'
                         }
-                        alt="Discover SAMO Showroom — Since 1999"
+                        alt="Discover SAMO Showroom"
                         category="Trench Coat"
                         styleType="Suede"
                         className="h-full w-full"
@@ -3289,7 +3354,7 @@ export default function App() {
                     <div className="p-4 flex items-center justify-between">
                       <div>
                         <div className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                          HOUSE HERITAGE SINCE 1999
+                          HOUSE HERITAGE
                         </div>
                         <h3 className="font-display text-xs md:text-sm font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
                           SHOWROOM
@@ -3317,9 +3382,7 @@ export default function App() {
         onSubmitPreorder={handleSubmitPreorder}
         showLowStockCount={showLowStockCount}
         onOpenCart={() => {
-          handleCloseProductModal();
-          setCartDrawerInitialStep('cart');
-          setCartDrawerOpen(true);
+          handleOpenCartDrawer('cart', activeProductModal);
         }}
       />
 
@@ -3331,11 +3394,15 @@ export default function App() {
         products={products}
         promoCodes={promoCodes}
         orders={orders}
-        onClose={() => setCartDrawerOpen(false)}
+        onClose={() => handleCloseCartDrawer(false)}
+        onSwipeBack={() => handleCloseCartDrawer(true)}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
         onAddToCart={handleAddToCart}
-        onSelectProduct={handleOpenProductModal}
+        onSelectProduct={(prod) => {
+          handleCloseCartDrawer(false);
+          handleOpenProductModal(prod);
+        }}
         onSubmitOrder={handleSubmitOrder}
       />
 
