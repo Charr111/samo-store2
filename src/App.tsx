@@ -103,7 +103,6 @@ import { ProductImage } from './components/ProductImage';
 import { CatalogProductCard } from './components/CatalogProductCard';
 import { ProductModal } from './components/ProductModal';
 import { CartCheckoutDrawer } from './components/CartCheckoutDrawer';
-import { AiStylistModal } from './components/AiStylistModal';
 import { NewsletterPopupModal } from './components/NewsletterPopupModal';
 import { FaqSection } from './components/FaqSection';
 
@@ -458,7 +457,6 @@ export default function App() {
     'cart' | 'checkout'
   >('cart');
   const cartReturnProductRef = useRef<ProductItem | null>(null);
-  const [aiStylistOpen, setAiStylistOpen] = useState<boolean>(false);
   const [newsletterEmail, setNewsletterEmail] = useState<string>('');
   const [newsletterSubscribed, setNewsletterSubscribed] =
     useState<boolean>(false);
@@ -2386,24 +2384,6 @@ export default function App() {
     } catch {}
   };
 
-  // AI Quick Search Filter Handler
-  const handleAiQuickSearch = async (query: string) => {
-    try {
-      const res = await fetch('/api/ai/quick-filter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchPrompt: query }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.department === 'women') {
-        handleNavigate('/women', data.category || 'all');
-      } else if (data.department === 'kids') {
-        handleNavigate('/kids', data.category || 'all');
-      }
-    } catch {}
-  };
-
   const womenCategories = useMemo(
     () => getCategoriesByDepartment(categories, 'women'),
     [categories]
@@ -2727,12 +2707,10 @@ export default function App() {
         onSelectCategory={handleSelectCategory}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onAiQuickSearch={handleAiQuickSearch}
         cartCount={totalCartCount}
         onOpenCart={() => {
           handleOpenCartDrawer('cart', activeProductModal);
         }}
-        onOpenAiStylist={() => setAiStylistOpen(true)}
       />
 
       {/* MAIN CONTENT AREA */}
@@ -3408,15 +3386,6 @@ export default function App() {
           handleOpenProductModal(prod);
         }}
         onSubmitOrder={handleSubmitOrder}
-      />
-
-      {/* SAMO STYLIST MODAL */}
-      <AiStylistModal
-        isOpen={aiStylistOpen}
-        onClose={() => setAiStylistOpen(false)}
-        onSelectDepartment={(dept, cat) => {
-          handleNavigate(dept === 'women' ? '/women' : '/kids', cat || 'all');
-        }}
       />
 
       {/* HOMEPAGE 10% OFF NEWSLETTER POP-UP MODAL */}

@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import {
   S3Client,
   PutObjectCommand,
@@ -661,76 +661,7 @@ async function startServer() {
     }
   });
 
-  // 1. Complex Fashion Atelier & Sizing/Architecture Thinking Endpoint (gemini-4-argon with HIGH thinking)
-  app.post('/api/ai/stylist', async (req, res) => {
-    try {
-      const { query, contextProducts, department } = req.body || {};
-      if (!query || typeof query !== 'string') {
-        res.status(400).json({ error: 'Query is required.' });
-        return;
-      }
-
-      const ai = getAiClient();
-      const catalogContext = Array.isArray(contextProducts)
-        ? contextProducts
-            .slice(0, 15)
-            .map(
-              (p: Record<string, unknown>) =>
-                `- ${p.name} (${p.department}/${p.category}, ${p.style}): $${p.price} | Sizes: ${
-                  Array.isArray(p.sizes) ? p.sizes.join(', ') : ''
-                } | Materials: ${Array.isArray(p.materials) ? p.materials.join(', ') : ''}`
-            )
-            .join('\n')
-        : '';
-
-      const systemPrompt = `You are the Head Samo Director for SAMO, an architectural luxury fashion house specializing in Women and Kids wear (Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts).
-Provide concise, authoritative styling, sizing (Letter XS-XL, European Numeric 34-44, or Kids Centimeters 80 cm - 150 cm), and material care guidance.
-Current department focus: ${department || 'All'}.
-Available catalog items:
-${catalogContext}`;
-
-      let textOutput = '';
-      let modelUsed = 'gemini-4-argon';
-
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-4-argon',
-          contents: query,
-          config: {
-            systemInstruction: systemPrompt,
-            thinkingConfig: {
-              thinkingLevel: ThinkingLevel.HIGH,
-            },
-          },
-        });
-        textOutput = response.text || '';
-      } catch (primaryErr) {
-        // Fallback to gemini-3.8-flash with ThinkingLevel.HIGH if paid model key was declined
-        modelUsed = 'gemini-3.8-flash';
-        const fallbackResponse = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: query,
-          config: {
-            systemInstruction: systemPrompt,
-            thinkingConfig: {
-              thinkingLevel: ThinkingLevel.HIGH,
-            },
-          },
-        });
-        textOutput = fallbackResponse.text || '';
-      }
-
-      res.json({
-        reply: textOutput,
-        model: modelUsed,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'AI Stylist request failed';
-      res.status(500).json({ error: message });
-    }
-  });
-
-  // 2. General Task: Admin Product Editorial Copy & Material Generator (gemini-3.8-flash)
+  // 1. Admin Product Editorial Copy & Material Generator (gemini-3.8-flash)
   app.post(['/api/ai/product-copy', '/api/ai/admin-copy'], async (req, res) => {
     try {
       const { name, department, category, style, materials } = req.body || {};
@@ -780,45 +711,7 @@ Selected Materials: ${Array.isArray(materials) ? materials.join(', ') : 'Cow Lea
     }
   });
 
-  // 3. Fast Task: Instant Catalog Search Intent Filter (gemini-3.1-flash-lite)
-  app.post('/api/ai/quick-filter', async (req, res) => {
-    try {
-      const { searchPrompt } = req.body || {};
-      if (!searchPrompt) {
-        res.status(400).json({ error: 'Search prompt is required.' });
-        return;
-      }
-
-      const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
-        contents: `Map this customer fashion search query "${searchPrompt}" to SAMO catalog filters.
-Departments: women, kids, all.
-Women Categories: Jacket, Trousers, Pants, Skirts, Denim, Tops, Full Set, Trench Coat, Fur, Bags, Belts.
-Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              department: { type: Type.STRING },
-              category: { type: Type.STRING },
-              materialKeyword: { type: Type.STRING },
-            },
-            required: ['department', 'category', 'materialKeyword'],
-          },
-        },
-      });
-
-      const rawText = response.text?.trim() || '{}';
-      res.json(JSON.parse(rawText));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Quick filter failed';
-      res.status(500).json({ error: message });
-    }
-  });
-
-  // 4. Transactional Order Confirmation Email via Resend REST API
+  // 2. Transactional Order Confirmation Email via Resend REST API
   app.options('/api/order-confirmation-email', (_req, res) => {
     res.set(R2_CORS_HEADERS).status(204).end();
   });

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, ShoppingBag, Menu, X, ChevronRight, Sparkles } from 'lucide-react';
+import { Search, ShoppingBag, Menu, X, ChevronRight } from 'lucide-react';
 import { CategoryItem, Department, RoutePath } from '../types/samo';
 
 interface NavbarProps {
@@ -11,10 +11,8 @@ interface NavbarProps {
   onSelectCategory: (catName: string) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onAiQuickSearch: (q: string) => void;
   cartCount: number;
   onOpenCart: () => void;
-  onOpenAiStylist: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,10 +24,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectCategory,
   searchQuery,
   onSearchChange,
-  onAiQuickSearch,
   cartCount,
   onOpenCart,
-  onOpenAiStylist,
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<Department>('women');
@@ -382,11 +378,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="search"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchQuery.trim()) {
-                  onAiQuickSearch(searchQuery.trim());
-                }
-              }}
               placeholder="WHAT ARE YOU LOOKING FOR? (E.G. COW LEATHER JACKET, SUEDE TRENCH...)"
               aria-label="Search SAMO catalog"
               className="w-full text-[11px] md:text-xs tracking-[0.08em] uppercase placeholder:text-zinc-400 text-zinc-950 focus:outline-none bg-transparent"
@@ -394,14 +385,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           {searchQuery && (
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => onAiQuickSearch(searchQuery)}
-                className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Smart Match</span>
-              </button>
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
