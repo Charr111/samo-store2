@@ -53,6 +53,7 @@ let isolateCatalogCache: Record<string, unknown> | null = null;
 let isolateCatalogJson: string | null = null;
 let isolateCacheTimestamp = 0;
 let garmentCodeColumnMigrated = false;
+let promoMaxUsesColumnMigrated = false;
 
 function safeJsonParse<T = unknown>(str: unknown, fallback: T): T {
   if (typeof str !== 'string' || !str.trim()) return fallback;
@@ -227,6 +228,10 @@ async function readFromD1(
       discountType: pc.discount_type,
       discountValue: Number(pc.discount_value) || 0,
       minOrderAmount: Number(pc.min_order_amount) || 0,
+      maxUsesPerEmail:
+        Number(pc.max_uses_per_email) > 0
+          ? Number(pc.max_uses_per_email)
+          : undefined,
       isActive: Boolean(pc.is_active),
       active: Boolean(pc.is_active),
       createdAt: pc.created_at,
@@ -546,18 +551,33 @@ async function writeToD1(
   }
 
   if (Array.isArray(patch.promoCodes)) {
+    if (!promoMaxUsesColumnMigrated) {
+      try {
+        await db
+          .prepare(
+            'ALTER TABLE promo_codes ADD COLUMN max_uses_per_email INTEGER DEFAULT 0;'
+          )
+          .run();
+      } catch {
+        // Column already exists
+      } finally {
+        promoMaxUsesColumnMigrated = true;
+      }
+    }
     for (const pc of patch.promoCodes as any[]) {
       if (!pc || !pc.code) continue;
       const isAct = pc.active !== undefined ? pc.active : pc.isActive;
+      const maxUses = Math.max(0, Math.floor(Number(pc.maxUsesPerEmail) || 0));
       statements.push(
         db
           .prepare(
-            `INSERT INTO promo_codes (id, code, discount_type, discount_value, min_order_amount, is_active, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO promo_codes (id, code, discount_type, discount_value, min_order_amount, max_uses_per_email, is_active, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(code) DO UPDATE SET
                discount_type=excluded.discount_type,
                discount_value=excluded.discount_value,
                min_order_amount=excluded.min_order_amount,
+               max_uses_per_email=excluded.max_uses_per_email,
                is_active=excluded.is_active;`
           )
           .bind(
@@ -566,6 +586,7 @@ async function writeToD1(
             pc.discountType || 'percent',
             pc.discountValue ?? 0,
             pc.minOrderAmount ?? 0,
+            maxUses,
             isAct !== false ? 1 : 0,
             pc.createdAt || new Date().toISOString()
           )

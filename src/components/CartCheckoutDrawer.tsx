@@ -14,6 +14,7 @@ import {
   getComplementaryUpsellProducts,
   getEffectiveProductPrice,
   getSizeQuantity,
+  hasEmailReachedPromoLimit,
   resolveProductGarmentCode,
 } from '../utils/catalogLogic';
 import { ProductImage } from './ProductImage';
@@ -24,6 +25,7 @@ interface CartCheckoutDrawerProps {
   cartItems: CartItem[];
   products: ProductItem[];
   promoCodes: PromoCodeItem[];
+  orders?: OrderItem[];
   onClose: () => void;
   onUpdateQuantity: (
     productId: string,
@@ -48,6 +50,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   cartItems,
   products,
   promoCodes,
+  orders = [],
   onClose,
   onUpdateQuantity,
   onRemoveItem,
@@ -132,6 +135,22 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       setPromoFeedback(`Promo code "${code}" is invalid or inactive.`);
       return;
     }
+    const maxPerEmail = Math.floor(Number(found.maxUsesPerEmail) || 0);
+    if (maxPerEmail > 0) {
+      const cleanEmail = customerEmail.trim();
+      if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+        setAppliedPromo(null);
+        setPromoFeedback('Please enter your Email Address above to apply this promo code.');
+        return;
+      }
+      if (hasEmailReachedPromoLimit(found, cleanEmail, orders)) {
+        setAppliedPromo(null);
+        setPromoFeedback(
+          'This promo code has already been used the maximum number of times for this email.'
+        );
+        return;
+      }
+    }
     setAppliedPromo(found);
     setPromoFeedback(
       `Applied ${found.code} (${
@@ -162,6 +181,17 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
     if (!customerEmail.trim().includes('@') || !customerEmail.trim().includes('.')) {
       setFormError('Please enter a valid email address to receive your order confirmation.');
+      return;
+    }
+    if (
+      appliedPromo &&
+      hasEmailReachedPromoLimit(appliedPromo, customerEmail.trim(), orders)
+    ) {
+      setAppliedPromo(null);
+      const limitMsg =
+        'This promo code has already been used the maximum number of times for this email.';
+      setPromoFeedback(limitMsg);
+      setFormError(limitMsg);
       return;
     }
 
@@ -563,7 +593,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="E.g. Céline Moreau"
-                  className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                  className="w-full px-3 py-2 text-[16px] sm:text-xs placeholder:text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                 />
               </div>
 
@@ -578,7 +608,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
                     placeholder="client@domain.com"
-                    className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                    className="w-full px-3 py-2 text-[16px] sm:text-xs placeholder:text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -591,7 +621,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     placeholder="e.g. 70 123 456"
-                    className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                    className="w-full px-3 py-2 text-[16px] sm:text-xs placeholder:text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
               </div>
@@ -607,7 +637,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     value={streetAddress}
                     onChange={(e) => setStreetAddress(e.target.value)}
                     placeholder="Street, building, floor"
-                    className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                    className="w-full px-3 py-2 text-[16px] sm:text-xs placeholder:text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -620,9 +650,42 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     value={cityCountry}
                     onChange={(e) => setCityCountry(e.target.value)}
                     placeholder="Beirut, Lebanon"
-                    className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                    className="w-full px-3 py-2 text-[16px] sm:text-xs placeholder:text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Compact Minimal Promo Code Row (Right Above Delivery Service) */}
+              <div className="space-y-1 pt-0.5">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                      placeholder="PROMO CODE"
+                      aria-label="Enter promo code"
+                      className="w-full pl-8 pr-2.5 py-2 text-[16px] sm:text-[11px] placeholder:text-[11px] font-mono-tabular uppercase bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyPromoCode}
+                    className="px-3.5 py-2 bg-zinc-950 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer shrink-0"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoFeedback && (
+                  <p
+                    className={`text-[11px] font-medium ${
+                      appliedPromo ? 'text-emerald-700' : 'text-red-700'
+                    }`}
+                  >
+                    {promoFeedback}
+                  </p>
+                )}
               </div>
 
               {/* Delivery Service (2 Options) */}
@@ -859,40 +922,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
         <div className="px-6 py-3.5 border-t border-zinc-950 bg-zinc-50 space-y-2.5 shrink-0">
           {step === 'cart' && cartItems.length > 0 && (
             <>
-              {/* Compact Promo Code Row */}
-              <div className="space-y-1">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Tag className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={promoInput}
-                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                      placeholder="PROMO CODE (E.G. SAMO10)"
-                      aria-label="Enter promo code"
-                      className="w-full pl-8 pr-2.5 py-1.5 text-[11px] font-mono-tabular uppercase bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApplyPromoCode}
-                    className="px-3.5 py-1.5 bg-zinc-900 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer"
-                  >
-                    Apply
-                  </button>
-                </div>
-                {promoFeedback && (
-                  <p
-                    className={`text-[11px] font-medium ${
-                      appliedPromo ? 'text-emerald-700' : 'text-red-700'
-                    }`}
-                  >
-                    {promoFeedback}
-                  </p>
-                )}
-              </div>
-
-              {/* Bag Totals (Without Delivery — Delivery is calculated in Checkout) */}
+              {/* Bag Totals (Without Delivery — Delivery & Promo Code are in Checkout) */}
               <div className="space-y-1 text-xs">
                 {totals.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-700 font-semibold">

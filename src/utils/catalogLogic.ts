@@ -1682,6 +1682,31 @@ export function calculateOrderTotals(
 }
 
 /**
+ * Checks whether a customer email has already used a promo code >= maxUsesPerEmail times
+ * across existing non-rejected orders.
+ */
+export function hasEmailReachedPromoLimit(
+  promo: Pick<PromoCodeItem, 'code' | 'maxUsesPerEmail'>,
+  customerEmail: string | null | undefined,
+  orders: Pick<OrderItem, 'customerEmail' | 'promoCode' | 'status'>[] = []
+): boolean {
+  const maxUses = Math.floor(Number(promo.maxUsesPerEmail) || 0);
+  if (maxUses <= 0) return false;
+  const cleanEmail = (customerEmail || '').trim().toLowerCase();
+  const cleanCode = (promo.code || '').trim().toUpperCase();
+  if (!cleanEmail || !cleanCode) return false;
+
+  const usedCount = orders.filter((order) => {
+    if (!order || order.status === 'rejected') return false;
+    const orderEmail = (order.customerEmail || '').trim().toLowerCase();
+    const orderPromo = (order.promoCode || '').trim().toUpperCase();
+    return orderEmail === cleanEmail && orderPromo === cleanCode;
+  }).length;
+
+  return usedCount >= maxUses;
+}
+
+/**
  * Selects parallel similar products for the Shopping Bag drawer from the same
  * department and category as the items in the customer's bag, excluding items already in the cart.
  */

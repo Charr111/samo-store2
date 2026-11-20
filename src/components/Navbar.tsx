@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Search, ShoppingBag, Menu, X, ChevronRight, Sparkles } from 'lucide-react';
 import { CategoryItem, Department, RoutePath } from '../types/samo';
 
@@ -35,6 +35,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [drawerTab, setDrawerTab] = useState<Department>('women');
   const [isScrolledPastHero, setIsScrolledPastHero] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [bagPulse, setBagPulse] = useState(false);
+  const prevCartCountRef = useRef<number>(cartCount);
+
+  useEffect(() => {
+    if (cartCount > prevCartCountRef.current) {
+      setBagPulse(true);
+      const timer = window.setTimeout(() => setBagPulse(false), 1200);
+      prevCartCountRef.current = cartCount;
+      return () => window.clearTimeout(timer);
+    }
+    prevCartCountRef.current = cartCount;
+  }, [cartCount]);
 
   useEffect(() => {
     if (currentRoute !== '/home') {
@@ -281,17 +293,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             onClick={onOpenCart}
             aria-label={`Shopping Bag (${cartCount} items)`}
-            className={`lg:hidden relative p-2 -mr-1.5 transition-colors duration-300 cursor-pointer ${
+            className={`lg:hidden relative p-2 -mr-1.5 transition-all duration-300 cursor-pointer ${
               isTransparentOverVideo
                 ? 'text-white hover:bg-white/15'
                 : 'text-zinc-950 hover:bg-zinc-100'
+            } ${
+              bagPulse
+                ? isTransparentOverVideo
+                  ? 'scale-110 ring-1 ring-white bg-white/20 rounded-full'
+                  : 'scale-110 ring-1 ring-zinc-950 bg-zinc-950/10 rounded-full'
+                : ''
             }`}
           >
-            <ShoppingBag className="w-5 h-5 stroke-[1.75]" />
+            <ShoppingBag className={`w-5 h-5 stroke-[1.75] transition-transform duration-300 ${bagPulse ? '-translate-y-0.5' : ''}`} />
             {cartCount > 0 && (
               <span
-                className={`absolute top-1 right-1 min-w-[15px] h-[15px] px-1 text-[9px] font-mono-tabular font-bold flex items-center justify-center leading-none transition-colors duration-300 ${
-                  isTransparentOverVideo
+                className={`absolute top-1 right-1 min-w-[15px] h-[15px] px-1 text-[9px] font-mono-tabular font-bold flex items-center justify-center leading-none transition-all duration-300 ${
+                  bagPulse
+                    ? isTransparentOverVideo
+                      ? 'bg-white text-zinc-950 scale-110 shadow-sm'
+                      : 'bg-zinc-950 text-white scale-110 shadow-sm'
+                    : isTransparentOverVideo
                     ? 'bg-white text-zinc-950'
                     : 'bg-zinc-950 text-white'
                 }`}
@@ -307,12 +329,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onOpenCart}
             aria-label={`Shopping Bag (${cartCount} items)`}
             className={`hidden lg:flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold tracking-[0.1em] uppercase transition-all duration-300 whitespace-nowrap shrink-0 cursor-pointer ${
-              isTransparentOverVideo
+              bagPulse
+                ? isTransparentOverVideo
+                  ? 'bg-white text-zinc-950 border border-white scale-105 shadow-md'
+                  : 'bg-zinc-950 text-white border border-zinc-950 ring-2 ring-zinc-950/30 scale-105 shadow-md'
+                : isTransparentOverVideo
                 ? 'bg-transparent text-white border border-white/80 hover:bg-white hover:text-zinc-950'
                 : 'bg-zinc-950 text-white border border-zinc-950 hover:bg-zinc-800'
             }`}
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
+            <ShoppingBag className={`w-3.5 h-3.5 transition-transform duration-300 ${bagPulse ? 'scale-110' : ''}`} />
             <span>Bag ({cartCount})</span>
           </button>
           <button

@@ -1214,7 +1214,7 @@ export default function App() {
       selectedSetSizes
     );
     handleCloseProductModal();
-    setCartDrawerInitialStep('checkout');
+    setCartDrawerInitialStep('cart');
     setCartDrawerOpen(true);
   };
 
@@ -2878,22 +2878,14 @@ export default function App() {
                   {/* Measured contrast scrim matching top HeroVideoSection */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25" />
 
-                  {/* Bottom-Center Campaign Title, Text & Rectangular White CTA Button */}
+                  {/* Bottom-Center Campaign Title & Rectangular White CTA Button */}
                   <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
-                    <p className="text-[11px] font-semibold tracking-[0.25em] uppercase text-zinc-200 mb-2">
-                      {siteBanners.homeMiddleKicker ||
-                        'SAMO KIDS WEAVE · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)'}
-                    </p>
                     <h2
-                      className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-3"
+                      className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-5"
                       style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', textWrap: 'balance' }}
                     >
                       {siteBanners.homeMiddleTitle || 'SAMO KIDS COLLECTION'}
                     </h2>
-                    <p className="text-xs md:text-sm text-zinc-200 max-w-xl mb-6 leading-relaxed">
-                      {siteBanners.homeMiddleSubtitle ||
-                        'Architectural silhouettes in supple cow leather, brushed suede, and combed cashmere graded in precision centimeter sizing.'}
-                    </p>
                     <div className="flex flex-wrap items-center justify-center gap-3.5">
                       <button
                         type="button"
@@ -3324,6 +3316,11 @@ export default function App() {
         onBuyNow={handleBuyNow}
         onSubmitPreorder={handleSubmitPreorder}
         showLowStockCount={showLowStockCount}
+        onOpenCart={() => {
+          handleCloseProductModal();
+          setCartDrawerInitialStep('cart');
+          setCartDrawerOpen(true);
+        }}
       />
 
       {/* SHOPPING BAG & FULL LOCATION CHECKOUT DRAWER */}
@@ -3333,6 +3330,7 @@ export default function App() {
         cartItems={cartItems}
         products={products}
         promoCodes={promoCodes}
+        orders={orders}
         onClose={() => setCartDrawerOpen(false)}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}

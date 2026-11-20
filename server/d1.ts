@@ -190,6 +190,7 @@ export async function initD1Schema(): Promise<void> {
       discount_type TEXT NOT NULL DEFAULT 'percent',
       discount_value REAL NOT NULL,
       min_order_amount REAL DEFAULT 0,
+      max_uses_per_email INTEGER DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT
     );`,
@@ -214,6 +215,13 @@ export async function initD1Schema(): Promise<void> {
   }
   try {
     await d1Query('ALTER TABLE products ADD COLUMN garment_code TEXT;');
+  } catch {
+    // Column already exists
+  }
+  try {
+    await d1Query(
+      'ALTER TABLE promo_codes ADD COLUMN max_uses_per_email INTEGER DEFAULT 0;'
+    );
   } catch {
     // Column already exists
   }
@@ -427,7 +435,12 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       discountType: pc.discount_type,
       discountValue: pc.discount_value,
       minOrderAmount: pc.min_order_amount ?? 0,
+      maxUsesPerEmail:
+        Number(pc.max_uses_per_email) > 0
+          ? Number(pc.max_uses_per_email)
+          : undefined,
       isActive: Boolean(pc.is_active),
+      active: Boolean(pc.is_active),
       createdAt: pc.created_at,
     }));
 
@@ -832,13 +845,19 @@ export async function writeD1CatalogPatch(
   if (Array.isArray(patch.promoCodes)) {
     for (const pc of patch.promoCodes as any[]) {
       if (pc && pc.code) {
+        const isAct = pc.active !== undefined ? pc.active : pc.isActive;
+        const maxUses = Math.max(
+          0,
+          Math.floor(Number(pc.maxUsesPerEmail) || 0)
+        );
         await d1Query(
-          `INSERT INTO promo_codes (id, code, discount_type, discount_value, min_order_amount, is_active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO promo_codes (id, code, discount_type, discount_value, min_order_amount, max_uses_per_email, is_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(code) DO UPDATE SET
              discount_type=excluded.discount_type,
              discount_value=excluded.discount_value,
              min_order_amount=excluded.min_order_amount,
+             max_uses_per_email=excluded.max_uses_per_email,
              is_active=excluded.is_active;`,
           [
             pc.id || `promo_${Date.now()}`,
@@ -846,7 +865,8 @@ export async function writeD1CatalogPatch(
             pc.discountType || 'percent',
             pc.discountValue ?? 0,
             pc.minOrderAmount ?? 0,
-            pc.isActive !== false ? 1 : 0,
+            maxUses,
+            isAct !== false ? 1 : 0,
             pc.createdAt || new Date().toISOString(),
           ]
         );

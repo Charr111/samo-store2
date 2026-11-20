@@ -11,6 +11,7 @@ import {
   getComplementaryUpsellProducts,
   getEffectiveProductPrice,
   getSizeQuantity,
+  hasEmailReachedPromoLimit,
   isAuthorizedAdminEmail,
   mergeColorsList,
   mergeMaterialsList,
@@ -1915,5 +1916,60 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
   assert.equal(whishCfAdminPayload.bcc, undefined);
 });
 
+test('hasEmailReachedPromoLimit enforces per-email promo code usage limits across non-rejected orders', () => {
+  const existingOrders = [
+    {
+      customerEmail: 'Layla@Example.com',
+      promoCode: 'SAMO10',
+      status: 'accepted' as const,
+    },
+    {
+      customerEmail: 'layla@example.com',
+      promoCode: 'SAMO10',
+      status: 'rejected' as const,
+    },
+    {
+      customerEmail: 'other@example.com',
+      promoCode: 'SAMO10',
+      status: 'accepted' as const,
+    },
+  ];
 
+  // 1 use per email: Layla has 1 accepted order with SAMO10 (and 1 rejected which is ignored) -> limit reached
+  assert.equal(
+    hasEmailReachedPromoLimit(
+      { code: 'SAMO10', maxUsesPerEmail: 1 },
+      'layla@example.com',
+      existingOrders
+    ),
+    true
+  );
 
+  // 2 uses per email: Layla has only 1 non-rejected use -> limit not reached yet
+  assert.equal(
+    hasEmailReachedPromoLimit(
+      { code: 'SAMO10', maxUsesPerEmail: 2 },
+      'layla@example.com',
+      existingOrders
+    ),
+    false
+  );
+
+  // Unlimited (0 or undefined): never reached
+  assert.equal(
+    hasEmailReachedPromoLimit(
+      { code: 'SAMO10', maxUsesPerEmail: 0 },
+      'layla@example.com',
+      existingOrders
+    ),
+    false
+  );
+  assert.equal(
+    hasEmailReachedPromoLimit(
+      { code: 'SAMO10' },
+      'layla@example.com',
+      existingOrders
+    ),
+    false
+  );
+});

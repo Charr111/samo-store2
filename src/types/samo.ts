@@ -126,6 +126,7 @@ export interface PromoCodeItem {
   code: string;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
+  maxUsesPerEmail?: number;
   active: boolean;
   createdAt?: string;
 }

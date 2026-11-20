@@ -800,6 +800,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     'percentage'
   );
   const [newPromoValue, setNewPromoValue] = useState('15');
+  const [newPromoMaxUsesPerEmail, setNewPromoMaxUsesPerEmail] =
+    useState<string>('1');
   const [promoFeedback, setPromoFeedback] = useState('');
 
   // Add Category Form State
@@ -1746,6 +1748,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .toUpperCase()
       .replace(/[^A-Z0-9_-]/g, '');
     const val = Math.max(1, Number(newPromoValue) || 0);
+    const maxUsesNum = Math.max(0, Math.floor(Number(newPromoMaxUsesPerEmail) || 0));
     if (!code) {
       setPromoFeedback('Enter a valid promo code (e.g. SAMO20).');
       return;
@@ -1754,13 +1757,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       code,
       discountType: newPromoType,
       discountValue: val,
+      ...(maxUsesNum > 0 ? { maxUsesPerEmail: maxUsesNum } : {}),
       active: true,
     });
     setNewPromoCode('');
+    const limitLabel =
+      maxUsesNum === 1
+        ? '1 use per email'
+        : maxUsesNum > 1
+        ? `${maxUsesNum} uses per email`
+        : 'Unlimited uses per email';
     setPromoFeedback(
       `Promo code "${code}" (${
         newPromoType === 'percentage' ? `${val}% Off` : `$${val} Off`
-      }) is now live.`
+      } · ${limitLabel}) is now live.`
     );
   };
 
@@ -6621,6 +6631,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                      Max Uses Per Email
+                    </label>
+                    <select
+                      value={newPromoMaxUsesPerEmail}
+                      onChange={(e) =>
+                        setNewPromoMaxUsesPerEmail(e.target.value)
+                      }
+                      aria-label="Max Uses Per Email"
+                      className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                    >
+                      <option value="1">1 Use Per Email</option>
+                      <option value="2">2 Uses Per Email</option>
+                      <option value="3">3 Uses Per Email</option>
+                      <option value="5">5 Uses Per Email</option>
+                      <option value="0">Unlimited</option>
+                    </select>
+                  </div>
+
                   <button
                     type="submit"
                     className="w-full py-3 px-4 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer"
@@ -6635,31 +6665,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   Active Promo Codes ({promoCodes.length})
                 </h3>
                 <div className="divide-y divide-zinc-800 mt-2">
-                  {promoCodes.map((promo) => (
-                    <div
-                      key={promo.id}
-                      className="py-3.5 flex items-center justify-between gap-4"
-                    >
-                      <div>
-                        <div className="font-mono-tabular text-xs font-bold text-white">
-                          {promo.code}
-                        </div>
-                        <div className="text-[11px] text-zinc-400">
-                          {promo.discountType === 'percentage'
-                            ? `${promo.discountValue}% Off Order Subtotal`
-                            : `$${promo.discountValue.toLocaleString()} Off Order Subtotal`}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onDeletePromoCode(promo.id)}
-                        aria-label={`Delete promo code ${promo.code}`}
-                        className="p-2 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 cursor-pointer"
+                  {promoCodes.map((promo) => {
+                    const maxPerEmail =
+                      typeof promo.maxUsesPerEmail === 'number' &&
+                      promo.maxUsesPerEmail > 0
+                        ? promo.maxUsesPerEmail
+                        : 0;
+                    return (
+                      <div
+                        key={promo.id}
+                        className="py-3.5 flex items-center justify-between gap-4"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono-tabular text-xs font-bold text-white">
+                              {promo.code}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-[10px] font-mono-tabular font-semibold uppercase tracking-wider text-zinc-300">
+                              {maxPerEmail === 1
+                                ? '1 Use Per Email'
+                                : maxPerEmail > 1
+                                ? `${maxPerEmail} Uses Per Email`
+                                : 'Unlimited Per Email'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-zinc-400 mt-0.5">
+                            {promo.discountType === 'percentage'
+                              ? `${promo.discountValue}% Off Order Subtotal`
+                              : `$${promo.discountValue.toLocaleString()} Off Order Subtotal`}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onDeletePromoCode(promo.id)}
+                          aria-label={`Delete promo code ${promo.code}`}
+                          className="p-2 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
