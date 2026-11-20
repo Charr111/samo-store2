@@ -2809,6 +2809,7 @@ export interface OrderConfirmationEmailConfig {
   promoGiftCode?: string;
   promoGiftDescription?: string;
   promoGiftBannerUrl?: string;
+  adminAlertOnly?: boolean;
 }
 
 /**
@@ -3070,9 +3071,9 @@ export function buildOrderConfirmationEmailPayload(
           <tr>
             <td style="padding:28px 24px 20px 24px;background-color:#FFFFFF;">
               <div style="font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#71717A;margin-bottom:8px;">
-                ORDER CONFIRMATION · EST. 1999
+                ORDER CONFIRMATION
               </div>
-              <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#09090B;line-height:1.25;">
+              <h1 style="margin:0 0 12px 0;font-size:20.7px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#09090B;line-height:1.25;">
                 THANK YOU FOR YOUR ORDER, ${escapeHtmlEmailText(customerName)}
               </h1>
               <p style="margin:0;font-size:13px;line-height:1.6;color:#3F3F46;">
@@ -3149,24 +3150,24 @@ export function buildOrderConfirmationEmailPayload(
             </td>
           </tr>
 
-          <!-- Client & Delivery Block -->
+          <!-- Delivery Details Block -->
           <tr>
             <td style="padding:0 24px 28px 24px;background-color:#FFFFFF;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#FAFAFA;border:1px solid #E5E5E5;border-collapse:collapse;">
                 <tr>
                   <td style="padding:16px;">
                     <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#09090B;margin-bottom:8px;">
-                      CLIENT &amp; ${isShowroomPickup ? 'SHOWROOM PICKUP' : 'DELIVERY'} DETAILS
+                      DELIVERY DETAILS
                     </div>
                     <div style="font-size:12px;line-height:1.6;color:#27272A;">
-                      <strong>Client:</strong> ${escapeHtmlEmailText(customerName)}<br />
+                      <strong>Name:</strong> ${escapeHtmlEmailText(customerName)}<br />
                       <strong>Phone:</strong> ${escapeHtmlEmailText(customerPhone)}<br />
                       ${
                         customerEmail
                           ? `<strong>Email:</strong> ${escapeHtmlEmailText(customerEmail)}<br />`
                           : ''
                       }
-                      <strong>${isShowroomPickup ? 'Pickup Location / Notes' : 'Delivery Address'}:</strong> ${escapeHtmlEmailText(shippingLocation)}
+                      <strong>${isShowroomPickup ? 'Showroom Pickup' : 'Delivery Address'}:</strong> ${escapeHtmlEmailText(shippingLocation)}
                     </div>
                     ${
                       isShowroomPickup
@@ -3263,58 +3264,58 @@ export function buildOrderConfirmationEmailPayload(
               : ''
           }
 
-          <!-- Bottom Editorial Campaign Banner & Dual Table CTA Buttons -->
+          <!-- Dual Table CTA Buttons Placed Between the Two Full-Bleed Banners -->
           <tr>
-            <td style="padding:0;border-top:1px solid #E5E5E5;background-color:#FFFFFF;">
-              ${
-                hasPublicBanner
-                  ? `<a href="${escapeHtmlEmailText(bannerTargetLink)}" target="_blank" style="display:block;text-decoration:none;border:0;">
-                      <img
-                        src="${escapeHtmlEmailText(bannerUrl)}"
-                        alt="SAMO Editorial Campaign"
-                        width="600"
-                        style="width:100%;max-width:600px;height:auto;display:block;border:0;outline:none;text-decoration:none;"
-                      />
-                    </a>`
-                  : ''
-              }
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:#FFFFFF;">
+            <td align="center" style="padding:20px 24px;background-color:#FFFFFF;border-top:1px solid #09090B;border-bottom:1px solid #09090B;">
+              <!-- Primary Solid Black Button: EXPLORE NEW ARRIVALS -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-bottom:10px;">
                 <tr>
-                  <td align="center" style="padding:22px 24px 26px 24px;">
-                    <!-- Primary Solid Black Button: EXPLORE NEW ARRIVALS -->
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-                      <tr>
-                        <td align="center" bgcolor="#09090B" style="background-color:#09090B;border:1px solid #09090B;">
-                          <a
-                            href="${escapeHtmlEmailText(bannerTargetLink)}"
-                            target="_blank"
-                            style="display:block;padding:14px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;text-decoration:none;text-align:center;"
-                          >
-                            EXPLORE NEW ARRIVALS
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
+                  <td align="center" bgcolor="#09090B" style="background-color:#09090B;border:1px solid #09090B;">
+                    <a
+                      href="${escapeHtmlEmailText(bannerTargetLink)}"
+                      target="_blank"
+                      style="display:block;padding:14px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#FFFFFF;text-decoration:none;text-align:center;"
+                    >
+                      EXPLORE NEW ARRIVALS
+                    </a>
+                  </td>
+                </tr>
+              </table>
 
-                    <!-- Secondary Outlined Black-on-White Button: CONTACT US (WhatsApp) -->
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
-                      <tr>
-                        <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid #09090B;">
-                          <a
-                            href="https://api.whatsapp.com/send/?phone=96170224767&amp;text&amp;type=phone_number&amp;app_absent=0"
-                            target="_blank"
-                            style="display:block;padding:13px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;text-decoration:none;text-align:center;"
-                          >
-                            CONTACT US
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
+              <!-- Secondary Outlined Black-on-White Button: CONTACT US (WhatsApp) -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+                <tr>
+                  <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid #09090B;">
+                    <a
+                      href="https://api.whatsapp.com/send/?phone=96170224767&amp;text&amp;type=phone_number&amp;app_absent=0"
+                      target="_blank"
+                      style="display:block;padding:13px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#09090B;text-decoration:none;text-align:center;"
+                    >
+                      CONTACT US
+                    </a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
+
+          ${
+            hasPublicBanner
+              ? `<!-- Bottom Full-Bleed Editorial Campaign Banner -->
+          <tr>
+            <td style="padding:0;background-color:#FFFFFF;">
+              <a href="${escapeHtmlEmailText(bannerTargetLink)}" target="_blank" style="display:block;text-decoration:none;border:0;">
+                <img
+                  src="${escapeHtmlEmailText(bannerUrl)}"
+                  alt="SAMO Editorial Campaign"
+                  width="600"
+                  style="width:100%;max-width:600px;height:auto;display:block;border:0;outline:none;text-decoration:none;"
+                />
+              </a>
+            </td>
+          </tr>`
+              : ''
+          }
 
           <!-- Footer -->
           <tr>
@@ -3359,12 +3360,12 @@ export function buildOrderConfirmationEmailPayload(
     `Delivery: ${deliveryFeeText}`,
     `TOTAL (USD): $${totalPrice.toLocaleString()}`,
     ``,
-    `CLIENT & DELIVERY DETAILS`,
+    `DELIVERY DETAILS`,
     `--------------------------------------------------`,
-    `Client: ${customerName}`,
+    `Name: ${customerName}`,
     `Phone: ${customerPhone}`,
     ...(customerEmail ? [`Email: ${customerEmail}`] : []),
-    `Address / Location: ${shippingLocation}`,
+    `${isShowroomPickup ? 'Showroom Pickup' : 'Delivery Address'}: ${shippingLocation}`,
     ...(showPromoGiftSection
       ? [
           ``,
@@ -3382,15 +3383,26 @@ export function buildOrderConfirmationEmailPayload(
     `© 2026 SAMO (EST. 1999) — ALL RIGHTS RESERVED`,
   ].join('\n');
 
-  const hasValidCustomerEmail = customerEmail.includes('@');
+  const isAdminAlertOnly = Boolean(config.adminAlertOnly);
   const fallbackStoreRecipients =
     bccList.length > 0 ? bccList : ['orders@samoweave.com'];
-  const toList = hasValidCustomerEmail ? [customerEmail] : fallbackStoreRecipients;
-  const effectiveBccList = hasValidCustomerEmail
-    ? bccList.filter(
-        (addr) => addr.toLowerCase() !== customerEmail.toLowerCase()
-      )
-    : [];
+
+  const hasValidCustomerEmail = customerEmail.includes('@');
+  const toList = isAdminAlertOnly
+    ? fallbackStoreRecipients
+    : hasValidCustomerEmail
+    ? [customerEmail]
+    : fallbackStoreRecipients;
+  const effectiveBccList =
+    !isAdminAlertOnly && hasValidCustomerEmail
+      ? bccList.filter(
+          (addr) => addr.toLowerCase() !== customerEmail.toLowerCase()
+        )
+      : [];
+
+  const subjectLine = isAdminAlertOnly
+    ? `Action Required: Verify ${paymentMethod} Payment — SAMO (#${orderRef})`
+    : `Order Confirmed — SAMO (#${orderRef})`;
 
   const payload: {
     from: string;
@@ -3403,7 +3415,7 @@ export function buildOrderConfirmationEmailPayload(
   } = {
     from: fromField,
     to: toList,
-    subject: `Order Confirmed — SAMO (#${orderRef})`,
+    subject: subjectLine,
     html,
     text,
   };

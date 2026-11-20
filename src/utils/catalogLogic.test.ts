@@ -1841,11 +1841,43 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     payload.html.includes('mailto:info@samoweave.com'),
     false
   );
+  assert.equal(payload.html.includes('ORDER CONFIRMATION · EST. 1999'), false);
+  assert.equal(cloudflarePayload.html.includes('ORDER CONFIRMATION · EST. 1999'), false);
+  assert.equal(payload.html.includes('font-size:20.7px;'), true);
+  assert.equal(cloudflarePayload.html.includes('font-size:20.7px;'), true);
+  assert.equal(payload.html.includes('DELIVERY DETAILS'), true);
+  assert.equal(cloudflarePayload.html.includes('DELIVERY DETAILS'), true);
+  assert.equal(payload.html.includes('CLIENT &amp; DELIVERY DETAILS'), false);
+  assert.equal(cloudflarePayload.html.includes('CLIENT &amp; DELIVERY DETAILS'), false);
+  assert.equal(payload.html.includes('<strong>Name:</strong> Layla Khoury'), true);
+  assert.equal(cloudflarePayload.html.includes('<strong>Name:</strong> Layla Khoury'), true);
+  assert.equal(payload.html.includes('<strong>Client:</strong>'), false);
+  assert.equal(cloudflarePayload.html.includes('<strong>Client:</strong>'), false);
+
+  // Verify the two CTA buttons sit BETWEEN the Promo Code Banner and the Main Email Campaign Banner
+  const promoIndex = payload.html.indexOf('YOU GOT 10% OFF');
+  const buttonsIndex = payload.html.indexOf('EXPLORE NEW ARRIVALS');
+  const campaignBannerIndex = payload.html.indexOf(
+    'https://images.samoweave.com/banners/order-email-banner-1.jpg'
+  );
+  assert.equal(promoIndex > 0 && buttonsIndex > promoIndex, true);
+  assert.equal(campaignBannerIndex > buttonsIndex, true);
+
+  const cfPromoIndex = cloudflarePayload.html.indexOf('YOU GOT 10% OFF');
+  const cfButtonsIndex = cloudflarePayload.html.indexOf('EXPLORE NEW ARRIVALS');
+  const cfCampaignBannerIndex = cloudflarePayload.html.indexOf(
+    'https://images.samoweave.com/banners/order-email-banner-1.jpg'
+  );
+  assert.equal(cfPromoIndex > 0 && cfButtonsIndex > cfPromoIndex, true);
+  assert.equal(cfCampaignBannerIndex > cfButtonsIndex, true);
+
   assert.equal(payload.html.includes('AVENUE HEAVY COW LEATHER BIKER JACKET'), true);
   assert.equal(payload.html.includes('Ref. W-1042'), true);
   assert.equal(payload.html.includes('SAMO10'), true);
   assert.equal(payload.html.includes('$450'), true);
   assert.equal(payload.text.includes('SAMO — ORDER CONFIRMED (#SAMO-9901)'), true);
+  assert.equal(payload.text.includes('DELIVERY DETAILS'), true);
+  assert.equal(payload.text.includes('Name: Layla Khoury'), true);
   assert.equal(payload.text.includes('YOU GOT 10% OFF'), true);
   assert.equal(payload.text.includes('A PRIVATE GIFT FOR YOUR NEXT VISIT'), false);
   assert.equal(payload.text.includes('Promo Code: SAMOVIP15'), true);
@@ -1861,6 +1893,26 @@ test('buildOrderConfirmationEmailPayload generates fluid 600px table HTML receip
     ),
     true
   );
+
+  // Verify adminAlertOnly mode for Whish/OMT orders sends only to orders@samoweave.com
+  const whishAlertInput = {
+    ...emailInput,
+    order: {
+      ...emailInput.order,
+      paymentMethod: 'Whish/OMT Payment' as const,
+    },
+    adminAlertOnly: true,
+  };
+  const whishAdminPayload = buildOrderConfirmationEmailPayload(whishAlertInput);
+  const whishCfAdminPayload = buildResendEmailPayload(whishAlertInput);
+  assert.deepEqual(whishAdminPayload.to, ['orders@samoweave.com']);
+  assert.equal(whishAdminPayload.bcc, undefined);
+  assert.equal(
+    whishAdminPayload.subject,
+    'Action Required: Verify Whish/OMT Payment Payment — SAMO (#SAMO-9901)'
+  );
+  assert.deepEqual(whishCfAdminPayload.to, ['orders@samoweave.com']);
+  assert.equal(whishCfAdminPayload.bcc, undefined);
 });
 
 

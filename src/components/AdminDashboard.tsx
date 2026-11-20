@@ -484,6 +484,7 @@ interface AdminDashboardProps {
   onAddCustomMaterial: (materialName: string) => Promise<void>;
   onAddCustomColor: (colorName: string) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  onConfirmOrderPayment?: (orderId: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   autoAcceptOrders: boolean;
   onToggleAutoAcceptOrders: (nextEnabled: boolean) => Promise<void>;
@@ -541,6 +542,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddCustomMaterial,
   onAddCustomColor,
   onUpdateOrderStatus,
+  onConfirmOrderPayment,
   onDeleteOrder,
   autoAcceptOrders,
   onToggleAutoAcceptOrders,
@@ -3341,7 +3343,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 {ord.status}
                               </span>
-                              <div className="flex items-center gap-3 text-xs font-semibold">
+                              <div className="flex flex-wrap items-center gap-2.5 text-xs font-semibold">
+                                {(ord.paymentMethod === 'Whish/OMT Payment' ||
+                                  ord.paymentMethod === 'Whish' ||
+                                  ord.paymentMethod === 'OMT' ||
+                                  String(ord.paymentMethod || '')
+                                    .toLowerCase()
+                                    .includes('whish') ||
+                                  String(ord.paymentMethod || '')
+                                    .toLowerCase()
+                                    .includes('omt')) &&
+                                  (!ord.paymentVerified ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onConfirmOrderPayment
+                                          ? onConfirmOrderPayment(ord.id)
+                                          : onUpdateOrderStatus(
+                                              ord.id,
+                                              'accepted'
+                                            )
+                                      }
+                                      className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                                    >
+                                      Payment Received? Yes — Send Client Email
+                                    </button>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-700/70 text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
+                                      ✓ Payment Received · Email Sent
+                                    </span>
+                                  ))}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -4074,6 +4105,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         );
                       })()}
 
+                    {/* Dual CTA Buttons Fitted Cleanly Between the Two Full-Bleed Banners */}
+                    <div className="p-3.5 space-y-2 bg-white border-y border-zinc-950">
+                      <div className="w-full py-2.5 bg-zinc-950 text-white text-center text-[10px] font-bold uppercase tracking-[0.18em]">
+                        EXPLORE NEW ARRIVALS
+                      </div>
+                      <a
+                        href="https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full py-2.5 bg-white text-zinc-950 border border-zinc-950 text-center text-[10px] font-bold uppercase tracking-[0.18em] hover:bg-zinc-100 transition-colors"
+                      >
+                        CONTACT US
+                      </a>
+                    </div>
+
                     {siteBanners.orderEmailBannerUrl &&
                     siteBanners.orderEmailBannerUrl.trim() ? (
                       <div className="relative bg-zinc-100 border-b border-zinc-200">
@@ -4103,23 +4149,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     ) : (
                       <div className="py-10 px-4 text-center bg-zinc-100 border-b border-zinc-200 text-xs text-zinc-500">
-                        No email campaign banner uploaded yet. Upload a 4:3 (1200×900) banner on the right to display it above the email CTA buttons.
+                        No email campaign banner uploaded yet. Upload a 4:3 (1200×900) banner on the right to display it below the email CTA buttons.
                       </div>
                     )}
-
-                    <div className="p-3.5 space-y-2 bg-white">
-                      <div className="w-full py-2.5 bg-zinc-950 text-white text-center text-[10px] font-bold uppercase tracking-[0.18em]">
-                        EXPLORE NEW ARRIVALS
-                      </div>
-                      <a
-                        href="https://api.whatsapp.com/send/?phone=96170224767&text&type=phone_number&app_absent=0"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-full py-2.5 bg-white text-zinc-950 border border-zinc-950 text-center text-[10px] font-bold uppercase tracking-[0.18em] hover:bg-zinc-100 transition-colors"
-                      >
-                        CONTACT US
-                      </a>
-                    </div>
                     <div className="px-3.5 py-2.5 bg-[#D4D4D4] border-t border-zinc-950 text-center text-[10px] text-zinc-800">
                       Questions about your order? Contact our Client Concierge:{' '}
                       <span className="font-bold text-zinc-950 underline">
@@ -6227,6 +6259,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
 
                       <div className="lg:col-span-3 flex flex-wrap items-center justify-start lg:justify-end gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-800/80 shrink-0">
+                        {(order.paymentMethod === 'Whish/OMT Payment' ||
+                          order.paymentMethod === 'Whish' ||
+                          order.paymentMethod === 'OMT' ||
+                          String(order.paymentMethod || '')
+                            .toLowerCase()
+                            .includes('whish') ||
+                          String(order.paymentMethod || '')
+                            .toLowerCase()
+                            .includes('omt')) &&
+                          (!order.paymentVerified ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onConfirmOrderPayment
+                                  ? onConfirmOrderPayment(order.id)
+                                  : onUpdateOrderStatus(order.id, 'accepted')
+                              }
+                              aria-label={`Confirm Whish/OMT payment received and send client confirmation email for order ${order.orderNumber}`}
+                              className="w-full sm:w-auto px-3 py-2 rounded-xl border border-emerald-500 bg-emerald-950/90 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <span className="flex items-center gap-1.5 shrink-0">
+                                <img
+                                  src="https://images.samoweave.com/logo/samo-whish-.png"
+                                  alt="Whish"
+                                  className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                                />
+                                <img
+                                  src="https://images.samoweave.com/logo/samo-omt.png"
+                                  alt="OMT"
+                                  className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                                />
+                              </span>
+                              <span>Payment Received? Yes — Send Client Email</span>
+                            </button>
+                          ) : (
+                            <span className="w-full sm:w-auto px-3 py-1.5 rounded-xl border border-emerald-700/80 bg-emerald-950/50 text-emerald-300 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5">
+                              <span className="flex items-center gap-1.5 shrink-0">
+                                <img
+                                  src="https://images.samoweave.com/logo/samo-whish-.png"
+                                  alt="Whish"
+                                  className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                                />
+                                <img
+                                  src="https://images.samoweave.com/logo/samo-omt.png"
+                                  alt="OMT"
+                                  className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                                />
+                              </span>
+                              <span>✓ Payment Received · Email Sent</span>
+                            </span>
+                          ))}
+
                         <button
                           type="button"
                           onClick={() =>

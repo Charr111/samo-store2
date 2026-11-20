@@ -590,7 +590,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     required
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="+961 70 505 645"
+                    placeholder="e.g. 70 123 456"
                     className="w-full px-3 py-2 text-xs border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
@@ -656,7 +656,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                           type="radio"
                           name="deliveryMethod"
                           checked={deliveryMethod === opt.method}
-                          onChange={() => setDeliveryMethod(opt.method)}
+                          onChange={() => {
+                            setDeliveryMethod(opt.method);
+                            if (opt.method === 'SAMO Showroom Pickup') {
+                              setPaymentMethod('SRP');
+                            } else if (paymentMethod === 'SRP') {
+                              setPaymentMethod('COD');
+                            }
+                          }}
                           className="accent-zinc-950"
                         />
                         <span>{opt.label}</span>
@@ -666,7 +673,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Payment Method (COD & Whish/OMT Payment) */}
+              {/* Payment Method (COD, Whish/OMT Payment & SRP when Showroom Pickup is selected) */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-900 mb-1.5">
                   Payment Method
@@ -682,6 +689,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         method: 'Whish/OMT Payment' as PaymentMethod,
                         label: 'Whish/OMT Payment',
                       },
+                      ...(deliveryMethod === 'SAMO Showroom Pickup'
+                        ? [
+                            {
+                              method: 'SRP' as PaymentMethod,
+                              label: 'SRP (Showroom Payment)',
+                            },
+                          ]
+                        : []),
                     ]
                   ).map((opt) => (
                     <label
@@ -702,6 +717,20 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         />
                         <span>{opt.label}</span>
                       </span>
+                      {opt.method === 'Whish/OMT Payment' && (
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          <img
+                            src="https://images.samoweave.com/logo/samo-whish-.png"
+                            alt="Whish"
+                            className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                          />
+                          <img
+                            src="https://images.samoweave.com/logo/samo-omt.png"
+                            alt="OMT"
+                            className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                          />
+                        </span>
+                      )}
                     </label>
                   ))}
                 </div>

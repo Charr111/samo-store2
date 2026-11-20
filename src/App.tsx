@@ -1288,11 +1288,23 @@ export default function App() {
         })
       : undefined;
 
+    const isWhishOrOmt =
+      orderPayload.paymentMethod === 'Whish/OMT Payment' ||
+      orderPayload.paymentMethod === 'Whish' ||
+      orderPayload.paymentMethod === 'OMT' ||
+      String(orderPayload.paymentMethod || '')
+        .toLowerCase()
+        .includes('whish') ||
+      String(orderPayload.paymentMethod || '')
+        .toLowerCase()
+        .includes('omt');
+
     const newOrder: OrderItem = {
       ...orderPayload,
       ...(enrichedOrderedItems ? { orderedItems: enrichedOrderedItems } : {}),
       id: newId,
       status: initialStatus,
+      paymentVerified: !isWhishOrOmt,
       createdAt: nowIso,
     };
 
@@ -1340,6 +1352,7 @@ export default function App() {
                 ? siteBanners.orderEmailPromoDescription
                 : 'Enjoy 10% off your next order',
             promoGiftBannerUrl: siteBanners.orderEmailPromoBannerUrl || '',
+            adminAlertOnly: isWhishOrOmt,
           }),
         });
       } catch (emailErr) {
@@ -1917,6 +1930,84 @@ export default function App() {
     } else {
       await pushServerCatalogPatch({ orders: nextOrders });
     }
+  };
+
+  const handleConfirmOrderPayment = async (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (!targetOrder) return;
+    const wasAlreadyAccepted = targetOrder.status === 'accepted';
+    const verifiedOrder: OrderItem = {
+      ...targetOrder,
+      status: 'accepted',
+      paymentVerified: true,
+    };
+
+    const nextOrders = orders.map((o) =>
+      o.id === orderId ? verifiedOrder : o
+    );
+    setOrders(nextOrders);
+    try {
+      localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(nextOrders));
+    } catch {}
+
+    let catalogPatchPromise: Promise<unknown>;
+    if (!wasAlreadyAccepted) {
+      const updatedCatalog = decrementStockForAcceptedOrder(
+        products,
+        verifiedOrder
+      );
+      setProducts(updatedCatalog);
+      setActiveProductModal((prev) => {
+        if (!prev) return null;
+        return updatedCatalog.find((p) => p.id === prev.id) || prev;
+      });
+      catalogPatchPromise = pushServerCatalogPatch({
+        orders: nextOrders,
+        products: updatedCatalog,
+      });
+    } else {
+      catalogPatchPromise = pushServerCatalogPatch({ orders: nextOrders });
+    }
+
+    const emailDispatchPromise = (async () => {
+      try {
+        await fetch('/api/order-confirmation-email', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order: verifiedOrder,
+            bannerUrl: siteBanners.orderEmailBannerUrl || '',
+            bannerLinkUrl:
+              siteBanners.orderEmailBannerLinkUrl ||
+              'https://samoweave.com/new-arrivals/women',
+            senderAddress:
+              siteBanners.orderEmailSenderAddress || 'orders@samoweave.com',
+            bccAddress:
+              siteBanners.orderEmailBccAddress !== undefined
+                ? siteBanners.orderEmailBccAddress
+                : 'orders@samoweave.com',
+            replyToAddress:
+              siteBanners.orderEmailReplyToAddress || 'info@samoweave.com',
+            promoGiftEnabled: Boolean(siteBanners.orderEmailPromoEnabled),
+            promoGiftCode: siteBanners.orderEmailPromoCode || 'SAMO10',
+            promoGiftDescription:
+              siteBanners.orderEmailPromoDescription !== undefined
+                ? siteBanners.orderEmailPromoDescription
+                : 'Enjoy 10% off your next order',
+            promoGiftBannerUrl: siteBanners.orderEmailPromoBannerUrl || '',
+            adminAlertOnly: false,
+          }),
+        });
+      } catch (emailErr) {
+        console.warn(
+          '[SAMO] Payment confirmed client email dispatch notice:',
+          emailErr
+        );
+      }
+    })();
+
+    await Promise.allSettled([catalogPatchPromise, emailDispatchPromise]);
   };
 
   const handleDeleteOrder = async (orderId: string) => {
@@ -2533,6 +2624,7 @@ export default function App() {
           onAddCustomMaterial={handleAddCustomMaterial}
           onAddCustomColor={handleAddCustomColor}
           onUpdateOrderStatus={handleUpdateOrderStatus}
+          onConfirmOrderPayment={handleConfirmOrderPayment}
           onDeleteOrder={handleDeleteOrder}
           autoAcceptOrders={autoAcceptOrders}
           onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
@@ -2582,10 +2674,10 @@ export default function App() {
       <main className="flex-1">
         {/* ROUTE: /showroom — Dedicated SAMO Heritage (Since 1999) & Showroom Map Page */}
         {currentRoute === '/showroom' && !searchQuery ? (
-          <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-12 space-y-14">
+          <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-12 space-y-12">
             {/* Showroom Hero & Heritage Story Since 1999 */}
             <div className="grid grid-cols-1 lg:grid-cols-12 border border-zinc-950 bg-white overflow-hidden">
-              <div className="lg:col-span-6 aspect-[4/5] lg:aspect-auto min-h-[420px] border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF]">
+              <div className="lg:col-span-6 h-[39vh] min-h-[290px] max-h-[445px] lg:h-auto border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF] overflow-hidden">
                 <ProductImage
                   src={
                     siteBanners.showroomHeroBannerUrl ||
@@ -2594,149 +2686,72 @@ export default function App() {
                   alt="SAMO Flagship Showroom & Weave — Established 1999"
                   category="Trench Coat"
                   styleType="Suede"
-                  className="h-full w-full"
+                  className="h-full w-full object-cover"
                 />
               </div>
-              <div className="lg:col-span-6 p-8 md:p-14 flex flex-col justify-between space-y-8">
-                <div className="space-y-5">
+              <div className="lg:col-span-6 p-7 md:p-12 flex flex-col justify-center">
+                <div className="space-y-4">
                   <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
                     SAMO HOUSE HERITAGE · ESTABLISHED 1999
                   </div>
-                  <h1 className="font-display text-3xl md:text-5xl font-extrabold tracking-[0.1em] uppercase text-zinc-950 leading-tight">
-                    THE HOUSE OF SAMO — SINCE 1999
+                  <h1 className="font-display text-2xl md:text-4xl font-extrabold tracking-[0.1em] uppercase text-zinc-950 leading-tight">
+                    THE HOUSE OF SAMO
                   </h1>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Founded in 1999, SAMO began as a dedicated leather and suede house crafting architectural outerwear, custom hides, and sculptural silhouettes. For over two decades, the house has remained true to its founding discipline: uncompromising raw materials—full-grain Italian cow leather, velvety calf suede, shearling fur, combed cashmere, and heavy silk—paired with bold, modernist tailoring.
+                    Rooted in architectural permanence since 1999, SAMO defines modern luxury through tactile mastery and sculptural precision. Every silhouette is conceived from noble raw materials—supple full-grain cow leather, velvety calf suede, shearling fur, combed cashmere, and liquid silk—tailored with clean geometric lines and enduring proportions.
                   </p>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Today, the SAMO Showroom brings together our 11-category Women’s ready-to-wear and accessories archive alongside our precision centimeter-graded Kids collection (Baby, Junior, and Teen). Every garment is cut, finished, and inspected to the same exacting standards established in our studio in 1999.
+                    Inside the SAMO Showroom, our Women’s ready-to-wear and leather goods curation converges with our centimeter-graded Kids collection for Minis, Children, and Teens—uniting artisanal heritage with an unmistakable contemporary attitude.
                   </p>
-                </div>
-
-                <div className="pt-6 border-t border-zinc-200 grid grid-cols-3 gap-4 font-mono-tabular">
-                  <div>
-                    <div className="text-xl md:text-2xl font-bold text-zinc-950">1999</div>
-                    <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      Year Founded
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xl md:text-2xl font-bold text-zinc-950">14</div>
-                    <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      House Categories
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xl md:text-2xl font-bold text-zinc-950">100%</div>
-                    <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      Samo Grade Hides
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Visit Our Showroom & Architectural Map Section */}
+            {/* Visit Our Showroom & Architectural Live Black-and-White Map Section */}
             <div className="border border-zinc-950 bg-zinc-950 text-white grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-              <div className="lg:col-span-5 p-8 md:p-12 flex flex-col justify-between space-y-6">
+              <div className="lg:col-span-5 p-7 md:p-11 flex flex-col justify-center">
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400">
                     <MapPin className="w-4 h-4 text-white" />
-                    <span>FLAGSHIP DESTINATION</span>
+                    <span>SHOWROOM DESTINATION</span>
                   </div>
                   <h2 className="font-display text-2xl md:text-3xl font-extrabold tracking-[0.12em] uppercase text-white">
                     VISIT OUR SHOWROOM
                   </h2>
-                  <p className="text-xs md:text-sm text-zinc-300 leading-relaxed">
-                    Experience SAMO’s Fine Leather, Suede, Fur, and Kids collections in person. Private fittings, bespoke leather sizing consultations, and boutique order pickups are available daily.
-                  </p>
-                  <div className="pt-2 space-y-1 text-xs font-mono-tabular text-zinc-300">
+                  <div className="pt-2 space-y-1.5 text-xs font-mono-tabular text-zinc-300">
                     <div>HOURS: MONDAY – SATURDAY · 10:00 AM – 8:00 PM</div>
                     <div>SERVICES: PRIVATE STYLING · BOUTIQUE PICKUP · ARCHIVE VIEWING</div>
                   </div>
                 </div>
-
-                <div className="pt-4">
-                  <a
-                    href="https://maps.app.goo.gl/3i4C59ucrmTFBvmx5"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2.5 px-7 py-4 bg-white text-zinc-950 text-xs font-bold tracking-[0.16em] uppercase hover:bg-zinc-200 transition-colors cursor-pointer"
-                  >
-                    <span>Open Showroom Location in Google Maps</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
               </div>
 
-              {/* Monochrome Architectural Map Plate Styled to Match Website */}
-              <div className="lg:col-span-7 relative min-h-[380px] bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 flex flex-col justify-between p-8 overflow-hidden">
-                {/* Architectural Grid & Street Vector Overlay */}
-                <svg
-                  viewBox="0 0 800 500"
-                  className="absolute inset-0 w-full h-full object-cover opacity-35"
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <pattern
-                      id="samo-map-grid"
-                      width="40"
-                      height="40"
-                      patternUnits="userSpaceOnUse"
-                    >
-                      <path
-                        d="M 40 0 L 0 0 0 40"
-                        fill="none"
-                        stroke="#52525b"
-                        strokeWidth="0.7"
-                      />
-                    </pattern>
-                  </defs>
-                  <rect width="800" height="500" fill="url(#samo-map-grid)" />
-                  <path
-                    d="M 0 140 L 800 220 M 180 0 L 310 500 M 540 0 L 460 500 M 0 360 L 800 310 M 90 0 L 720 500"
-                    stroke="#a1a1aa"
-                    strokeWidth="2.5"
-                    fill="none"
-                  />
-                  <path
-                    d="M 240 165 L 510 192 L 485 332 L 265 345 Z"
-                    fill="#27272a"
-                    stroke="#e4e4e7"
-                    strokeWidth="1.5"
-                  />
-                </svg>
-
-                <div className="relative z-10 flex items-center justify-between text-[11px] font-mono-tabular uppercase tracking-widest text-zinc-400">
-                  <span>SAMO ARCHITECTURAL MAP PLATE</span>
-                  <span>EST. 1999</span>
+              {/* Monochrome Live Google Map Styled in Architectural Black & White */}
+              <div className="lg:col-span-7 bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 flex flex-col justify-between p-5 sm:p-7">
+                <div className="flex items-center justify-between text-[11px] font-mono-tabular uppercase tracking-widest text-zinc-400 mb-3">
+                  <span>SAMO SHOWROOM MAP</span>
                 </div>
 
-                {/* Center Map Pin Card */}
-                <div className="relative z-10 my-auto mx-auto max-w-sm w-full bg-zinc-950/95 border border-white p-6 text-center space-y-3 shadow-2xl">
-                  <div className="w-10 h-10 mx-auto bg-white text-zinc-950 flex items-center justify-center">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div className="font-display text-sm font-extrabold tracking-[0.16em] uppercase text-white">
-                    SAMO FLAGSHIP SHOWROOM
-                  </div>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Click below to launch turn-by-turn navigation directly to the SAMO Showroom on Google Maps.
-                  </p>
+                <div className="relative w-full h-[250px] sm:h-[300px] border border-zinc-700 bg-zinc-950 overflow-hidden">
+                  <iframe
+                    title="SAMO Showroom Live Map"
+                    src="https://maps.google.com/maps?q=34.068764,35.643423&t=&z=16&ie=UTF8&iwloc=&output=embed"
+                    className="w-full h-full border-0 grayscale contrast-125"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                  />
+                </div>
+
+                <div className="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <a
                     href="https://maps.app.goo.gl/3i4C59ucrmTFBvmx5"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-2.5 px-4 bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-[0.14em] inline-flex items-center justify-center gap-1.5 hover:bg-zinc-200 transition-colors"
+                    className="w-full py-3 px-5 bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-[0.16em] inline-flex items-center justify-center gap-2 hover:bg-zinc-200 transition-colors cursor-pointer"
                   >
-                    <span>View on Google Maps</span>
+                    <span>OPEN ON GOOGLE MAPS</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>
-                </div>
-
-                <div className="relative z-10 flex items-center justify-between text-[10px] font-mono-tabular uppercase tracking-widest text-zinc-400">
-                  <span>MAPS.APP.GOO.GL/3I4C59UCRMTFBVMX5</span>
-                  <span>DIRECT DIRECTIONS</span>
                 </div>
               </div>
             </div>
@@ -3170,17 +3185,14 @@ export default function App() {
 
             {/* Section 5 (Requirement #7): DISCOVER THE HOUSE (New Arrivals, Gifts [Belts & Bags], Showroom [Since 1999 + Map]) */}
             {currentRoute === '/home' && !searchQuery && (
-              <section className="max-w-[1440px] mx-auto px-4 md:px-8 pb-16 pt-4">
-                <div className="border-t border-zinc-200 pt-10 mb-8 flex items-center justify-between">
-                  <h2 className="font-display text-lg md:text-xl font-extrabold tracking-[0.14em] uppercase text-zinc-950">
+              <section className="max-w-[1220px] mx-auto px-5 md:px-10 pb-14 pt-3">
+                <div className="border-t border-zinc-200 pt-8 mb-6 flex items-center justify-between">
+                  <h2 className="font-display text-base md:text-lg font-extrabold tracking-[0.14em] uppercase text-zinc-950">
                     DISCOVER THE HOUSE
                   </h2>
-                  <span className="text-[11px] font-mono-tabular uppercase tracking-widest text-zinc-500">
-                    SAMO ARCHIVE &amp; CURATIONS
-                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-[335px] sm:max-w-[370px] md:max-w-none mx-auto">
                   {/* Box 1: New Arrivals */}
                   <div
                     onClick={() => handleNavigate('/new-arrivals', 'women')}
@@ -3194,7 +3206,7 @@ export default function App() {
                     }}
                     className="group cursor-pointer border border-zinc-200 hover:border-zinc-950 bg-white flex flex-col justify-between transition-all"
                   >
-                    <div className="aspect-[4/5] w-full overflow-hidden border-b border-zinc-100">
+                    <div className="aspect-[4/4.35] w-full overflow-hidden border-b border-zinc-100">
                       <ProductImage
                         src={
                           siteBanners.homeBottomNewArrivalsUrl ||
@@ -3206,16 +3218,16 @@ export default function App() {
                         className="h-full w-full"
                       />
                     </div>
-                    <div className="p-5 flex items-center justify-between">
+                    <div className="p-4 flex items-center justify-between">
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                        <div className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-500">
                           LATEST RUNWAY RELEASES
                         </div>
-                        <h3 className="font-display text-sm md:text-base font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
+                        <h3 className="font-display text-xs md:text-sm font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
                           NEW ARRIVALS
                         </h3>
                       </div>
-                      <ArrowUpRight className="w-4 h-4 text-zinc-950" />
+                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-950" />
                     </div>
                   </div>
 
@@ -3232,7 +3244,7 @@ export default function App() {
                     }}
                     className="group cursor-pointer border border-zinc-200 hover:border-zinc-950 bg-white flex flex-col justify-between transition-all"
                   >
-                    <div className="aspect-[4/5] w-full overflow-hidden border-b border-zinc-100">
+                    <div className="aspect-[4/4.35] w-full overflow-hidden border-b border-zinc-100">
                       <ProductImage
                         src={
                           siteBanners.homeBottomGiftsUrl ||
@@ -3244,16 +3256,16 @@ export default function App() {
                         className="h-full w-full"
                       />
                     </div>
-                    <div className="p-5 flex items-center justify-between">
+                    <div className="p-4 flex items-center justify-between">
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                        <div className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-500">
                           LEATHER BAGS &amp; BELTS CURATION
                         </div>
-                        <h3 className="font-display text-sm md:text-base font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
+                        <h3 className="font-display text-xs md:text-sm font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
                           GIFTS
                         </h3>
                       </div>
-                      <ArrowUpRight className="w-4 h-4 text-zinc-950" />
+                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-950" />
                     </div>
                   </div>
 
@@ -3270,7 +3282,7 @@ export default function App() {
                     }}
                     className="group cursor-pointer border border-zinc-200 hover:border-zinc-950 bg-white flex flex-col justify-between transition-all"
                   >
-                    <div className="aspect-[4/5] w-full overflow-hidden border-b border-zinc-100">
+                    <div className="aspect-[4/4.35] w-full overflow-hidden border-b border-zinc-100">
                       <ProductImage
                         src={
                           siteBanners.homeBottomShowroomUrl ||
@@ -3282,16 +3294,16 @@ export default function App() {
                         className="h-full w-full"
                       />
                     </div>
-                    <div className="p-5 flex items-center justify-between">
+                    <div className="p-4 flex items-center justify-between">
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                          HOUSE HERITAGE SINCE 1999 · VISIT US
+                        <div className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                          HOUSE HERITAGE SINCE 1999
                         </div>
-                        <h3 className="font-display text-sm md:text-base font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
+                        <h3 className="font-display text-xs md:text-sm font-extrabold tracking-[0.14em] uppercase text-zinc-950 group-hover:underline mt-0.5">
                           SHOWROOM
                         </h3>
                       </div>
-                      <ArrowUpRight className="w-4 h-4 text-zinc-950" />
+                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-950" />
                     </div>
                   </div>
                 </div>

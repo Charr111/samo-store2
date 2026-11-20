@@ -148,7 +148,12 @@ export interface CartItem {
 
 export type DeliveryMethod = 'Standard Delivery' | 'SAMO Showroom Pickup';
 
-export type PaymentMethod = 'COD' | 'Whish/OMT Payment';
+export type PaymentMethod =
+  | 'COD'
+  | 'Whish/OMT Payment'
+  | 'Whish'
+  | 'OMT'
+  | 'SRP';
 
 export interface OrderedLineItem {
   productId: string;
@@ -171,6 +176,7 @@ export interface OrderItem {
   shippingLocation: string;
   deliveryMethod: DeliveryMethod;
   paymentMethod?: PaymentMethod;
+  paymentVerified?: boolean;
   deliveryFee: number;
   subtotal: number;
   discountAmount?: number;

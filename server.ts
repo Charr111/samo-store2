@@ -924,6 +924,7 @@ Kids Categories: MINIS 1 To 5, CHILDREN 6+, Teen 13+.`,
           body.promoGiftBannerUrl !== undefined
             ? String(body.promoGiftBannerUrl).trim()
             : storedBanners.orderEmailPromoBannerUrl || '',
+        adminAlertOnly: Boolean(body.adminAlertOnly),
       });
 
       const resendResponse = await fetch('https://api.resend.com/emails', {
