@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { buildProductImageSeoAlt } from '../utils/seoLogic';
 
 interface ProductImageProps {
@@ -26,10 +26,24 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   eager = false,
 }) => {
   const normalizedSrc = (src || '').trim();
-  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const retriedRef = useRef<boolean>(false);
+  const [loaded, setLoaded] = useState<boolean>(true);
+  const [failed, setFailed] = useState<boolean>(false);
 
   React.useEffect(() => {
-    setHasError(false);
+    retriedRef.current = false;
+    setFailed(false);
+    if (
+      imgRef.current &&
+      imgRef.current.complete &&
+      imgRef.current.naturalWidth > 0
+    ) {
+      setLoaded(true);
+      setFailed(false);
+    } else {
+      setLoaded(true);
+    }
   }, [normalizedSrc]);
 
   const seoAltText = buildProductImageSeoAlt({
@@ -39,7 +53,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   });
 
   // If no image URL is uploaded yet (or an external image failed), render a clean blank studio box
-  if (!normalizedSrc || hasError) {
+  if (!normalizedSrc || failed) {
     return (
       <div
         className={`relative flex items-center justify-center overflow-hidden bg-[#EFEFEF] select-none ${className}`}
@@ -58,14 +72,44 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     return (
       <div className={`relative overflow-hidden bg-[#F3F3F4] ${className}`}>
         <img
+          ref={(el) => {
+            imgRef.current = el;
+            if (el && el.complete && el.naturalWidth > 0) {
+              if (!loaded) setLoaded(true);
+              if (failed) setFailed(false);
+            }
+          }}
           key={normalizedSrc}
           src={normalizedSrc}
           alt={seoAltText}
           loading={eager ? 'eager' : 'lazy'}
-          decoding={eager ? 'sync' : 'async'}
+          decoding="async"
           referrerPolicy="no-referrer"
-          onError={() => setHasError(true)}
-          className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"
+          onLoad={() => {
+            setLoaded(true);
+            setFailed(false);
+          }}
+          onError={() => {
+            if (
+              imgRef.current &&
+              imgRef.current.complete &&
+              imgRef.current.naturalWidth > 0
+            ) {
+              setLoaded(true);
+              setFailed(false);
+              return;
+            }
+            if (!retriedRef.current && imgRef.current) {
+              retriedRef.current = true;
+              const sep = normalizedSrc.includes('?') ? '&' : '?';
+              imgRef.current.src = `${normalizedSrc}${sep}r=1`;
+              return;
+            }
+            setFailed(true);
+          }}
+          className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
+            loaded ? 'opacity-100' : 'opacity-100'
+          }`}
         />
       </div>
     );

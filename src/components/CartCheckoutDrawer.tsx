@@ -104,32 +104,66 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   }, [codEnabled, paymentMethod]);
 
   React.useEffect(() => {
+    const win = window as unknown as {
+      __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
+    };
+    win.__samoBagStep = isOpen ? step : undefined;
+    return () => {
+      if (!isOpen) {
+        win.__samoBagStep = undefined;
+      }
+    };
+  }, [isOpen, step]);
+
+  React.useEffect(() => {
     if (!isOpen) return;
     const handleCheckoutPopState = (event: PopStateEvent) => {
       const st = (event.state || {}) as {
         samoBagOpen?: boolean;
         samoCheckoutStep?: boolean;
       };
-      if (st.samoBagOpen && !st.samoCheckoutStep) {
+      if (step === 'checkout' || (st.samoBagOpen && !st.samoCheckoutStep)) {
+        const win = window as unknown as {
+          __samoCheckoutStepBackAt?: number;
+          __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
+        };
+        win.__samoCheckoutStepBackAt = Date.now();
+        win.__samoBagStep = 'cart';
         setStep('cart');
       }
     };
     window.addEventListener('popstate', handleCheckoutPopState);
     return () => window.removeEventListener('popstate', handleCheckoutPopState);
-  }, [isOpen]);
+  }, [isOpen, step]);
 
   if (!isOpen) return null;
 
   const stepBackToCart = () => {
-    const st = (window.history.state || {}) as {
-      samoBagOpen?: boolean;
-      samoCheckoutStep?: boolean;
+    const win = window as unknown as {
+      __samoCheckoutStepBackAt?: number;
+      __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
     };
-    if (st.samoCheckoutStep) {
-      window.history.back();
-    } else {
-      setStep('cart');
-    }
+    win.__samoCheckoutStepBackAt = Date.now();
+    win.__samoBagStep = 'cart';
+    setStep('cart');
+    try {
+      const st = (window.history.state || {}) as {
+        samoBagOpen?: boolean;
+        samoCheckoutStep?: boolean;
+        previousProductId?: string | null;
+      };
+      if (st.samoCheckoutStep) {
+        window.history.replaceState(
+          {
+            ...st,
+            samoBagOpen: true,
+            samoCheckoutStep: false,
+          },
+          '',
+          window.location.pathname + window.location.search
+        );
+      }
+    } catch {}
   };
 
   const handleDrawerTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -153,6 +187,15 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     if (e.touches.length !== 1 || touchStartXRef.current === null) return;
     touchCurrentXRef.current = e.touches[0].clientX;
     touchCurrentYRef.current = e.touches[0].clientY;
+    if (touchStartYRef.current !== null && touchStartXRef.current <= 28) {
+      const deltaX = touchCurrentXRef.current - touchStartXRef.current;
+      const deltaY = Math.abs(
+        touchCurrentYRef.current - touchStartYRef.current
+      );
+      if (deltaX > 12 && deltaX > deltaY * 1.5 && e.cancelable) {
+        e.preventDefault();
+      }
+    }
   };
 
   const handleDrawerTouchEnd = () => {
@@ -166,7 +209,13 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       const deltaX = touchCurrentXRef.current - touchStartXRef.current;
       const deltaY = Math.abs(touchCurrentYRef.current - touchStartYRef.current);
       if (deltaX > 75 && deltaY < 40 && deltaX > deltaY * 1.5) {
-        if (step === 'checkout') {
+        const win = window as unknown as {
+          __samoCheckoutStepBackAt?: number;
+        };
+        const recentlySteppedBackFromCheckout =
+          typeof win.__samoCheckoutStepBackAt === 'number' &&
+          Date.now() - win.__samoCheckoutStepBackAt < 450;
+        if (step === 'checkout' || recentlySteppedBackFromCheckout) {
           stepBackToCart();
         } else if (onSwipeBack) {
           onSwipeBack();

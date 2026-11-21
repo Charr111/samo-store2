@@ -795,10 +795,36 @@ export default function App() {
         samoCheckoutStep?: boolean;
         previousProductId?: string | null;
       };
-      if (stateObj.samoBagOpen) {
+      const win = window as unknown as {
+        __samoCheckoutStepBackAt?: number;
+        __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
+      };
+      const withinCheckoutStepBackGuard =
+        typeof win.__samoCheckoutStepBackAt === 'number' &&
+        Date.now() - win.__samoCheckoutStepBackAt < 450;
+      if (
+        stateObj.samoBagOpen ||
+        withinCheckoutStepBackGuard ||
+        win.__samoBagStep === 'checkout'
+      ) {
+        win.__samoCheckoutStepBackAt = Date.now();
+        win.__samoBagStep = 'cart';
         setCartDrawerOpen(true);
         if (!stateObj.samoCheckoutStep) {
           setCartDrawerInitialStep('cart');
+        }
+        if (!stateObj.samoBagOpen) {
+          try {
+            window.history.replaceState(
+              {
+                ...stateObj,
+                samoBagOpen: true,
+                samoCheckoutStep: false,
+              },
+              '',
+              window.location.pathname + window.location.search
+            );
+          } catch {}
         }
         return;
       }
