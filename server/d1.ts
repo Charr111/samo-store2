@@ -251,6 +251,8 @@ export interface PersistedCatalogState {
   newsletterPopupConfig?: Record<string, unknown>;
   seoConfig?: Record<string, unknown>;
   sizeGuideConfig?: Record<string, unknown>;
+  codEnabled?: boolean;
+  adminNotificationState?: Record<string, unknown>;
   newsletterPopupImpressions?: Record<string, { date: string; count: number }>;
 }
 
@@ -496,6 +498,10 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
         typeof settingsMap.shrinkUploadsEnabled === 'boolean'
           ? settingsMap.shrinkUploadsEnabled
           : true,
+      codEnabled:
+        typeof settingsMap.codEnabled === 'boolean'
+          ? settingsMap.codEnabled
+          : false,
       newsletterPopupConfig: settingsMap.newsletterPopupConfig || undefined,
       seoConfig: settingsMap.seoConfig || undefined,
       sizeGuideConfig: settingsMap.sizeGuideConfig || undefined,
@@ -506,6 +512,8 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       deletedOrderIds: deletedOrderIdsList,
       newsletterPopupImpressions:
         settingsMap.newsletterPopupImpressions || undefined,
+      adminNotificationState:
+        settingsMap.adminNotificationState || undefined,
     };
   } catch (err) {
     console.warn('[SAMO D1] Failed to read catalog from D1:', err);
@@ -880,12 +888,14 @@ export async function writeD1CatalogPatch(
     'autoAcceptOrders',
     'showLowStockCount',
     'shrinkUploadsEnabled',
+    'codEnabled',
     'newsletterPopupConfig',
     'seoConfig',
     'sizeGuideConfig',
     'customMaterials',
     'customColors',
     'newsletterPopupImpressions',
+    'adminNotificationState',
   ] as const;
 
   for (const key of settingsKeys) {

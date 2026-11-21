@@ -49,6 +49,7 @@ interface PersistedCatalogState {
   newsletterPopupConfig?: Record<string, unknown>;
   seoConfig?: Record<string, unknown>;
   sizeGuideConfig?: Record<string, unknown>;
+  adminNotificationState?: Record<string, unknown>;
   newsletterPopupImpressions?: Record<string, { date: string; count: number }>;
 }
 
@@ -317,6 +318,15 @@ async function startServer() {
         : {}),
       ...(body.sizeGuideConfig && typeof body.sizeGuideConfig === 'object'
         ? { sizeGuideConfig: body.sizeGuideConfig as Record<string, unknown> }
+        : {}),
+      ...(body.adminNotificationState &&
+      typeof body.adminNotificationState === 'object'
+        ? {
+            adminNotificationState: body.adminNotificationState as Record<
+              string,
+              unknown
+            >,
+          }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,

@@ -309,5 +309,14 @@ export interface SeoConfigState {
   >;
 }
 
+export interface AdminNotificationSyncState {
+  readIds: string[];
+  dismissedIds: string[];
+  markedAllReadAt?: string;
+  clearedAllAt?: string;
+  updatedAt?: string;
+}
+
+
 
 

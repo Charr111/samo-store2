@@ -301,6 +301,8 @@ async function readFromD1(
       deletedOrderIds: deletedOrderIdsList,
       newsletterPopupImpressions:
         settingsMap.newsletterPopupImpressions || undefined,
+      adminNotificationState:
+        settingsMap.adminNotificationState || undefined,
     };
   } catch (err) {
     console.error('Error querying Cloudflare D1 in Pages:', err);
@@ -611,6 +613,7 @@ async function writeToD1(
     'customMaterials',
     'customColors',
     'newsletterPopupImpressions',
+    'adminNotificationState',
   ];
 
   for (const key of settingsKeys) {
@@ -887,6 +890,10 @@ export const onRequestPost = async (context: {
         : {}),
       ...(typeof patch.codEnabled === 'boolean'
         ? { codEnabled: patch.codEnabled }
+        : {}),
+      ...(patch.adminNotificationState &&
+      typeof patch.adminNotificationState === 'object'
+        ? { adminNotificationState: patch.adminNotificationState }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,

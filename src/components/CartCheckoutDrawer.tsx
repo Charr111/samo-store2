@@ -77,6 +77,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<OrderItem | null>(null);
   const [whishInfoOpen, setWhishInfoOpen] = useState(true);
+  const [srpInfoOpen, setSrpInfoOpen] = useState(true);
 
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
@@ -89,6 +90,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       setDeliveryMethod('Standard Delivery');
       setPaymentMethod('Whish/OMT Payment');
       setWhishInfoOpen(true);
+      setSrpInfoOpen(true);
       setFormError('');
       setPromoFeedback('');
     }
@@ -874,6 +876,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
               ]
             ).map((opt) => {
               const isWhishOption = opt.method === 'Whish/OMT Payment';
+              const isSrpOption = opt.method === 'SRP';
               const isSelected = paymentMethod === opt.method;
               return (
                 <div key={opt.method} className="flex flex-col">
@@ -893,6 +896,8 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                           setPaymentMethod(opt.method);
                           if (opt.method === 'Whish/OMT Payment') {
                             setWhishInfoOpen(true);
+                          } else if (opt.method === 'SRP') {
+                            setSrpInfoOpen(true);
                           }
                         }}
                         className="accent-zinc-950"
@@ -935,6 +940,28 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         )}
                       </span>
                     )}
+                    {isSrpOption && isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSrpInfoOpen((prev) => !prev);
+                        }}
+                        aria-label={
+                          srpInfoOpen
+                            ? 'Collapse SRP showroom payment note'
+                            : 'Expand SRP showroom payment note'
+                        }
+                        className="ml-0.5 p-0.5 text-zinc-700 hover:text-zinc-950 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                      >
+                        {srpInfoOpen ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
                   </label>
 
                   {isWhishOption && isSelected && whishInfoOpen && (
@@ -944,6 +971,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         <strong className="text-xs font-mono-tabular font-bold text-white underline tracking-wider">
                           705056450
                         </strong>
+                      </span>
+                    </div>
+                  )}
+
+                  {isSrpOption && isSelected && srpInfoOpen && (
+                    <div className="px-3 py-1.5 bg-zinc-950 text-white border border-t-0 border-zinc-950 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+                      <span className="text-[10px] text-zinc-200 tracking-wide truncate">
+                        Payment is settled in-store upon order pickup.
                       </span>
                     </div>
                   )}

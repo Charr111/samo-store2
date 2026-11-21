@@ -41,6 +41,7 @@ import {
   Ruler,
 } from 'lucide-react';
 import {
+  AdminNotificationSyncState,
   AdminRecord,
   CategoryBannerConfig,
   CategoryItem,
@@ -407,7 +408,8 @@ type AdminSectionTab =
   | 'newsletter'
   | 'seo'
   | 'admins'
-  | 'size_guides';
+  | 'size_guides'
+  | 'toggles';
 
 interface AdminDashboardProps {
   currentUser: User | null;
@@ -501,6 +503,10 @@ interface AdminDashboardProps {
   onDeletePreorder: (preorderId: string) => Promise<void>;
   onAddAdminByEmail: (email: string) => Promise<void>;
   onRemoveAdminByEmail: (email: string) => Promise<void>;
+  adminNotificationState?: AdminNotificationSyncState;
+  onUpdateAdminNotificationState?: (
+    nextState: AdminNotificationSyncState
+  ) => Promise<void> | void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -558,6 +564,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeletePreorder,
   onAddAdminByEmail,
   onRemoveAdminByEmail,
+  adminNotificationState,
+  onUpdateAdminNotificationState,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminSectionTab>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -2110,11 +2118,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       try {
         const raw = localStorage.getItem('samo_admin_read_notifs_v1');
         const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed)
+        const localIds = Array.isArray(parsed)
           ? parsed.slice(0, MAX_ADMIN_NOTIFICATIONS)
           : [];
+        const syncedIds = Array.isArray(adminNotificationState?.readIds)
+          ? adminNotificationState.readIds
+          : [];
+        return Array.from(new Set([...syncedIds, ...localIds])).slice(
+          0,
+          MAX_ADMIN_NOTIFICATIONS
+        );
       } catch {
-        return [];
+        return Array.isArray(adminNotificationState?.readIds)
+          ? adminNotificationState.readIds.slice(0, MAX_ADMIN_NOTIFICATIONS)
+          : [];
       }
     }
   );
@@ -2124,13 +2141,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const raw = localStorage.getItem('samo_admin_dismissed_notifs_v1');
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
+      const localIds = Array.isArray(parsed)
         ? parsed.slice(0, MAX_ADMIN_NOTIFICATIONS)
         : [];
+      const syncedIds = Array.isArray(adminNotificationState?.dismissedIds)
+        ? adminNotificationState.dismissedIds
+        : [];
+      return Array.from(new Set([...syncedIds, ...localIds])).slice(
+        0,
+        MAX_ADMIN_NOTIFICATIONS
+      );
     } catch {
-      return [];
+      return Array.isArray(adminNotificationState?.dismissedIds)
+        ? adminNotificationState.dismissedIds.slice(0, MAX_ADMIN_NOTIFICATIONS)
+        : [];
     }
   });
+  const [markedAllReadAt, setMarkedAllReadAt] = useState<string | undefined>(
+    () => {
+      try {
+        return (
+          adminNotificationState?.markedAllReadAt ||
+          localStorage.getItem('samo_admin_marked_all_read_at_v1') ||
+          undefined
+        );
+      } catch {
+        return adminNotificationState?.markedAllReadAt;
+      }
+    }
+  );
+  const [clearedAllAt, setClearedAllAt] = useState<string | undefined>(() => {
+    try {
+      return (
+        adminNotificationState?.clearedAllAt ||
+        localStorage.getItem('samo_admin_cleared_all_at_v1') ||
+        undefined
+      );
+    } catch {
+      return adminNotificationState?.clearedAllAt;
+    }
+  });
+
+  // Sync shared notification read/dismissed state across all admin emails & devices
+  useEffect(() => {
+    if (!adminNotificationState) return;
+    if (Array.isArray(adminNotificationState.readIds)) {
+      setReadNotificationIds((prev) => {
+        const merged = Array.from(
+          new Set([...adminNotificationState.readIds, ...prev])
+        ).slice(0, MAX_ADMIN_NOTIFICATIONS);
+        try {
+          localStorage.setItem(
+            'samo_admin_read_notifs_v1',
+            JSON.stringify(merged)
+          );
+        } catch {}
+        return merged;
+      });
+    }
+    if (Array.isArray(adminNotificationState.dismissedIds)) {
+      setDismissedNotificationIds((prev) => {
+        const merged = Array.from(
+          new Set([...adminNotificationState.dismissedIds, ...prev])
+        ).slice(0, MAX_ADMIN_NOTIFICATIONS);
+        try {
+          localStorage.setItem(
+            'samo_admin_dismissed_notifs_v1',
+            JSON.stringify(merged)
+          );
+        } catch {}
+        return merged;
+      });
+    }
+    if (typeof adminNotificationState.markedAllReadAt === 'string') {
+      setMarkedAllReadAt((prev) => {
+        if (
+          !prev ||
+          new Date(adminNotificationState.markedAllReadAt!).getTime() >
+            new Date(prev).getTime()
+        ) {
+          try {
+            localStorage.setItem(
+              'samo_admin_marked_all_read_at_v1',
+              adminNotificationState.markedAllReadAt!
+            );
+          } catch {}
+          return adminNotificationState.markedAllReadAt;
+        }
+        return prev;
+      });
+    }
+    if (typeof adminNotificationState.clearedAllAt === 'string') {
+      setClearedAllAt((prev) => {
+        if (
+          !prev ||
+          new Date(adminNotificationState.clearedAllAt!).getTime() >
+            new Date(prev).getTime()
+        ) {
+          try {
+            localStorage.setItem(
+              'samo_admin_cleared_all_at_v1',
+              adminNotificationState.clearedAllAt!
+            );
+          } catch {}
+          return adminNotificationState.clearedAllAt;
+        }
+        return prev;
+      });
+    }
+  }, [adminNotificationState]);
+
   const [confirmDeleteAllNotifications, setConfirmDeleteAllNotifications] =
     useState<boolean>(false);
   const [adminActivityLog, setAdminActivityLog] = useState<
@@ -2394,6 +2514,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             .quantity
         : sumSizeQuantities(prod.sizes, prod.sizeQuantities);
       if (!prod.inStock || totalQty <= 0) {
+        const rawProdProd = prod as ProductItem & {
+          updatedAt?: string;
+          createdAt?: string;
+        };
         list.push({
           id: `notif-cat-oos-${prod.id}`,
           category: 'out_of_stock',
@@ -2401,7 +2525,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           badgeTone: 'red',
           title: `${prod.name} (${prod.department.toUpperCase()} · ${prod.category})`,
           detail: `0 total quantity left across all sizes (${prod.sizes.join(', ')})`,
-          timestamp: new Date().toISOString(),
+          timestamp:
+            rawProdProd.updatedAt ||
+            rawProdProd.createdAt ||
+            '2026-01-01T00:00:00.000Z',
           productId: prod.id,
         });
       }
@@ -2420,10 +2547,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
     }
 
-    // Sort newest first, exclude deleted/dismissed IDs, and enforce strict 35-notification cap
+    // Sort newest first, exclude deleted/dismissed IDs (or cleared before clearedAllAt), and enforce strict 35-notification cap
     const dismissedSet = new Set(dismissedNotificationIds);
+    const clearedCutoffMs = clearedAllAt
+      ? new Date(clearedAllAt).getTime()
+      : 0;
     return list
-      .filter((item) => !dismissedSet.has(item.id))
+      .filter((item) => {
+        if (dismissedSet.has(item.id)) return false;
+        if (
+          clearedCutoffMs > 0 &&
+          new Date(item.timestamp).getTime() <= clearedCutoffMs
+        ) {
+          return false;
+        }
+        return true;
+      })
       .sort(
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -2435,6 +2574,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     products,
     adminActivityLog,
     dismissedNotificationIds,
+    clearedAllAt,
     getOrderStockAlerts,
   ]);
 
@@ -2491,11 +2631,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [adminNotifications]);
 
+  const isNotificationRead = React.useCallback(
+    (notif: { id: string; timestamp: string }) => {
+      if (readNotificationIds.includes(notif.id)) return true;
+      if (markedAllReadAt) {
+        const notifMs = new Date(notif.timestamp).getTime();
+        const readCutoffMs = new Date(markedAllReadAt).getTime();
+        if (!Number.isNaN(notifMs) && !Number.isNaN(readCutoffMs) && notifMs <= readCutoffMs) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [readNotificationIds, markedAllReadAt]
+  );
+
   const unreadNotificationsCount = useMemo(
-    () =>
-      adminNotifications.filter((n) => !readNotificationIds.includes(n.id))
-        .length,
-    [adminNotifications, readNotificationIds]
+    () => adminNotifications.filter((n) => !isNotificationRead(n)).length,
+    [adminNotifications, isNotificationRead]
   );
 
   // Trigger Web Audio chime + native browser notification when a new order or out-of-stock alert arrives
@@ -2538,26 +2691,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [adminNotifications, playAdminNotificationChime]);
 
   const handleMarkAllNotificationsRead = () => {
+    const nowIso = new Date().toISOString();
     const allIds = adminNotifications
       .map((n) => n.id)
       .slice(0, MAX_ADMIN_NOTIFICATIONS);
     setReadNotificationIds(allIds);
+    setMarkedAllReadAt(nowIso);
     try {
       localStorage.setItem(
         'samo_admin_read_notifs_v1',
         JSON.stringify(allIds)
       );
+      localStorage.setItem('samo_admin_marked_all_read_at_v1', nowIso);
     } catch {}
+    if (onUpdateAdminNotificationState) {
+      onUpdateAdminNotificationState({
+        readIds: allIds,
+        dismissedIds: dismissedNotificationIds.slice(
+          0,
+          MAX_ADMIN_NOTIFICATIONS
+        ),
+        markedAllReadAt: nowIso,
+        ...(clearedAllAt ? { clearedAllAt } : {}),
+        updatedAt: nowIso,
+      });
+    }
   };
 
   const handleDeleteAllNotifications = () => {
+    const nowIso = new Date().toISOString();
     // 1. Permanently wipe stored activity log entries
     setAdminActivityLog([]);
     try {
       localStorage.removeItem('samo_admin_activity_log_v1');
       localStorage.removeItem('samo_admin_read_notifs_v1');
+      localStorage.setItem('samo_admin_marked_all_read_at_v1', nowIso);
+      localStorage.setItem('samo_admin_cleared_all_at_v1', nowIso);
     } catch {}
     setReadNotificationIds([]);
+    setMarkedAllReadAt(nowIso);
+    setClearedAllAt(nowIso);
 
     // 2. Dismiss any currently listed order/stock notification IDs (capped at 35)
     const nonActivityIds = adminNotifications
@@ -2577,6 +2750,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         );
       }
     } catch {}
+    if (onUpdateAdminNotificationState) {
+      onUpdateAdminNotificationState({
+        readIds: [],
+        dismissedIds: nextDismissed,
+        markedAllReadAt: nowIso,
+        clearedAllAt: nowIso,
+        updatedAt: nowIso,
+      });
+    }
     setConfirmDeleteAllNotifications(false);
   };
 
@@ -3055,6 +3237,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       label: 'Size Guides',
       shortLabel: 'Sizes',
       icon: <Ruler className="w-4 h-4 shrink-0" />,
+    },
+    {
+      id: 'toggles',
+      label: 'Store Quick Toggles',
+      shortLabel: 'Toggles',
+      icon: <Sparkles className="w-4 h-4 shrink-0" />,
+      badge: 6,
     },
     {
       id: 'admins',
@@ -3671,9 +3860,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 : n.category === notificationFilter
                             )
                             .map((notif) => {
-                              const isUnread = !readNotificationIds.includes(
-                                notif.id
-                              );
+                              const isUnread = !isNotificationRead(notif);
                               return (
                                 <div
                                   key={notif.id}
@@ -3823,6 +4010,367 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* =====================================================================
+              DEDICATED PAGE: STORE QUICK TOGGLES & CONTROLS (activeTab === 'toggles')
+             ===================================================================== */}
+          {activeTab === 'toggles' && (
+            <div
+              data-testid="admin-unified-quick-toggles"
+              className="space-y-6"
+            >
+              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h1 className="font-display text-lg sm:text-xl font-bold text-white uppercase tracking-wider">
+                      Store Quick Toggles &amp; Controls
+                    </h1>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      All 6 live website &amp; checkout switches in one dedicated page — synced across Cloudflare &amp; all devices
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {/* 1. Auto-Shrink Product Uploads (60%–70% Smaller) */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Auto-Shrink Product Uploads
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          shrinkUploadsEnabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {shrinkUploadsEnabled ? 'ON · 60%–70%' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      {shrinkUploadsEnabled
+                        ? 'Shrinking uploads by 60%–70% (e.g. 2 MB → 500–800 KB).'
+                        : 'Uploading original full-resolution files.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={shrinkUploadsEnabled}
+                    data-testid="toggle-shrink-uploads"
+                    aria-label="Toggle Auto-Shrink Image Uploads On or Off"
+                    onClick={() => {
+                      const next = !shrinkUploadsEnabled;
+                      handleToggleShrinkUploads();
+                      recordAdminActivity(
+                        'Auto-Shrink Uploads Toggled',
+                        `Auto-Shrink Product Uploads turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      shrinkUploadsEnabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        shrinkUploadsEnabled
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 2. "1 Left / 2 Left" Low-Stock Urgency Label */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        &ldquo;1 Left / 2 Left&rdquo; Low-Stock Label
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          showLowStockCount
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {showLowStockCount ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      {showLowStockCount
+                        ? 'Showing "1 LEFT" / "2 LEFT" inside selected size box.'
+                        : 'Low-stock count hidden on product pop-ups.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showLowStockCount}
+                    data-testid="toggle-show-low-stock"
+                    aria-label="Toggle 1 left and 2 left indicator on product pop-up"
+                    onClick={() => {
+                      const next = !showLowStockCount;
+                      if (onToggleShowLowStockCount) {
+                        onToggleShowLowStockCount(next);
+                      }
+                      recordAdminActivity(
+                        'Low-Stock Label Toggled',
+                        `"1 Left / 2 Left" label turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      showLowStockCount
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        showLowStockCount
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 3. COD Payment (Cash on Delivery) */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        COD Payment (Cash on Delivery)
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          codEnabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {codEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      {codEnabled
+                        ? 'COD enabled alongside Whish/OMT in checkout.'
+                        : 'Standard Delivery uses Whish/OMT Payment only.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={codEnabled}
+                    data-testid="dashboard-toggle-cod-payment"
+                    aria-label="Toggle COD Payment On or Off"
+                    onClick={() => {
+                      const next = !codEnabled;
+                      if (onToggleCodEnabled) {
+                        onToggleCodEnabled(next);
+                      }
+                      recordAdminActivity(
+                        'Checkout Payment Updated',
+                        `COD (Cash on Delivery) turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      codEnabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        codEnabled
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 4. Auto-Accept Incoming Orders */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Auto-Accept Incoming Orders
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          autoAcceptOrders
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {autoAcceptOrders ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      Automatically approve incoming orders &amp; deduct stock.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoAcceptOrders}
+                    data-testid="dashboard-toggle-auto-accept-orders"
+                    aria-label="Toggle Auto-Accept Orders On or Off"
+                    onClick={() => {
+                      const next = !autoAcceptOrders;
+                      onToggleAutoAcceptOrders(next);
+                      recordAdminActivity(
+                        'Auto-Accept Orders Toggled',
+                        `Auto-Accept Orders turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      autoAcceptOrders
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        autoAcceptOrders
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 5. Newsletter Welcome Pop-Up */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Newsletter Welcome Pop-Up
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          newsletterPopupConfig.enabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {newsletterPopupConfig.enabled ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      {newsletterPopupConfig.enabled
+                        ? `Active · Pops after ${newsletterPopupConfig.delaySeconds}s (${newsletterPopupConfig.maxTimesPerDay}x/day).`
+                        : 'Hidden on Homepage.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={newsletterPopupConfig.enabled}
+                    data-testid="dashboard-toggle-newsletter-popup"
+                    aria-label="Toggle Homepage Newsletter Pop-Up On or Off"
+                    onClick={async () => {
+                      const nextEnabled = !newsletterPopupConfig.enabled;
+                      await commitNewsletterPopupDraft({
+                        enabled: nextEnabled,
+                      });
+                      recordAdminActivity(
+                        'Newsletter Pop-Up Toggled',
+                        `Newsletter Welcome Pop-Up turned ${nextEnabled ? 'ON' : 'OFF'}`
+                      );
+                      setItemFeedback(
+                        nextEnabled
+                          ? '✓ Homepage Newsletter Pop-Up turned ON'
+                          : 'Homepage Newsletter Pop-Up turned OFF'
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      newsletterPopupConfig.enabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        newsletterPopupConfig.enabled
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 6. Product Size Guides (Master Switch) */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Product Size Guides
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          currentSizeConfig.masterEnabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {currentSizeConfig.masterEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                      {currentSizeConfig.masterEnabled
+                        ? 'Size Guide drawers visible on product pop-ups & FAQ.'
+                        : 'All Size Guides hidden across live website.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={currentSizeConfig.masterEnabled}
+                    data-testid="dashboard-toggle-size-guides"
+                    aria-label="Toggle Product Size Guides Master Switch On or Off"
+                    onClick={() => {
+                      const next = !currentSizeConfig.masterEnabled;
+                      handleToggleMasterSizeGuide();
+                      recordAdminActivity(
+                        'Size Guides Toggled',
+                        `Product Size Guides turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      currentSizeConfig.masterEnabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        currentSizeConfig.masterEnabled
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================================
               SECTION 1 & 2: DASHBOARD OVERVIEW & ITEMS / PRODUCTS CATALOG
               (Matches Reference Image: Welcome Back, Admin! + Add Product / Add Category
                + Quick Categories + Products List with In-Stock Toggle, Edit, Delete)
@@ -3864,492 +4412,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
               </div>
-
-              {/* Unified Store Quick Toggles & Controls Section (First Section: activeTab === 'dashboard') */}
-              {activeTab === 'dashboard' && (
-                <div
-                  data-testid="admin-unified-quick-toggles"
-                  className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
-                          Store Quick Toggles &amp; Controls
-                        </h2>
-                        <p className="text-[11px] text-zinc-400">
-                          All 6 live website &amp; checkout switches in one place — synced across Cloudflare &amp; all devices
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {/* 1. Auto-Shrink Product Uploads (60%–70% Smaller) */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            Auto-Shrink Product Uploads
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              shrinkUploadsEnabled
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {shrinkUploadsEnabled ? 'ON · 60%–70%' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          {shrinkUploadsEnabled
-                            ? 'Shrinking uploads by 60%–70% (e.g. 2 MB → 500–800 KB).'
-                            : 'Uploading original full-resolution files.'}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={shrinkUploadsEnabled}
-                        data-testid="toggle-shrink-uploads"
-                        aria-label="Toggle Auto-Shrink Image Uploads On or Off"
-                        onClick={() => {
-                          const next = !shrinkUploadsEnabled;
-                          handleToggleShrinkUploads();
-                          recordAdminActivity(
-                            'Auto-Shrink Uploads Toggled',
-                            `Auto-Shrink Product Uploads turned ${next ? 'ON' : 'OFF'}`
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          shrinkUploadsEnabled
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            shrinkUploadsEnabled
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 2. "1 Left / 2 Left" Low-Stock Urgency Label */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            &ldquo;1 Left / 2 Left&rdquo; Low-Stock Label
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              showLowStockCount
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {showLowStockCount ? 'ON' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          {showLowStockCount
-                            ? 'Showing "1 LEFT" / "2 LEFT" inside selected size box.'
-                            : 'Low-stock count hidden on product pop-ups.'}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={showLowStockCount}
-                        data-testid="toggle-show-low-stock"
-                        aria-label="Toggle 1 left and 2 left indicator on product pop-up"
-                        onClick={() => {
-                          const next = !showLowStockCount;
-                          if (onToggleShowLowStockCount) {
-                            onToggleShowLowStockCount(next);
-                          }
-                          recordAdminActivity(
-                            'Low-Stock Label Toggled',
-                            `"1 Left / 2 Left" label turned ${next ? 'ON' : 'OFF'}`
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          showLowStockCount
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            showLowStockCount
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 3. COD Payment (Cash on Delivery) */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            COD Payment (Cash on Delivery)
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              codEnabled
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {codEnabled ? 'ON' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          {codEnabled
-                            ? 'COD enabled alongside Whish/OMT in checkout.'
-                            : 'Standard Delivery uses Whish/OMT Payment only.'}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={codEnabled}
-                        data-testid="dashboard-toggle-cod-payment"
-                        aria-label="Toggle COD Payment On or Off"
-                        onClick={() => {
-                          const next = !codEnabled;
-                          if (onToggleCodEnabled) {
-                            onToggleCodEnabled(next);
-                          }
-                          recordAdminActivity(
-                            'Checkout Payment Updated',
-                            `COD (Cash on Delivery) turned ${next ? 'ON' : 'OFF'}`
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          codEnabled
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            codEnabled
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 4. Auto-Accept Incoming Orders */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            Auto-Accept Incoming Orders
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              autoAcceptOrders
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {autoAcceptOrders ? 'ON' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          Automatically approve incoming orders &amp; deduct stock.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={autoAcceptOrders}
-                        data-testid="dashboard-toggle-auto-accept-orders"
-                        aria-label="Toggle Auto-Accept Orders On or Off"
-                        onClick={() => {
-                          const next = !autoAcceptOrders;
-                          onToggleAutoAcceptOrders(next);
-                          recordAdminActivity(
-                            'Auto-Accept Orders Toggled',
-                            `Auto-Accept Orders turned ${next ? 'ON' : 'OFF'}`
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          autoAcceptOrders
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            autoAcceptOrders
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 5. Newsletter Welcome Pop-Up */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            Newsletter Welcome Pop-Up
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              newsletterPopupConfig.enabled
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {newsletterPopupConfig.enabled ? 'ON' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          {newsletterPopupConfig.enabled
-                            ? `Active · Pops after ${newsletterPopupConfig.delaySeconds}s (${newsletterPopupConfig.maxTimesPerDay}x/day).`
-                            : 'Hidden on Homepage.'}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={newsletterPopupConfig.enabled}
-                        data-testid="dashboard-toggle-newsletter-popup"
-                        aria-label="Toggle Homepage Newsletter Pop-Up On or Off"
-                        onClick={async () => {
-                          const nextEnabled = !newsletterPopupConfig.enabled;
-                          await commitNewsletterPopupDraft({
-                            enabled: nextEnabled,
-                          });
-                          recordAdminActivity(
-                            'Newsletter Pop-Up Toggled',
-                            `Newsletter Welcome Pop-Up turned ${nextEnabled ? 'ON' : 'OFF'}`
-                          );
-                          setItemFeedback(
-                            nextEnabled
-                              ? '✓ Homepage Newsletter Pop-Up turned ON'
-                              : 'Homepage Newsletter Pop-Up turned OFF'
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          newsletterPopupConfig.enabled
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            newsletterPopupConfig.enabled
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 6. Product Size Guides (Master Switch) */}
-                    <div className="bg-zinc-900/75 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-white">
-                            Product Size Guides
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              currentSizeConfig.masterEnabled
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {currentSizeConfig.masterEnabled ? 'ON' : 'OFF'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
-                          {currentSizeConfig.masterEnabled
-                            ? 'Size Guide drawers visible on product pop-ups & FAQ.'
-                            : 'All Size Guides hidden across live website.'}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={currentSizeConfig.masterEnabled}
-                        data-testid="dashboard-toggle-size-guides"
-                        aria-label="Toggle Product Size Guides Master Switch On or Off"
-                        onClick={() => {
-                          const next = !currentSizeConfig.masterEnabled;
-                          handleToggleMasterSizeGuide();
-                          recordAdminActivity(
-                            'Size Guides Toggled',
-                            `Product Size Guides turned ${next ? 'ON' : 'OFF'}`
-                          );
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          currentSizeConfig.masterEnabled
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            currentSizeConfig.masterEnabled
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Products Tab Toggles (when viewing Items & Products directly) */}
-              {activeTab === 'items' && (
-                <>
-                  <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3.5">
-                      <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs sm:text-sm font-bold text-white">
-                            Auto-Shrink Image Uploads
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              shrinkUploadsEnabled
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-amber-950/90 text-amber-300 border border-amber-700/70'
-                            }`}
-                          >
-                            {shrinkUploadsEnabled
-                              ? 'ON · Shrinking by 60%–70% (e.g. 2 MB → 500–800 KB)'
-                              : 'OFF · Original Full Quality'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          {shrinkUploadsEnabled
-                            ? 'Uploaded item & banner photos are automatically shrunk by 60%–70% of their original file size (e.g. a 2 MB photo becomes ~500–800 KB). Turn off anytime to upload original uncompressed resolution.'
-                            : 'Image shrinking is currently turned OFF. Uploaded item & banner photos will be stored at their original resolution without shrinking.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
-                      <span className="text-xs font-semibold text-zinc-300">
-                        {shrinkUploadsEnabled ? 'Shrink ON' : 'Shrink OFF'}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={shrinkUploadsEnabled}
-                        data-testid="toggle-shrink-uploads"
-                        aria-label="Toggle Auto-Shrink Image Uploads On or Off"
-                        onClick={handleToggleShrinkUploads}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          shrinkUploadsEnabled
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            shrinkUploadsEnabled
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3.5">
-                      <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                        <Package className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs sm:text-sm font-bold text-white">
-                            Show &ldquo;1 Left / 2 Left&rdquo; on Product Pop-Up
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              showLowStockCount
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
-                            {showLowStockCount
-                              ? 'ON · Showing on Live Website'
-                              : 'OFF · Hidden on Live Website'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          {showLowStockCount
-                            ? 'Sizes with only 1 or 2 pieces remaining display "1 left" or "2 left" inside the customer product pop-up.'
-                            : 'Currently OFF — "1 left" and "2 left" low-stock counts are hidden from customers on the live website product pop-up.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
-                      <span className="text-xs font-semibold text-zinc-300">
-                        {showLowStockCount
-                          ? '1 Left / 2 Left ON'
-                          : '1 Left / 2 Left OFF'}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={showLowStockCount}
-                        data-testid="toggle-show-low-stock"
-                        aria-label="Toggle 1 left and 2 left indicator on product pop-up"
-                        onClick={() => {
-                          if (onToggleShowLowStockCount) {
-                            onToggleShowLowStockCount(!showLowStockCount);
-                          }
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                          showLowStockCount
-                            ? 'bg-white border-white'
-                            : 'bg-zinc-800 border-zinc-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                            showLowStockCount
-                              ? 'translate-x-5 bg-zinc-950'
-                              : 'translate-x-1 bg-zinc-400'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
 
               {/* Quick Categories Row (Matches Reference Image + Edit Category Name Button) */}
               <div className="space-y-2.5">
@@ -7449,140 +7511,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {orders.filter((o) => o.status === 'rejected').length}
                     </strong>
                   </span>
-                </div>
-              </div>
-
-              {/* Simple ON / OFF Toggle for Auto-Accepting Orders */}
-              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3.5">
-                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                    <ShoppingBag className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs sm:text-sm font-bold text-white">
-                        Auto-Accept Orders
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          autoAcceptOrders
-                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                            : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
-                        }`}
-                      >
-                        {autoAcceptOrders
-                          ? 'ON · Automatically Accepting Orders'
-                          : 'OFF · Manual Review'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 mt-0.5">
-                      {autoAcceptOrders
-                        ? 'Auto-Accept is turned ON. All incoming orders are automatically accepted and item stock quantities are updated immediately.'
-                        : 'Turn on to automatically accept incoming customer orders and deduct item stock without manual approval.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
-                  <span className="text-xs font-semibold text-zinc-300">
-                    {autoAcceptOrders ? 'Auto-Accept ON' : 'Auto-Accept OFF'}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={autoAcceptOrders}
-                    data-testid="toggle-auto-accept-orders"
-                    aria-label="Toggle Auto-Accept Orders On or Off"
-                    onClick={() => {
-                      const next = !autoAcceptOrders;
-                      onToggleAutoAcceptOrders(next);
-                      recordAdminActivity(
-                        'Auto-Accept Orders Toggled',
-                        `Auto-Accept Orders turned ${next ? 'ON' : 'OFF'}`
-                      );
-                    }}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                      autoAcceptOrders
-                        ? 'bg-white border-white'
-                        : 'bg-zinc-800 border-zinc-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                        autoAcceptOrders
-                          ? 'translate-x-5 bg-zinc-950'
-                          : 'translate-x-1 bg-zinc-400'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Simple ON / OFF Toggle for COD (Cash on Delivery) in Checkout */}
-              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3.5">
-                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                    <Tag className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs sm:text-sm font-bold text-white">
-                        COD Payment (Cash on Delivery)
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          codEnabled
-                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
-                            : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
-                        }`}
-                      >
-                        {codEnabled
-                          ? 'ON · COD Shown in Checkout'
-                          : 'OFF · Whish/OMT Only for Standard Delivery'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 mt-0.5">
-                      {codEnabled
-                        ? 'Clients can choose Cash on Delivery or Whish/OMT Payment at checkout.'
-                        : 'Standard Delivery preselects Whish/OMT Payment only. SAMO Showroom Pickup offers Whish/OMT Payment and SRP (Showroom Payment).'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
-                  <span className="text-xs font-semibold text-zinc-300">
-                    {codEnabled ? 'COD ON' : 'COD OFF'}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={codEnabled}
-                    data-testid="orders-toggle-cod-payment"
-                    aria-label="Toggle COD Payment On or Off"
-                    onClick={() => {
-                      const next = !codEnabled;
-                      if (onToggleCodEnabled) {
-                        onToggleCodEnabled(next);
-                      }
-                      recordAdminActivity(
-                        'Checkout Payment Updated',
-                        `COD (Cash on Delivery) turned ${next ? 'ON' : 'OFF'}`
-                      );
-                    }}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                      codEnabled
-                        ? 'bg-white border-white'
-                        : 'bg-zinc-800 border-zinc-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                        codEnabled
-                          ? 'translate-x-5 bg-zinc-950'
-                          : 'translate-x-1 bg-zinc-400'
-                      }`}
-                    />
-                  </button>
                 </div>
               </div>
 

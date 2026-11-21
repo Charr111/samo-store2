@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import {
+  AdminNotificationSyncState,
   AdminRecord,
   CartItem,
   CategoryItem,
@@ -134,6 +135,7 @@ const STORAGE_KEYS = {
   newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
   seoConfig: 'samo_seo_config_v2',
   sizeGuideConfig: 'samo_size_guide_cfg_v1',
+  adminNotificationState: 'samo_admin_notif_state_v1',
 };
 
 function sanitizeAuthorizedAdmins(list: AdminRecord[]): AdminRecord[] {
@@ -449,6 +451,16 @@ export default function App() {
   const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
     getShrinkUploadsEnabled()
   );
+  const [adminNotificationState, setAdminNotificationState] =
+    useState<AdminNotificationSyncState>(() =>
+      loadStored<AdminNotificationSyncState>(
+        STORAGE_KEYS.adminNotificationState,
+        {
+          readIds: [],
+          dismissedIds: [],
+        }
+      )
+    );
 
   // Shopping Bag & Active Sole Product Modal State
   const [cartItems, setCartItems] = useState<CartItem[]>(() =>
@@ -632,6 +644,15 @@ export default function App() {
       );
     } catch {}
   }, [codEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.adminNotificationState,
+        JSON.stringify(adminNotificationState)
+      );
+    } catch {}
+  }, [adminNotificationState]);
 
   useEffect(() => {
     setShrinkUploadsEnabled(shrinkUploadsEnabled);
@@ -875,6 +896,34 @@ export default function App() {
         if (cfg && cfg.seoConfig && typeof cfg.seoConfig === 'object') {
           setSeoConfig(cfg.seoConfig as SeoConfigState);
         }
+        if (
+          cfg &&
+          cfg.adminNotificationState &&
+          typeof cfg.adminNotificationState === 'object'
+        ) {
+          const remoteNotif =
+            cfg.adminNotificationState as Partial<AdminNotificationSyncState>;
+          setAdminNotificationState((prev) => ({
+            readIds: Array.isArray(remoteNotif.readIds)
+              ? remoteNotif.readIds.slice(-35)
+              : prev.readIds,
+            dismissedIds: Array.isArray(remoteNotif.dismissedIds)
+              ? remoteNotif.dismissedIds.slice(-35)
+              : prev.dismissedIds,
+            markedAllReadAt:
+              typeof remoteNotif.markedAllReadAt === 'string'
+                ? remoteNotif.markedAllReadAt
+                : prev.markedAllReadAt,
+            clearedAllAt:
+              typeof remoteNotif.clearedAllAt === 'string'
+                ? remoteNotif.clearedAllAt
+                : prev.clearedAllAt,
+            updatedAt:
+              typeof remoteNotif.updatedAt === 'string'
+                ? remoteNotif.updatedAt
+                : prev.updatedAt,
+          }));
+        }
       },
       () => {
         // Ignore snapshot errors when offline
@@ -1070,6 +1119,33 @@ export default function App() {
           setSizeGuideConfig(
             mergeSizeGuideConfig(data.sizeGuideConfig as Partial<SizeGuideConfig>)
           );
+        }
+        if (
+          data.adminNotificationState &&
+          typeof data.adminNotificationState === 'object'
+        ) {
+          const remoteNotif =
+            data.adminNotificationState as Partial<AdminNotificationSyncState>;
+          setAdminNotificationState((prev) => ({
+            readIds: Array.isArray(remoteNotif.readIds)
+              ? remoteNotif.readIds.slice(-35)
+              : prev.readIds,
+            dismissedIds: Array.isArray(remoteNotif.dismissedIds)
+              ? remoteNotif.dismissedIds.slice(-35)
+              : prev.dismissedIds,
+            markedAllReadAt:
+              typeof remoteNotif.markedAllReadAt === 'string'
+                ? remoteNotif.markedAllReadAt
+                : prev.markedAllReadAt,
+            clearedAllAt:
+              typeof remoteNotif.clearedAllAt === 'string'
+                ? remoteNotif.clearedAllAt
+                : prev.clearedAllAt,
+            updatedAt:
+              typeof remoteNotif.updatedAt === 'string'
+                ? remoteNotif.updatedAt
+                : prev.updatedAt,
+          }));
         }
       } catch {}
     };
@@ -2222,6 +2298,38 @@ export default function App() {
     } catch {}
   };
 
+  const handleUpdateAdminNotificationState = async (
+    nextNotifState: AdminNotificationSyncState
+  ) => {
+    const sanitized: AdminNotificationSyncState = {
+      readIds: Array.isArray(nextNotifState.readIds)
+        ? Array.from(new Set(nextNotifState.readIds)).slice(-35)
+        : [],
+      dismissedIds: Array.isArray(nextNotifState.dismissedIds)
+        ? Array.from(new Set(nextNotifState.dismissedIds)).slice(-35)
+        : [],
+      ...(nextNotifState.markedAllReadAt
+        ? { markedAllReadAt: nextNotifState.markedAllReadAt }
+        : {}),
+      ...(nextNotifState.clearedAllAt
+        ? { clearedAllAt: nextNotifState.clearedAllAt }
+        : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    setAdminNotificationState(sanitized);
+    await pushServerCatalogPatch({ adminNotificationState: sanitized });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          adminNotificationState: sanitized,
+          updatedAt: sanitized.updatedAt,
+        },
+        { merge: true }
+      );
+    } catch {}
+  };
+
   const handleAddAdminByEmail = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const record: AdminRecord = {
@@ -2768,6 +2876,8 @@ export default function App() {
           onRefreshSeoMetadata={handleRefreshSeoMetadata}
           sizeGuideConfig={sizeGuideConfig}
           onUpdateSizeGuideConfig={handleUpdateSizeGuideConfig}
+          adminNotificationState={adminNotificationState}
+          onUpdateAdminNotificationState={handleUpdateAdminNotificationState}
         />
       </React.Suspense>
     );
@@ -3024,7 +3134,7 @@ export default function App() {
                         }}
                         className="px-2 py-1 text-white text-xs sm:text-[13px] font-bold tracking-[0.18em] uppercase underline underline-offset-[7px] decoration-white/80 hover:decoration-white hover:opacity-80 transition-opacity whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        Explore Kids
+                        EXPLORE CATALOG
                       </button>
                     </div>
                   </div>
