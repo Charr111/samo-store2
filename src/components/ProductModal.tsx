@@ -1204,7 +1204,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                       ? `${subItem.productName} size ${sz} (Out of stock — click to preorder)`
                                       : `${subItem.productName} size ${sz}`
                                   }
-                                  className={`relative py-2 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
+                                  className={`relative min-h-[40px] py-2 px-2 text-[12.25px] font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
                                     isSelected && isZeroQty
                                       ? 'bg-red-950 text-white border-red-800 ring-1 ring-red-700'
                                       : isSelected
@@ -1217,12 +1217,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                   <span className={isZeroQty && !isSelected ? 'opacity-60' : ''}>
                                     {sz}
                                   </span>
-                                  {isLowQty && (
-                                    <span
-                                      className={`text-[9px] font-bold leading-none mt-0.5 ${
-                                        isSelected ? 'text-white' : 'text-zinc-950'
-                                      }`}
-                                    >
+                                  {isSelected && isLowQty && (
+                                    <span className="text-[8.7px] font-bold leading-none mt-0.5 text-white">
                                       {szQty} left
                                     </span>
                                   )}
@@ -1324,7 +1320,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             ? `Size ${size} (Out of stock — click to preorder)`
                             : `Size ${size}`
                         }
-                        className={`relative py-2.5 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
+                        className={`relative min-h-[44px] py-2.5 px-2 text-[12.25px] font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
                           isSelected && isZeroQty
                             ? 'bg-red-950 text-white border-red-800 ring-1 ring-red-700'
                             : isSelected
@@ -1337,12 +1333,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         <span className={isZeroQty && !isSelected ? 'opacity-60' : ''}>
                           {size}
                         </span>
-                        {isLowQty && (
-                          <span
-                            className={`text-[9px] font-bold leading-none mt-0.5 ${
-                              isSelected ? 'text-white' : 'text-zinc-950'
-                            }`}
-                          >
+                        {isSelected && isLowQty && (
+                          <span className="text-[8.7px] font-bold leading-none mt-0.5 text-white">
                             {sizeQty} left
                           </span>
                         )}

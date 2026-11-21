@@ -287,6 +287,10 @@ async function readFromD1(
         typeof settingsMap.shrinkUploadsEnabled === 'boolean'
           ? settingsMap.shrinkUploadsEnabled
           : true,
+      codEnabled:
+        typeof settingsMap.codEnabled === 'boolean'
+          ? settingsMap.codEnabled
+          : false,
       newsletterPopupConfig: settingsMap.newsletterPopupConfig || undefined,
       seoConfig: settingsMap.seoConfig || undefined,
       sizeGuideConfig: settingsMap.sizeGuideConfig || undefined,
@@ -600,6 +604,7 @@ async function writeToD1(
     'autoAcceptOrders',
     'showLowStockCount',
     'shrinkUploadsEnabled',
+    'codEnabled',
     'newsletterPopupConfig',
     'seoConfig',
     'sizeGuideConfig',
@@ -879,6 +884,9 @@ export const onRequestPost = async (context: {
         : {}),
       ...(typeof patch.shrinkUploadsEnabled === 'boolean'
         ? { shrinkUploadsEnabled: patch.shrinkUploadsEnabled }
+        : {}),
+      ...(typeof patch.codEnabled === 'boolean'
+        ? { codEnabled: patch.codEnabled }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,

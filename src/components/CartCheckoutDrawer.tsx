@@ -43,6 +43,7 @@ interface CartCheckoutDrawerProps {
   ) => void;
   onSelectProduct?: (product: ProductItem) => void;
   onSubmitOrder: (orderPayload: Omit<OrderItem, 'id' | 'createdAt' | 'status'>) => Promise<OrderItem>;
+  codEnabled?: boolean;
 }
 
 export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
@@ -59,6 +60,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   onAddToCart,
   onSelectProduct,
   onSubmitOrder,
+  codEnabled = false,
 }) => {
   const [step, setStep] = useState<'cart' | 'checkout' | 'confirmed'>(initialStep);
   const [customerName, setCustomerName] = useState('');
@@ -67,7 +69,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [streetAddress, setStreetAddress] = useState('');
   const [cityCountry, setCityCountry] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('Standard Delivery');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Whish/OMT Payment');
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCodeItem | null>(null);
   const [promoFeedback, setPromoFeedback] = useState('');
@@ -83,10 +85,18 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   React.useEffect(() => {
     if (isOpen) {
       setStep(initialStep);
+      setDeliveryMethod('Standard Delivery');
+      setPaymentMethod('Whish/OMT Payment');
       setFormError('');
       setPromoFeedback('');
     }
   }, [isOpen, initialStep]);
+
+  React.useEffect(() => {
+    if (!codEnabled && paymentMethod === 'COD') {
+      setPaymentMethod('Whish/OMT Payment');
+    }
+  }, [codEnabled, paymentMethod]);
 
   if (!isOpen) return null;
 
@@ -772,10 +782,13 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                           checked={deliveryMethod === opt.method}
                           onChange={() => {
                             setDeliveryMethod(opt.method);
-                            if (opt.method === 'SAMO Showroom Pickup') {
-                              setPaymentMethod('SRP');
-                            } else if (paymentMethod === 'SRP') {
-                              setPaymentMethod('COD');
+                            if (opt.method === 'Standard Delivery') {
+                              if (
+                                paymentMethod === 'SRP' ||
+                                (!codEnabled && paymentMethod === 'COD')
+                              ) {
+                                setPaymentMethod('Whish/OMT Payment');
+                              }
                             }
                           }}
                           className="accent-zinc-950"
@@ -787,7 +800,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Payment Method (COD, Whish/OMT Payment & SRP when Showroom Pickup is selected) */}
+              {/* Payment Method (Whish/OMT Payment preselected; SRP shown when Showroom Pickup is selected; COD shown when codEnabled is ON) */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-900 mb-1.5">
                   Payment Method
@@ -795,10 +808,6 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 <div className="space-y-2">
                   {(
                     [
-                      {
-                        method: 'COD' as PaymentMethod,
-                        label: 'COD (Cash on Delivery)',
-                      },
                       {
                         method: 'Whish/OMT Payment' as PaymentMethod,
                         label: 'Whish/OMT Payment',
@@ -808,6 +817,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                             {
                               method: 'SRP' as PaymentMethod,
                               label: 'SRP (Showroom Payment)',
+                            },
+                          ]
+                        : []),
+                      ...(codEnabled
+                        ? [
+                            {
+                              method: 'COD' as PaymentMethod,
+                              label: 'COD (Cash on Delivery)',
                             },
                           ]
                         : []),
@@ -995,7 +1012,11 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
               <button
                 type="button"
-                onClick={() => setStep('checkout')}
+                onClick={() => {
+                  setDeliveryMethod('Standard Delivery');
+                  setPaymentMethod('Whish/OMT Payment');
+                  setStep('checkout');
+                }}
                 className="w-full py-3 px-5 bg-zinc-950 text-white text-xs font-bold tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Proceed to Order Details</span>

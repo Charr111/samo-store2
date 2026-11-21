@@ -44,6 +44,7 @@ interface PersistedCatalogState {
   autoAcceptOrders?: boolean;
   showLowStockCount?: boolean;
   shrinkUploadsEnabled?: boolean;
+  codEnabled?: boolean;
   newsletterSubscribers?: unknown[];
   newsletterPopupConfig?: Record<string, unknown>;
   seoConfig?: Record<string, unknown>;
@@ -295,6 +296,9 @@ async function startServer() {
         : {}),
       ...(typeof body.shrinkUploadsEnabled === 'boolean'
         ? { shrinkUploadsEnabled: body.shrinkUploadsEnabled }
+        : {}),
+      ...(typeof body.codEnabled === 'boolean'
+        ? { codEnabled: body.codEnabled }
         : {}),
       ...(Array.isArray(body.newsletterSubscribers)
         ? { newsletterSubscribers: body.newsletterSubscribers }

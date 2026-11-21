@@ -488,6 +488,8 @@ interface AdminDashboardProps {
   onDeleteOrder: (orderId: string) => Promise<void>;
   autoAcceptOrders: boolean;
   onToggleAutoAcceptOrders: (nextEnabled: boolean) => Promise<void>;
+  codEnabled?: boolean;
+  onToggleCodEnabled?: (nextEnabled: boolean) => Promise<void>;
   showLowStockCount?: boolean;
   onToggleShowLowStockCount?: (nextEnabled: boolean) => Promise<void>;
   shrinkUploadsEnabled?: boolean;
@@ -546,6 +548,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteOrder,
   autoAcceptOrders,
   onToggleAutoAcceptOrders,
+  codEnabled = false,
+  onToggleCodEnabled,
   showLowStockCount = false,
   onToggleShowLowStockCount,
   shrinkUploadsEnabled: shrinkUploadsEnabledProp,
@@ -1912,6 +1916,500 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     [validPreorders]
   );
 
+  // ============================================================================
+  // ADMIN OUT-OF-STOCK ORDER ALERTS & NOTIFICATION CENTER (ZERO CLOUDFLARE QUOTA)
+  // ============================================================================
+  const getOrderStockAlerts = React.useCallback(
+    (
+      order: OrderItem
+    ): Array<{
+      id: string;
+      type: 'product' | 'size';
+      productName: string;
+      sizeLabel: string;
+      message: string;
+    }> => {
+      const alerts: Array<{
+        id: string;
+        type: 'product' | 'size';
+        productName: string;
+        sizeLabel: string;
+        message: string;
+      }> = [];
+      const seenIds = new Set<string>();
+
+      const itemsToCheck =
+        Array.isArray(order.orderedItems) && order.orderedItems.length > 0
+          ? order.orderedItems
+          : [
+              {
+                productId: '',
+                productName: order.primaryProductName || '',
+                selectedSize: order.primaryProductSize || '',
+                selectedColor: undefined,
+                selectedSetSizes: undefined,
+                quantity: 1,
+                unitPrice: order.totalPrice,
+              },
+            ];
+
+      for (const oi of itemsToCheck) {
+        const liveProd = products.find(
+          (p) =>
+            (oi.productId && p.id === oi.productId) ||
+            (oi.productName &&
+              p.name.trim().toLowerCase() ===
+                oi.productName.trim().toLowerCase())
+        );
+        if (!liveProd) continue;
+
+        const hasColors =
+          Boolean(liveProd.hasColors) &&
+          Array.isArray(liveProd.colorVariants) &&
+          liveProd.colorVariants.length > 0;
+        const totalProductQty = hasColors
+          ? syncProductFromColorVariants(
+              liveProd.colorVariants!,
+              liveProd.sizeType
+            ).quantity
+          : sumSizeQuantities(liveProd.sizes, liveProd.sizeQuantities);
+
+        const isEntireProductOut = !liveProd.inStock || totalProductQty <= 0;
+
+        if (isEntireProductOut) {
+          const alertId = `${order.id}-${liveProd.id}-product-out`;
+          if (!seenIds.has(alertId)) {
+            seenIds.add(alertId);
+            alerts.push({
+              id: alertId,
+              type: 'product',
+              productName: liveProd.name,
+              sizeLabel: oi.selectedSize || 'All Sizes',
+              message: `ENTIRE PRODUCT OUT OF STOCK — ${liveProd.name} has 0 total quantity left across all sizes`,
+            });
+          }
+          continue;
+        }
+
+        // Check specific ordered size (or color + size)
+        const cleanSize = String(oi.selectedSize || '').trim();
+        if (cleanSize && !cleanSize.includes(':')) {
+          let sizeQty = 0;
+          if (hasColors && oi.selectedColor) {
+            const matchedVariant = liveProd.colorVariants!.find(
+              (v) =>
+                v.colorName.trim().toLowerCase() ===
+                oi.selectedColor!.trim().toLowerCase()
+            );
+            sizeQty = matchedVariant
+              ? Number(matchedVariant.sizeQuantities?.[cleanSize] ?? 0)
+              : Number(liveProd.sizeQuantities?.[cleanSize] ?? 0);
+          } else {
+            sizeQty = Number(liveProd.sizeQuantities?.[cleanSize] ?? 0);
+          }
+
+          if (sizeQty <= 0) {
+            const alertId = `${order.id}-${liveProd.id}-${cleanSize}-${oi.selectedColor || 'std'}-size-out`;
+            if (!seenIds.has(alertId)) {
+              seenIds.add(alertId);
+              alerts.push({
+                id: alertId,
+                type: 'size',
+                productName: liveProd.name,
+                sizeLabel: cleanSize,
+                message: `SIZE OUT OF STOCK — ${liveProd.name} (Size ${cleanSize}${oi.selectedColor ? ` · ${oi.selectedColor}` : ''}) now has 0 quantity left`,
+              });
+            }
+          }
+        }
+
+        // Check Full Set linked pieces if ordered item is a Full Set
+        if (
+          liveProd.isFullSet &&
+          Array.isArray(oi.selectedSetSizes) &&
+          oi.selectedSetSizes.length > 0
+        ) {
+          for (const chosenPiece of oi.selectedSetSizes) {
+            const chosenPieceSize = chosenPiece.selectedSize;
+            if (!chosenPieceSize) continue;
+            const linkedPieceProd = chosenPiece.productId
+              ? products.find((p) => p.id === chosenPiece.productId)
+              : null;
+            if (linkedPieceProd) {
+              const pieceTotalQty = sumSizeQuantities(
+                linkedPieceProd.sizes,
+                linkedPieceProd.sizeQuantities
+              );
+              const pieceSizeQty = Number(
+                linkedPieceProd.sizeQuantities?.[chosenPieceSize] ?? 0
+              );
+              if (!linkedPieceProd.inStock || pieceTotalQty <= 0) {
+                const alertId = `${order.id}-${linkedPieceProd.id}-product-out`;
+                if (!seenIds.has(alertId)) {
+                  seenIds.add(alertId);
+                  alerts.push({
+                    id: alertId,
+                    type: 'product',
+                    productName: linkedPieceProd.name,
+                    sizeLabel: chosenPieceSize,
+                    message: `ENTIRE PRODUCT OUT OF STOCK — ${linkedPieceProd.name} has 0 total quantity left across all sizes`,
+                  });
+                }
+              } else if (pieceSizeQty <= 0) {
+                const alertId = `${order.id}-${linkedPieceProd.id}-${chosenPieceSize}-size-out`;
+                if (!seenIds.has(alertId)) {
+                  seenIds.add(alertId);
+                  alerts.push({
+                    id: alertId,
+                    type: 'size',
+                    productName: linkedPieceProd.name,
+                    sizeLabel: chosenPieceSize,
+                    message: `SIZE OUT OF STOCK — ${linkedPieceProd.name} (Size ${chosenPieceSize}) now has 0 quantity left`,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return alerts;
+    },
+    [products]
+  );
+
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] =
+    useState<boolean>(false);
+  const [notificationFilter, setNotificationFilter] = useState<
+    'all' | 'out_of_stock' | 'orders' | 'activity'
+  >('all');
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('samo_admin_sound_alerts_v1') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(
+    () => {
+      try {
+        const raw = localStorage.getItem('samo_admin_read_notifs_v1');
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+  );
+  const [adminActivityLog, setAdminActivityLog] = useState<
+    Array<{
+      id: string;
+      title: string;
+      detail: string;
+      createdAt: string;
+    }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('samo_admin_activity_log_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playAdminNotificationChime = React.useCallback(
+    (forcePlay = false) => {
+      if (!forcePlay && !soundAlertsEnabled) return;
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioCtx();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        const now = ctx.currentTime;
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc1.type = 'sine';
+        osc2.type = 'sine';
+        osc1.frequency.setValueAtTime(880, now); // A5
+        osc2.frequency.setValueAtTime(1318.5, now + 0.11); // E6
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 0.12);
+        osc2.start(now + 0.11);
+        osc2.stop(now + 0.35);
+      } catch {
+        // Ignore if browser blocked audio before first tap
+      }
+    },
+    [soundAlertsEnabled]
+  );
+
+  // Unlock AudioContext on first admin tap/click (iPhone Safari & Android Chrome requirement)
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioCtx();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume().catch(() => {});
+        }
+      } catch {}
+    };
+    window.addEventListener('pointerdown', unlockAudio, {
+      once: true,
+      passive: true,
+    });
+    return () => window.removeEventListener('pointerdown', unlockAudio);
+  }, []);
+
+  const recordAdminActivity = React.useCallback(
+    (title: string, detail: string) => {
+      const cleanDetail = detail.replace(/^✓\s*/, '').trim();
+      if (!cleanDetail) return;
+      setAdminActivityLog((prev) => {
+        if (prev[0]?.detail === cleanDetail) return prev;
+        const entry = {
+          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title,
+          detail: cleanDetail,
+          createdAt: new Date().toISOString(),
+        };
+        const next = [entry, ...prev].slice(0, 35);
+        try {
+          localStorage.setItem(
+            'samo_admin_activity_log_v1',
+            JSON.stringify(next)
+          );
+        } catch {}
+        return next;
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (itemFeedback && !itemFeedback.toLowerCase().includes('cannot')) {
+      recordAdminActivity('Catalog Item Updated', itemFeedback);
+    }
+  }, [itemFeedback, recordAdminActivity]);
+
+  useEffect(() => {
+    if (catFeedback && !catFeedback.toLowerCase().includes('please')) {
+      recordAdminActivity('Category / Feed Banner Updated', catFeedback);
+    }
+  }, [catFeedback, recordAdminActivity]);
+
+  useEffect(() => {
+    if (bannerFeedback) {
+      recordAdminActivity('Site Banner / Media Updated', bannerFeedback);
+    }
+  }, [bannerFeedback, recordAdminActivity]);
+
+  const adminNotifications = useMemo(() => {
+    const list: Array<{
+      id: string;
+      category: 'out_of_stock' | 'orders' | 'activity';
+      badgeLabel: string;
+      badgeTone: 'red' | 'amber' | 'emerald' | 'zinc';
+      title: string;
+      detail: string;
+      timestamp: string;
+      orderId?: string;
+      productId?: string;
+    }> = [];
+
+    // 1. Out-of-stock alerts triggered on orders
+    for (const ord of orders.slice(0, 25)) {
+      const stockAlerts = getOrderStockAlerts(ord);
+      for (const st of stockAlerts) {
+        list.push({
+          id: `notif-stock-${st.id}`,
+          category: 'out_of_stock',
+          badgeLabel:
+            st.type === 'product'
+              ? 'ENTIRE PRODUCT OUT OF STOCK'
+              : 'SIZE OUT OF STOCK',
+          badgeTone: st.type === 'product' ? 'red' : 'amber',
+          title: `${st.productName}${st.type === 'size' ? ` (Size ${st.sizeLabel})` : ''}`,
+          detail: `${st.message} · Order ${ord.orderNumber} (${ord.customerName})`,
+          timestamp: ord.createdAt,
+          orderId: ord.id,
+        });
+      }
+    }
+
+    // 2. Client Orders (Pending & Recent Accepted)
+    for (const ord of orders.slice(0, 20)) {
+      const stockAlerts = getOrderStockAlerts(ord);
+      const stockSuffix =
+        stockAlerts.length > 0
+          ? ` · ⚠ ${stockAlerts.map((a) => (a.type === 'product' ? `${a.productName} 0 total stock left` : `${a.productName} Size ${a.sizeLabel} 0 left`)).join(', ')}`
+          : '';
+      list.push({
+        id: `notif-order-${ord.id}-${ord.status}`,
+        category: 'orders',
+        badgeLabel:
+          ord.status === 'pending'
+            ? 'NEW ORDER · PENDING'
+            : ord.status === 'accepted'
+            ? 'ORDER ACCEPTED'
+            : 'ORDER REJECTED',
+        badgeTone:
+          ord.status === 'pending'
+            ? 'amber'
+            : ord.status === 'accepted'
+            ? 'emerald'
+            : 'red',
+        title: `${ord.orderNumber} — ${ord.customerName} ($${ord.totalPrice.toLocaleString()})`,
+        detail: `${ord.itemsSummary} · ${ord.paymentMethod || 'Whish/OMT Payment'}${stockSuffix}`,
+        timestamp: ord.createdAt,
+        orderId: ord.id,
+      });
+    }
+
+    // 3. Pending Preorders for Out-of-Stock Sizes
+    for (const pre of pendingPreorders.slice(0, 10)) {
+      list.push({
+        id: `notif-preorder-${pre.id}`,
+        category: 'orders',
+        badgeLabel: 'PREORDER REQUEST',
+        badgeTone: 'amber',
+        title: `${pre.productName} — Requested Size ${pre.selectedSize}`,
+        detail: `Client Contact: ${pre.customerContact}${pre.selectedColor ? ` · Color: ${pre.selectedColor}` : ''}`,
+        timestamp: pre.createdAt,
+      });
+    }
+
+    // 4. Catalog products currently completely out of stock
+    for (const prod of products) {
+      const hasColors =
+        Boolean(prod.hasColors) &&
+        Array.isArray(prod.colorVariants) &&
+        prod.colorVariants.length > 0;
+      const totalQty = hasColors
+        ? syncProductFromColorVariants(prod.colorVariants!, prod.sizeType)
+            .quantity
+        : sumSizeQuantities(prod.sizes, prod.sizeQuantities);
+      if (!prod.inStock || totalQty <= 0) {
+        list.push({
+          id: `notif-cat-oos-${prod.id}`,
+          category: 'out_of_stock',
+          badgeLabel: 'CATALOG OUT OF STOCK',
+          badgeTone: 'red',
+          title: `${prod.name} (${prod.department.toUpperCase()} · ${prod.category})`,
+          detail: `0 total quantity left across all sizes (${prod.sizes.join(', ')})`,
+          timestamp: new Date().toISOString(),
+          productId: prod.id,
+        });
+      }
+    }
+
+    // 5. Admin & Catalog Activity Log (Product Added, Stock Updated, Image Uploaded, Toggles)
+    for (const act of adminActivityLog) {
+      list.push({
+        id: act.id,
+        category: 'activity',
+        badgeLabel: 'ADMIN ACTIVITY',
+        badgeTone: 'zinc',
+        title: act.title,
+        detail: act.detail,
+        timestamp: act.createdAt,
+      });
+    }
+
+    return list;
+  }, [
+    orders,
+    pendingPreorders,
+    products,
+    adminActivityLog,
+    getOrderStockAlerts,
+  ]);
+
+  const unreadNotificationsCount = useMemo(
+    () =>
+      adminNotifications.filter((n) => !readNotificationIds.includes(n.id))
+        .length,
+    [adminNotifications, readNotificationIds]
+  );
+
+  // Trigger Web Audio chime + native browser notification when a new order or out-of-stock alert arrives
+  const prevAlertSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    const highPriorityIds = adminNotifications
+      .filter((n) => n.category === 'orders' || n.category === 'out_of_stock')
+      .map((n) => n.id)
+      .join('|');
+    if (prevAlertSignatureRef.current === null) {
+      prevAlertSignatureRef.current = highPriorityIds;
+      return;
+    }
+    if (
+      highPriorityIds &&
+      highPriorityIds !== prevAlertSignatureRef.current
+    ) {
+      const prevSet = new Set(prevAlertSignatureRef.current.split('|'));
+      const newlyAdded = adminNotifications.find(
+        (n) =>
+          (n.category === 'orders' || n.category === 'out_of_stock') &&
+          !prevSet.has(n.id)
+      );
+      prevAlertSignatureRef.current = highPriorityIds;
+      if (newlyAdded) {
+        playAdminNotificationChime(false);
+        if (
+          typeof window !== 'undefined' &&
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ) {
+          try {
+            new Notification(`SAMO Admin: ${newlyAdded.badgeLabel}`, {
+              body: `${newlyAdded.title} — ${newlyAdded.detail}`,
+            });
+          } catch {}
+        }
+      }
+    }
+  }, [adminNotifications, playAdminNotificationChime]);
+
+  const handleMarkAllNotificationsRead = () => {
+    const allIds = adminNotifications.map((n) => n.id);
+    setReadNotificationIds(allIds);
+    try {
+      localStorage.setItem(
+        'samo_admin_read_notifs_v1',
+        JSON.stringify(allIds)
+      );
+    } catch {}
+  };
+
   const currentSizeConfig = sizeGuideConfig || DEFAULT_SIZE_GUIDE_CONFIG;
 
   const handleUpdateCurrentSizeConfig = (
@@ -2724,15 +3222,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSelectNav('orders')}
-                aria-label="View pending orders"
-                title="Client Orders Queue"
-                className="relative p-2 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer shrink-0"
+                onClick={() => setIsNotificationCenterOpen((prev) => !prev)}
+                aria-label="Open Admin Notification Center"
+                data-testid="admin-notification-bell-btn"
+                title="Admin Notification Center (Orders, Out-of-Stock Alerts & Activity)"
+                className="relative p-2 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer shrink-0 transition-colors"
               >
                 <BellRing className="w-4 h-4" />
-                {pendingOrders.length + pendingPreorders.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-zinc-950 text-[9px] font-bold flex items-center justify-center">
-                    {pendingOrders.length + pendingPreorders.length}
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-white text-zinc-950 text-[9px] font-bold flex items-center justify-center">
+                    {unreadNotificationsCount > 99
+                      ? '99+'
+                      : unreadNotificationsCount}
                   </span>
                 )}
               </button>
@@ -3216,9 +3717,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           aria-checked={autoAcceptOrders}
                           data-testid="dashboard-toggle-auto-accept-orders"
                           aria-label="Toggle Auto-Accept Orders On or Off"
-                          onClick={() =>
-                            onToggleAutoAcceptOrders(!autoAcceptOrders)
-                          }
+                          onClick={() => {
+                            const next = !autoAcceptOrders;
+                            onToggleAutoAcceptOrders(next);
+                            recordAdminActivity(
+                              'Auto-Accept Orders Toggled',
+                              `Auto-Accept Orders turned ${next ? 'ON' : 'OFF'}`
+                            );
+                          }}
                           className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
                             autoAcceptOrders
                               ? 'bg-white border-white'
@@ -3235,8 +3741,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       </div>
 
+                      {/* COD (Cash on Delivery) Payment Toggle in First Section */}
+                      <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-white">
+                              COD Payment (Cash on Delivery)
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                codEnabled
+                                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                                  : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                              }`}
+                            >
+                              {codEnabled ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">
+                            {codEnabled
+                              ? 'COD is enabled alongside Whish/OMT in checkout.'
+                              : 'Standard Delivery uses Whish/OMT Payment only (Showroom Pickup offers Whish/OMT & SRP).'}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={codEnabled}
+                          data-testid="dashboard-toggle-cod-payment"
+                          aria-label="Toggle COD Payment On or Off"
+                          onClick={() => {
+                            const next = !codEnabled;
+                            if (onToggleCodEnabled) {
+                              onToggleCodEnabled(next);
+                            }
+                            recordAdminActivity(
+                              'Checkout Payment Updated',
+                              `COD (Cash on Delivery) turned ${next ? 'ON' : 'OFF'}`
+                            );
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                            codEnabled
+                              ? 'bg-white border-white'
+                              : 'bg-zinc-800 border-zinc-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                              codEnabled
+                                ? 'translate-x-5 bg-zinc-950'
+                                : 'translate-x-1 bg-zinc-400'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
                       <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl divide-y divide-zinc-800/80 overflow-hidden">
-                        {orders.slice(0, 4).map((ord) => (
+                        {orders.slice(0, 4).map((ord) => {
+                          const ordStockAlerts = getOrderStockAlerts(ord);
+                          return (
                           <div key={ord.id} className="p-4 space-y-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-bold text-white">
@@ -3249,6 +3813,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <p className="text-[11px] text-zinc-400 line-clamp-2">
                               {ord.orderNumber} · {ord.itemsSummary}
                             </p>
+                            {ordStockAlerts.length > 0 && (
+                              <div className="space-y-1 pt-0.5">
+                                {ordStockAlerts.map((alert) => (
+                                  <div
+                                    key={alert.id}
+                                    data-testid="admin-order-stock-alert"
+                                    className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold tracking-wide flex items-start gap-1.5 ${
+                                      alert.type === 'product'
+                                        ? 'bg-red-950/85 border-red-700/80 text-red-200'
+                                        : 'bg-amber-950/85 border-amber-700/80 text-amber-200'
+                                    }`}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                    <span>{alert.message}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             <div className="flex items-center justify-between pt-1">
                               <span
                                 className={`text-[10px] font-bold uppercase tracking-wider ${
@@ -3300,19 +3882,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 >
                                   Approve
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onUpdateOrderStatus(ord.id, 'rejected')
-                                  }
-                                  className="text-zinc-400 hover:text-red-400 cursor-pointer"
-                                >
-                                  Reject
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateOrderStatus(ord.id, 'rejected')
+                                    }
+                                    className="text-zinc-400 hover:text-red-400 cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -6119,7 +6702,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     aria-checked={autoAcceptOrders}
                     data-testid="toggle-auto-accept-orders"
                     aria-label="Toggle Auto-Accept Orders On or Off"
-                    onClick={() => onToggleAutoAcceptOrders(!autoAcceptOrders)}
+                    onClick={() => {
+                      const next = !autoAcceptOrders;
+                      onToggleAutoAcceptOrders(next);
+                      recordAdminActivity(
+                        'Auto-Accept Orders Toggled',
+                        `Auto-Accept Orders turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
                       autoAcceptOrders
                         ? 'bg-white border-white'
@@ -6129,6 +6719,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
                         autoAcceptOrders
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Simple ON / OFF Toggle for COD (Cash on Delivery) in Checkout */}
+              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                    <Tag className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        COD Payment (Cash on Delivery)
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          codEnabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {codEnabled
+                          ? 'ON · COD Shown in Checkout'
+                          : 'OFF · Whish/OMT Only for Standard Delivery'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {codEnabled
+                        ? 'Clients can choose Cash on Delivery or Whish/OMT Payment at checkout.'
+                        : 'Standard Delivery preselects Whish/OMT Payment only. SAMO Showroom Pickup offers Whish/OMT Payment and SRP (Showroom Payment).'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
+                  <span className="text-xs font-semibold text-zinc-300">
+                    {codEnabled ? 'COD ON' : 'COD OFF'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={codEnabled}
+                    data-testid="orders-toggle-cod-payment"
+                    aria-label="Toggle COD Payment On or Off"
+                    onClick={() => {
+                      const next = !codEnabled;
+                      if (onToggleCodEnabled) {
+                        onToggleCodEnabled(next);
+                      }
+                      recordAdminActivity(
+                        'Checkout Payment Updated',
+                        `COD (Cash on Delivery) turned ${next ? 'ON' : 'OFF'}`
+                      );
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      codEnabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        codEnabled
                           ? 'translate-x-5 bg-zinc-950'
                           : 'translate-x-1 bg-zinc-400'
                       }`}
@@ -6250,6 +6908,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="text-[11px] text-zinc-400 leading-relaxed break-words">
                           {order.itemsSummary}
                         </div>
+                        {(() => {
+                          const orderStockAlerts = getOrderStockAlerts(order);
+                          if (orderStockAlerts.length === 0) return null;
+                          return (
+                            <div className="space-y-1.5 pt-1">
+                              {orderStockAlerts.map((alert) => (
+                                <div
+                                  key={alert.id}
+                                  data-testid="orders-tab-stock-alert"
+                                  className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold tracking-wide flex items-start gap-1.5 ${
+                                    alert.type === 'product'
+                                      ? 'bg-red-950/85 border-red-700/80 text-red-200'
+                                      : 'bg-amber-950/85 border-amber-700/80 text-amber-200'
+                                  }`}
+                                >
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                  <span>{alert.message}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         <div className="pt-1 flex flex-wrap items-center gap-2 font-mono-tabular text-[11px] text-zinc-300">
                           <span>
                             Subtotal:{' '}
@@ -7966,6 +8646,263 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           );
         })}
       </nav>
+
+      {/* =========================================================================
+          POP-UP MODAL 0: ADMIN NOTIFICATION CENTER POP-UP (Orders, Out-of-Stock & Activity)
+         ========================================================================= */}
+      {isNotificationCenterOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-notification-center-title"
+          data-testid="admin-notification-center-modal"
+          onClick={() => setIsNotificationCenterOpen(false)}
+          className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-xl w-full mt-10 sm:mt-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+          >
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                  <BellRing className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3
+                    id="admin-notification-center-title"
+                    className="text-sm sm:text-base font-bold text-white truncate"
+                  >
+                    Admin Notification Center
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 truncate">
+                    Live Out-of-Stock Alerts, Client Orders &amp; Admin Activity
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsNotificationCenterOpen(false)}
+                aria-label="Close Notification Center"
+                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sound Chime Control Bar (iPhone, Android, Mac & Desktop) */}
+            <div className="px-4 sm:px-5 py-3 bg-zinc-900/70 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !soundAlertsEnabled;
+                    setSoundAlertsEnabled(next);
+                    try {
+                      localStorage.setItem(
+                        'samo_admin_sound_alerts_v1',
+                        next ? 'true' : 'false'
+                      );
+                    } catch {}
+                    if (next) {
+                      playAdminNotificationChime(true);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors ${
+                    soundAlertsEnabled
+                      ? 'bg-emerald-950/80 border-emerald-700/80 text-emerald-300'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                  }`}
+                >
+                  Sound Alerts: {soundAlertsEnabled ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playAdminNotificationChime(true);
+                    if (
+                      typeof window !== 'undefined' &&
+                      'Notification' in window &&
+                      Notification.permission === 'default'
+                    ) {
+                      Notification.requestPermission().catch(() => {});
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-[11px] font-semibold cursor-pointer transition-colors"
+                >
+                  Test Sound
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {unreadNotificationsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllNotificationsRead}
+                    className="text-[11px] font-semibold text-zinc-300 hover:text-white underline cursor-pointer"
+                  >
+                    Mark All Read ({unreadNotificationsCount})
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="px-4 sm:px-5 py-2.5 border-b border-zinc-800 flex items-center gap-1.5 overflow-x-auto">
+              {(
+                [
+                  {
+                    id: 'all',
+                    label: `All (${adminNotifications.length})`,
+                  },
+                  {
+                    id: 'out_of_stock',
+                    label: `Out of Stock (${adminNotifications.filter((n) => n.category === 'out_of_stock').length})`,
+                  },
+                  {
+                    id: 'orders',
+                    label: `Orders (${adminNotifications.filter((n) => n.category === 'orders').length})`,
+                  },
+                  {
+                    id: 'activity',
+                    label: `Admin Activity (${adminNotifications.filter((n) => n.category === 'activity').length})`,
+                  },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setNotificationFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer transition-colors ${
+                    notificationFilter === tab.id
+                      ? 'bg-white text-zinc-950'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Notification Items List */}
+            <div className="divide-y divide-zinc-800/80 overflow-y-auto flex-1">
+              {adminNotifications.filter((n) =>
+                notificationFilter === 'all'
+                  ? true
+                  : n.category === notificationFilter
+              ).length === 0 ? (
+                <div className="p-10 text-center text-xs text-zinc-400 uppercase tracking-wider">
+                  No notifications in this view.
+                </div>
+              ) : (
+                adminNotifications
+                  .filter((n) =>
+                    notificationFilter === 'all'
+                      ? true
+                      : n.category === notificationFilter
+                  )
+                  .map((notif) => {
+                    const isUnread = !readNotificationIds.includes(notif.id);
+                    return (
+                      <div
+                        key={notif.id}
+                        className={`p-4 space-y-1.5 transition-colors ${
+                          isUnread ? 'bg-zinc-900/50' : 'bg-[#18181C]'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                              notif.badgeTone === 'red'
+                                ? 'bg-red-950/90 border-red-700/80 text-red-200'
+                                : notif.badgeTone === 'amber'
+                                ? 'bg-amber-950/90 border-amber-700/80 text-amber-200'
+                                : notif.badgeTone === 'emerald'
+                                ? 'bg-emerald-950/90 border-emerald-700/80 text-emerald-200'
+                                : 'bg-zinc-800 border-zinc-700 text-zinc-300'
+                            }`}
+                          >
+                            {notif.badgeLabel}
+                          </span>
+                          <span className="text-[10px] text-zinc-500 font-mono-tabular">
+                            {new Date(notif.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="text-xs sm:text-sm font-bold text-white">
+                          {notif.title}
+                        </div>
+                        <p className="text-[11px] text-zinc-300 leading-relaxed">
+                          {notif.detail}
+                        </p>
+
+                        <div className="pt-1 flex flex-wrap items-center gap-3">
+                          {notif.orderId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!readNotificationIds.includes(notif.id)) {
+                                  const nextRead = [
+                                    ...readNotificationIds,
+                                    notif.id,
+                                  ];
+                                  setReadNotificationIds(nextRead);
+                                  try {
+                                    localStorage.setItem(
+                                      'samo_admin_read_notifs_v1',
+                                      JSON.stringify(nextRead)
+                                    );
+                                  } catch {}
+                                }
+                                setIsNotificationCenterOpen(false);
+                                handleSelectNav('orders');
+                              }}
+                              className="text-[11px] font-bold text-white hover:underline cursor-pointer"
+                            >
+                              View Order in Queue →
+                            </button>
+                          )}
+                          {notif.productId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsNotificationCenterOpen(false);
+                                handleSelectNav('items');
+                                setProductStockFilter('out-of-stock');
+                              }}
+                              className="text-[11px] font-bold text-amber-300 hover:underline cursor-pointer"
+                            >
+                              View Out-of-Stock Product →
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3.5 sm:px-5 bg-zinc-900/90 border-t border-zinc-800 flex items-center justify-between gap-3">
+              <span className="text-[10px] text-zinc-400">
+                100% browser-computed · Uses 0 Resend emails &amp; 0 Cloudflare quota
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNotificationCenterOpen(false);
+                  handleSelectNav('orders');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer shrink-0"
+              >
+                Open Orders Tab
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           POP-UP MODAL 1: DELETE ITEM CONFIRMATION ("Are you sure you want to delete?")

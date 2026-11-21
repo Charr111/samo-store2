@@ -129,6 +129,7 @@ const STORAGE_KEYS = {
   siteBanners: 'samo_site_banners_v2',
   autoAcceptOrders: 'samo_auto_accept_orders_v2',
   showLowStockCount: 'samo_show_low_stock_v1',
+  codEnabled: 'samo_cod_enabled_v1',
   newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
   seoConfig: 'samo_seo_config_v2',
   sizeGuideConfig: 'samo_size_guide_cfg_v1',
@@ -441,6 +442,9 @@ export default function App() {
   const [showLowStockCount, setShowLowStockCount] = useState<boolean>(() =>
     loadStored<boolean>(STORAGE_KEYS.showLowStockCount, false)
   );
+  const [codEnabled, setCodEnabled] = useState<boolean>(() =>
+    loadStored<boolean>(STORAGE_KEYS.codEnabled, false)
+  );
   const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
     getShrinkUploadsEnabled()
   );
@@ -618,6 +622,15 @@ export default function App() {
       );
     } catch {}
   }, [showLowStockCount]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.codEnabled,
+        JSON.stringify(codEnabled)
+      );
+    } catch {}
+  }, [codEnabled]);
 
   useEffect(() => {
     setShrinkUploadsEnabled(shrinkUploadsEnabled);
@@ -840,6 +853,9 @@ export default function App() {
         if (cfg && typeof cfg.showLowStockCount === 'boolean') {
           setShowLowStockCount(cfg.showLowStockCount);
         }
+        if (cfg && typeof cfg.codEnabled === 'boolean') {
+          setCodEnabled(cfg.codEnabled);
+        }
         if (cfg && cfg.newsletterPopupConfig && typeof cfg.newsletterPopupConfig === 'object') {
           setNewsletterPopupConfig(
             mergeNewsletterPopupConfig(
@@ -902,6 +918,7 @@ export default function App() {
             admins,
             autoAcceptOrders,
             showLowStockCount,
+            codEnabled,
             shrinkUploadsEnabled,
             newsletterPopupConfig,
             seoConfig,
@@ -1014,6 +1031,9 @@ export default function App() {
         }
         if (typeof data.showLowStockCount === 'boolean') {
           setShowLowStockCount(data.showLowStockCount);
+        }
+        if (typeof data.codEnabled === 'boolean') {
+          setCodEnabled(data.codEnabled);
         }
         if (typeof data.shrinkUploadsEnabled === 'boolean') {
           setShrinkUploadsState(data.shrinkUploadsEnabled);
@@ -2178,6 +2198,21 @@ export default function App() {
     } catch {}
   };
 
+  const handleToggleCodEnabled = async (nextEnabled: boolean) => {
+    setCodEnabled(nextEnabled);
+    await pushServerCatalogPatch({ codEnabled: nextEnabled });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          codEnabled: nextEnabled,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {}
+  };
+
   const handleAddAdminByEmail = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const record: AdminRecord = {
@@ -2713,6 +2748,8 @@ export default function App() {
           onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
           showLowStockCount={showLowStockCount}
           onToggleShowLowStockCount={handleToggleShowLowStockCount}
+          codEnabled={codEnabled}
+          onToggleCodEnabled={handleToggleCodEnabled}
           shrinkUploadsEnabled={shrinkUploadsEnabled}
           onToggleShrinkUploads={handleToggleShrinkUploads}
           onUpdatePreorderStatus={handleUpdatePreorderStatus}
@@ -3526,6 +3563,7 @@ export default function App() {
           handleOpenProductModal(prod);
         }}
         onSubmitOrder={handleSubmitOrder}
+        codEnabled={codEnabled}
       />
 
       {/* HOMEPAGE 10% OFF NEWSLETTER POP-UP MODAL */}
