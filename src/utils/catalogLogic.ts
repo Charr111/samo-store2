@@ -3473,7 +3473,66 @@ export function buildOrderConfirmationEmailPayload(
   return payload;
 }
 
+/**
+ * Orders the Homepage "New Arrivals" row for the selected department ('women' | 'kids').
+ * For 'women', places "SAHARA CROC CRESCENT" 1st, keeps the previous 2nd item in 2nd position,
+ * moves the previous 1st item to 3rd position, and moves the previous 3rd item to 4th position.
+ */
+export function orderHomeNewArrivalsProducts(
+  products: ProductItem[],
+  department: Department
+): ProductItem[] {
+  const rawNewArrivals = filterNewArrivalProducts(products).filter(
+    (p) => p.department === department
+  );
 
+  if (department === 'women') {
+    const saharaProduct = products.find(
+      (p) =>
+        p.department === 'women' &&
+        p.name.trim().toLowerCase().includes('sahara croc crescent')
+    );
 
+    const listWithoutSahara = saharaProduct
+      ? rawNewArrivals.filter((p) => p.id !== saharaProduct.id)
+      : rawNewArrivals;
 
+    const prevReordered =
+      listWithoutSahara.length >= 3
+        ? [
+            listWithoutSahara[1],
+            listWithoutSahara[2],
+            listWithoutSahara[0],
+            ...listWithoutSahara.slice(3),
+          ]
+        : listWithoutSahara;
 
+    if (saharaProduct) {
+      if (prevReordered.length >= 3) {
+        return [
+          saharaProduct,
+          prevReordered[1],
+          prevReordered[0],
+          prevReordered[2],
+          ...prevReordered.slice(3),
+        ];
+      }
+      if (prevReordered.length === 2) {
+        return [saharaProduct, prevReordered[1], prevReordered[0]];
+      }
+      return [saharaProduct, ...prevReordered];
+    }
+
+    return prevReordered;
+  }
+
+  if (rawNewArrivals.length >= 3) {
+    return [
+      rawNewArrivals[1],
+      rawNewArrivals[2],
+      rawNewArrivals[0],
+      ...rawNewArrivals.slice(3),
+    ];
+  }
+  return rawNewArrivals;
+}

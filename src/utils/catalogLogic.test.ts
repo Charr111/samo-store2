@@ -2004,3 +2004,30 @@ test('hasEmailReachedPromoLimit enforces per-email promo code usage limits acros
     false
   );
 });
+
+import { orderHomeNewArrivalsProducts } from './catalogLogic';
+
+test('orderHomeNewArrivalsProducts places SAHARA CROC CRESCENT first, moves old 1st to 3rd, keeps old 2nd at 2nd, and moves old 3rd to 4th', () => {
+  const baseProd = INITIAL_PRODUCTS[0];
+  const p0 = { ...baseProd, id: 'na-0', name: 'Product L0', department: 'women' as const, isNewArrival: true };
+  const p1 = { ...baseProd, id: 'na-1', name: 'Product L1', department: 'women' as const, isNewArrival: true };
+  const p2 = { ...baseProd, id: 'na-2', name: 'Product L2', department: 'women' as const, isNewArrival: true };
+  const p3 = { ...baseProd, id: 'na-3', name: 'Product L3', department: 'women' as const, isNewArrival: true };
+  const sahara = {
+    ...baseProd,
+    id: 'w-bag-sahara',
+    name: 'SAHARA CROC CRESCENT',
+    department: 'women' as const,
+    category: 'Bags',
+    isNewArrival: false,
+  };
+
+  // Before Sahara: prevReordered was [p1, p2, p0, p3] (where p1 was 1st, p2 was 2nd, p0 was 3rd)
+  // With Sahara: Sahara is 1st, p2 (old 2nd) stays 2nd, p1 (old 1st) moves to 3rd, p0 (old 3rd) moves to 4th, followed by p3
+  const ordered = orderHomeNewArrivalsProducts([p0, p1, p2, p3, sahara], 'women');
+  assert.deepEqual(
+    ordered.map((p) => p.id),
+    ['w-bag-sahara', 'na-2', 'na-1', 'na-0', 'na-3']
+  );
+});
+

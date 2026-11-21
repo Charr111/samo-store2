@@ -63,6 +63,7 @@ import {
   mergeSiteBannersConfig,
   moveCategoryInDepartment,
   normalizeKidsCategoryName,
+  orderHomeNewArrivalsProducts,
   parseCatalogUrlState,
   parsePathnameToRoute,
   renumberDepartmentCategoriesSequentially,
@@ -766,14 +767,22 @@ export default function App() {
       window.history.replaceState({}, '', '/home');
     }
     const onPopState = (event: PopStateEvent) => {
-      setCartDrawerOpen(false);
-      setSearchQuery('');
       const stateObj = (event.state || {}) as {
         modalOpen?: boolean;
         productId?: string;
         samoBagOpen?: boolean;
+        samoCheckoutStep?: boolean;
         previousProductId?: string | null;
       };
+      if (stateObj.samoBagOpen) {
+        setCartDrawerOpen(true);
+        if (!stateObj.samoCheckoutStep) {
+          setCartDrawerInitialStep('cart');
+        }
+        return;
+      }
+      setCartDrawerOpen(false);
+      setSearchQuery('');
       const search = new URLSearchParams(window.location.search);
       const parsed = parseCatalogUrlState(
         window.location.pathname,
@@ -2631,16 +2640,11 @@ export default function App() {
     });
   }, [homeCategoryDept, womenCategories, kidsCategories, products]);
 
-  // Home New Arrivals Carousel Products filtered by Women | Kids switcher (first 3 reordered: 2nd -> 1st, 3rd -> 2nd, 1st -> 3rd)
-  const homeNewArrivalsProducts = useMemo(() => {
-    const list = filterNewArrivalProducts(products).filter(
-      (p) => p.department === homeNewArrivalsDept
-    );
-    if (list.length >= 3) {
-      return [list[1], list[2], list[0], ...list.slice(3)];
-    }
-    return list;
-  }, [products, homeNewArrivalsDept]);
+  // Home New Arrivals Carousel Products filtered by Women | Kids switcher (Women: SAHARA CROC CRESCENT 1st, old 1st -> 3rd, old 3rd -> 4th)
+  const homeNewArrivalsProducts = useMemo(
+    () => orderHomeNewArrivalsProducts(products, homeNewArrivalsDept),
+    [products, homeNewArrivalsDept]
+  );
 
   const handleNewArrivalsScroll = () => {
     const el = newArrivalsScrollRef.current;

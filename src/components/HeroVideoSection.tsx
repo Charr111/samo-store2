@@ -40,6 +40,50 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   const [isMuted, setIsMuted] = useState(true);
   const [customVideoFailed, setCustomVideoFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && window.innerHeight > 300) {
+      return window.innerHeight;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let lastWidth = window.innerWidth;
+
+    const syncMobileHeight = () => {
+      if (window.innerWidth < 768 && window.innerHeight > 300) {
+        setMobileViewportHeight(window.innerHeight);
+      } else {
+        setMobileViewportHeight(null);
+      }
+      lastWidth = window.innerWidth;
+    };
+
+    syncMobileHeight();
+
+    const handleResize = () => {
+      const currentWidth = window.innerWidth;
+      if (
+        Math.abs(currentWidth - lastWidth) > 20 ||
+        (currentWidth >= 768 && lastWidth < 768) ||
+        (currentWidth < 768 && lastWidth >= 768)
+      ) {
+        syncMobileHeight();
+      }
+    };
+
+    const handleOrientationChange = () => {
+      window.setTimeout(syncMobileHeight, 120);
+    };
+
+    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('orientationchange', handleOrientationChange, { passive: true });
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, []);
 
   const requestedVideoUrl = (videoUrl || DEFAULT_HERO_VIDEO).trim();
   const effectiveVideoUrl = customVideoFailed
@@ -149,7 +193,10 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   };
 
   return (
-    <section className="relative w-full h-[100svh] md:h-[94vh] md:min-h-[600px] md:max-h-[980px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y">
+    <section
+      style={mobileViewportHeight ? { height: `${mobileViewportHeight}px` } : undefined}
+      className="relative w-full h-[100svh] md:h-[94vh] md:min-h-[600px] md:max-h-[980px] bg-zinc-950 overflow-hidden border-b border-zinc-950 touch-pan-y"
+    >
       {/* Background Video or Admin-Selected Image Banner */}
       {!showImageBanner ? (
         <video
@@ -189,7 +236,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
 
       {/* Bottom-Right Minimalist Volume Control (Mute/Unmute when in video mode) */}
       {!showImageBanner && (
-        <div className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-5 z-20 flex items-center">
+        <div className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 z-20 flex items-center">
           <button
             type="button"
             onClick={toggleMute}
@@ -206,7 +253,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
       )}
 
       {/* Bottom-Center Campaign Title & Dual Underlined Text CTA Buttons */}
-      <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
+      <div className="absolute inset-x-0 bottom-9 sm:bottom-11 z-20 flex flex-col items-center px-4 text-center">
         {typeof title === 'string' && title.trim().length > 0 && (
           <h1
             className={`font-display text-white font-extrabold tracking-[0.14em] uppercase mb-5 leading-tight ${

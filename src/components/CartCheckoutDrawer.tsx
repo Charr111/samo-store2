@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { X, Trash2, Plus, Minus, CheckCircle2, ArrowRight, Tag } from 'lucide-react';
+import { X, Trash2, Plus, Minus, CheckCircle2, ArrowRight, Tag, ChevronUp, ChevronDown } from 'lucide-react';
 import {
   CartItem,
   DeliveryMethod,
@@ -76,6 +76,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<OrderItem | null>(null);
+  const [whishInfoOpen, setWhishInfoOpen] = useState(true);
 
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
@@ -87,6 +88,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       setStep(initialStep);
       setDeliveryMethod('Standard Delivery');
       setPaymentMethod('Whish/OMT Payment');
+      setWhishInfoOpen(true);
       setFormError('');
       setPromoFeedback('');
     }
@@ -95,21 +97,58 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   React.useEffect(() => {
     if (!codEnabled && paymentMethod === 'COD') {
       setPaymentMethod('Whish/OMT Payment');
+      setWhishInfoOpen(true);
     }
   }, [codEnabled, paymentMethod]);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleCheckoutPopState = (event: PopStateEvent) => {
+      const st = (event.state || {}) as {
+        samoBagOpen?: boolean;
+        samoCheckoutStep?: boolean;
+      };
+      if (st.samoBagOpen && !st.samoCheckoutStep) {
+        setStep('cart');
+      }
+    };
+    window.addEventListener('popstate', handleCheckoutPopState);
+    return () => window.removeEventListener('popstate', handleCheckoutPopState);
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const stepBackToCart = () => {
+    const st = (window.history.state || {}) as {
+      samoBagOpen?: boolean;
+      samoCheckoutStep?: boolean;
+    };
+    if (st.samoCheckoutStep) {
+      window.history.back();
+    } else {
+      setStep('cart');
+    }
+  };
 
   const handleDrawerTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
-    touchStartXRef.current = e.touches[0].clientX;
+    const startX = e.touches[0].clientX;
+    // Only initiate swipe-back when the gesture begins strictly at the left screen edge (<= 28px)
+    if (startX > 28) {
+      touchStartXRef.current = null;
+      touchStartYRef.current = null;
+      touchCurrentXRef.current = null;
+      touchCurrentYRef.current = null;
+      return;
+    }
+    touchStartXRef.current = startX;
     touchStartYRef.current = e.touches[0].clientY;
-    touchCurrentXRef.current = e.touches[0].clientX;
+    touchCurrentXRef.current = startX;
     touchCurrentYRef.current = e.touches[0].clientY;
   };
 
   const handleDrawerTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
+    if (e.touches.length !== 1 || touchStartXRef.current === null) return;
     touchCurrentXRef.current = e.touches[0].clientX;
     touchCurrentYRef.current = e.touches[0].clientY;
   };
@@ -117,14 +156,17 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const handleDrawerTouchEnd = () => {
     if (
       touchStartXRef.current !== null &&
+      touchStartXRef.current <= 28 &&
       touchStartYRef.current !== null &&
       touchCurrentXRef.current !== null &&
       touchCurrentYRef.current !== null
     ) {
       const deltaX = touchCurrentXRef.current - touchStartXRef.current;
       const deltaY = Math.abs(touchCurrentYRef.current - touchStartYRef.current);
-      if (deltaX > 75 && deltaX > deltaY * 1.2) {
-        if (onSwipeBack) {
+      if (deltaX > 75 && deltaY < 40 && deltaX > deltaY * 1.5) {
+        if (step === 'checkout') {
+          stepBackToCart();
+        } else if (onSwipeBack) {
           onSwipeBack();
         } else {
           onClose();
@@ -631,7 +673,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setStep('cart')}
+                  onClick={stepBackToCart}
                   className="underline text-[11px] uppercase font-bold text-zinc-950 cursor-pointer"
                 >
                   Edit Bag
@@ -782,97 +824,134 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                           checked={deliveryMethod === opt.method}
                           onChange={() => {
                             setDeliveryMethod(opt.method);
-                            if (opt.method === 'Standard Delivery') {
-                              if (
-                                paymentMethod === 'SRP' ||
-                                (!codEnabled && paymentMethod === 'COD')
-                              ) {
-                                setPaymentMethod('Whish/OMT Payment');
-                              }
-                            }
-                          }}
-                          className="accent-zinc-950"
-                        />
-                        <span>{opt.label}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                      if (opt.method === 'Standard Delivery') {
+                        if (
+                          paymentMethod === 'SRP' ||
+                          (!codEnabled && paymentMethod === 'COD')
+                        ) {
+                          setPaymentMethod('Whish/OMT Payment');
+                          setWhishInfoOpen(true);
+                        }
+                      }
+                    }}
+                    className="accent-zinc-950"
+                  />
+                  <span>{opt.label}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
 
-              {/* Payment Method (Whish/OMT Payment preselected; SRP shown when Showroom Pickup is selected; COD shown when codEnabled is ON) */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-900 mb-1.5">
-                  Payment Method
-                </label>
-                <div className="space-y-2">
-                  {(
-                    [
+        {/* Payment Method (Whish/OMT Payment preselected; SRP shown when Showroom Pickup is selected; COD shown when codEnabled is ON) */}
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-900 mb-1.5">
+            Payment Method
+          </label>
+          <div className="space-y-2">
+            {(
+              [
+                {
+                  method: 'Whish/OMT Payment' as PaymentMethod,
+                  label: 'Whish/OMT Payment',
+                },
+                ...(deliveryMethod === 'SAMO Showroom Pickup'
+                  ? [
                       {
-                        method: 'Whish/OMT Payment' as PaymentMethod,
-                        label: 'Whish/OMT Payment',
+                        method: 'SRP' as PaymentMethod,
+                        label: 'SRP (Showroom Payment)',
                       },
-                      ...(deliveryMethod === 'SAMO Showroom Pickup'
-                        ? [
-                            {
-                              method: 'SRP' as PaymentMethod,
-                              label: 'SRP (Showroom Payment)',
-                            },
-                          ]
-                        : []),
-                      ...(codEnabled
-                        ? [
-                            {
-                              method: 'COD' as PaymentMethod,
-                              label: 'COD (Cash on Delivery)',
-                            },
-                          ]
-                        : []),
                     ]
-                  ).map((opt) => (
-                    <label
-                      key={opt.method}
-                      className={`flex items-center justify-between p-2.5 border text-xs cursor-pointer ${
-                        paymentMethod === opt.method
-                          ? 'border-zinc-950 bg-zinc-50 font-semibold'
-                          : 'border-zinc-200'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          checked={paymentMethod === opt.method}
-                          onChange={() => setPaymentMethod(opt.method)}
-                          className="accent-zinc-950"
+                  : []),
+                ...(codEnabled
+                  ? [
+                      {
+                        method: 'COD' as PaymentMethod,
+                        label: 'COD (Cash on Delivery)',
+                      },
+                    ]
+                  : []),
+              ]
+            ).map((opt) => {
+              const isWhishOption = opt.method === 'Whish/OMT Payment';
+              const isSelected = paymentMethod === opt.method;
+              return (
+                <div key={opt.method} className="flex flex-col">
+                  <label
+                    className={`flex items-center justify-between p-2.5 border text-xs cursor-pointer ${
+                      isSelected
+                        ? 'border-zinc-950 bg-zinc-50 font-semibold'
+                        : 'border-zinc-200'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={isSelected}
+                        onChange={() => {
+                          setPaymentMethod(opt.method);
+                          if (opt.method === 'Whish/OMT Payment') {
+                            setWhishInfoOpen(true);
+                          }
+                        }}
+                        className="accent-zinc-950"
+                      />
+                      <span>{opt.label}</span>
+                    </span>
+                    {isWhishOption && (
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <img
+                          src="https://images.samoweave.com/logo/samo-whish-.png"
+                          alt="Whish"
+                          className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
                         />
-                        <span>{opt.label}</span>
+                        <img
+                          src="https://images.samoweave.com/logo/samo-omt.png"
+                          alt="OMT"
+                          className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
+                        />
+                        {isSelected && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setWhishInfoOpen((prev) => !prev);
+                            }}
+                            aria-label={
+                              whishInfoOpen
+                                ? 'Collapse Whish/OMT payment number'
+                                : 'Expand Whish/OMT payment number'
+                            }
+                            className="ml-0.5 p-0.5 text-zinc-700 hover:text-zinc-950 transition-colors cursor-pointer flex items-center justify-center"
+                          >
+                            {whishInfoOpen ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
                       </span>
-                      {opt.method === 'Whish/OMT Payment' && (
-                        <span className="flex items-center gap-1.5 shrink-0">
-                          <img
-                            src="https://images.samoweave.com/logo/samo-whish-.png"
-                            alt="Whish"
-                            className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
-                          />
-                          <img
-                            src="https://images.samoweave.com/logo/samo-omt.png"
-                            alt="OMT"
-                            className="h-3.5 sm:h-4 w-auto object-contain shrink-0"
-                          />
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
+                    )}
+                  </label>
 
-                {paymentMethod === 'Whish/OMT Payment' && (
-                  <div className="mt-2 p-3 bg-zinc-950 text-white border border-zinc-950 text-xs leading-relaxed">
-                    Delivery is processed once the payment is received on this number:{' '}
-                    <strong className="font-mono-tabular underline">705056450</strong>
-                  </div>
-                )}
-              </div>
+                  {isWhishOption && isSelected && whishInfoOpen && (
+                    <div className="px-3 py-1.5 bg-zinc-950 text-white border border-t-0 border-zinc-950 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+                      <span className="text-[10px] text-zinc-200 tracking-wide truncate">
+                        Processed once payment is received on:{' '}
+                        <strong className="text-xs font-mono-tabular font-bold text-white underline tracking-wider">
+                          705056450
+                        </strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
             </form>
           )}
 
@@ -1015,7 +1094,26 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 onClick={() => {
                   setDeliveryMethod('Standard Delivery');
                   setPaymentMethod('Whish/OMT Payment');
+                  setWhishInfoOpen(true);
                   setStep('checkout');
+                  try {
+                    const currentHistState = (window.history.state || {}) as {
+                      samoBagOpen?: boolean;
+                      samoCheckoutStep?: boolean;
+                      previousProductId?: string | null;
+                    };
+                    if (!currentHistState.samoCheckoutStep) {
+                      window.history.pushState(
+                        {
+                          ...currentHistState,
+                          samoBagOpen: true,
+                          samoCheckoutStep: true,
+                        },
+                        '',
+                        window.location.pathname + window.location.search
+                      );
+                    }
+                  } catch {}
                 }}
                 className="w-full py-3 px-5 bg-zinc-950 text-white text-xs font-bold tracking-[0.16em] uppercase hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
