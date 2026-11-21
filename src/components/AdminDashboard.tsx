@@ -2090,17 +2090,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return true;
     }
   });
+  const [soundPreset, setSoundPreset] = useState<'tone1' | 'tone2' | 'tone3'>(
+    () => {
+      try {
+        const saved = localStorage.getItem('samo_admin_sound_preset_v1');
+        if (saved === 'tone1' || saved === 'tone2' || saved === 'tone3') {
+          return saved;
+        }
+        return 'tone1';
+      } catch {
+        return 'tone1';
+      }
+    }
+  );
+  const MAX_ADMIN_NOTIFICATIONS = 35;
+
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(
     () => {
       try {
         const raw = localStorage.getItem('samo_admin_read_notifs_v1');
         const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed)
+          ? parsed.slice(0, MAX_ADMIN_NOTIFICATIONS)
+          : [];
       } catch {
         return [];
       }
     }
   );
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<
+    string[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem('samo_admin_dismissed_notifs_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed)
+        ? parsed.slice(0, MAX_ADMIN_NOTIFICATIONS)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [confirmDeleteAllNotifications, setConfirmDeleteAllNotifications] =
+    useState<boolean>(false);
   const [adminActivityLog, setAdminActivityLog] = useState<
     Array<{
       id: string;
@@ -2112,7 +2144,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const raw = localStorage.getItem('samo_admin_activity_log_v1');
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+        ? parsed.slice(0, MAX_ADMIN_NOTIFICATIONS)
+        : [];
     } catch {
       return [];
     }
@@ -2121,8 +2155,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const playAdminNotificationChime = React.useCallback(
-    (forcePlay = false) => {
+    (forcePlay = false, presetOverride?: 'tone1' | 'tone2' | 'tone3') => {
       if (!forcePlay && !soundAlertsEnabled) return;
+      const activePreset = presetOverride || soundPreset;
       try {
         const AudioCtx =
           window.AudioContext ||
@@ -2137,32 +2172,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ctx.resume().catch(() => {});
         }
         const now = ctx.currentTime;
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const gain = ctx.createGain();
 
-        osc1.type = 'sine';
-        osc2.type = 'sine';
-        osc1.frequency.setValueAtTime(880, now); // A5
-        osc2.frequency.setValueAtTime(1318.5, now + 0.11); // E6
+        if (activePreset === 'tone2') {
+          // Tone 2: Soft Luxury Chime (Three-note ascending harmonic triad C5 -> E5 -> G5)
+          const notes = [523.25, 659.25, 783.99];
+          notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const start = now + idx * 0.085;
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.26);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.27);
+          });
+        } else if (activePreset === 'tone3') {
+          // Tone 3: Modern Studio Pulse (Crisp double-tap synth alert D6 -> A6)
+          const notes = [
+            { freq: 1174.66, offset: 0, duration: 0.09 },
+            { freq: 1760.0, offset: 0.095, duration: 0.18 },
+          ];
+          notes.forEach((n) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const start = now + n.offset;
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(n.freq, start);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.exponentialRampToValueAtTime(0.17, start + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + n.duration);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + n.duration + 0.01);
+          });
+        } else {
+          // Tone 1: Classic Crystal Bell (Warm dual-note A5 -> E6 bell chime)
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gain = ctx.createGain();
 
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+          osc1.type = 'sine';
+          osc2.type = 'sine';
+          osc1.frequency.setValueAtTime(880, now); // A5
+          osc2.frequency.setValueAtTime(1318.5, now + 0.11); // E6
 
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(ctx.destination);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
 
-        osc1.start(now);
-        osc1.stop(now + 0.12);
-        osc2.start(now + 0.11);
-        osc2.stop(now + 0.35);
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc1.start(now);
+          osc1.stop(now + 0.12);
+          osc2.start(now + 0.11);
+          osc2.stop(now + 0.35);
+        }
       } catch {
         // Ignore if browser blocked audio before first tap
       }
     },
-    [soundAlertsEnabled]
+    [soundAlertsEnabled, soundPreset]
   );
 
   // Unlock AudioContext on first admin tap/click (iPhone Safari & Android Chrome requirement)
@@ -2332,7 +2408,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     // 5. Admin & Catalog Activity Log (Product Added, Stock Updated, Image Uploaded, Toggles)
-    for (const act of adminActivityLog) {
+    for (const act of adminActivityLog.slice(0, MAX_ADMIN_NOTIFICATIONS)) {
       list.push({
         id: act.id,
         category: 'activity',
@@ -2344,14 +2420,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
     }
 
-    return list;
+    // Sort newest first, exclude deleted/dismissed IDs, and enforce strict 35-notification cap
+    const dismissedSet = new Set(dismissedNotificationIds);
+    return list
+      .filter((item) => !dismissedSet.has(item.id))
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, MAX_ADMIN_NOTIFICATIONS);
   }, [
     orders,
     pendingPreorders,
     products,
     adminActivityLog,
+    dismissedNotificationIds,
     getOrderStockAlerts,
   ]);
+
+  // Auto-delete any old notification metadata beyond the active 35 notifications so no junk data remains in storage
+  useEffect(() => {
+    const activeIdsSet = new Set(adminNotifications.map((n) => n.id));
+
+    setReadNotificationIds((prev) => {
+      const pruned = prev
+        .filter((id) => activeIdsSet.has(id))
+        .slice(0, MAX_ADMIN_NOTIFICATIONS);
+      if (pruned.length !== prev.length) {
+        try {
+          if (pruned.length === 0) {
+            localStorage.removeItem('samo_admin_read_notifs_v1');
+          } else {
+            localStorage.setItem(
+              'samo_admin_read_notifs_v1',
+              JSON.stringify(pruned)
+            );
+          }
+        } catch {}
+        return pruned;
+      }
+      return prev;
+    });
+
+    setAdminActivityLog((prev) => {
+      if (prev.length > MAX_ADMIN_NOTIFICATIONS) {
+        const pruned = prev.slice(0, MAX_ADMIN_NOTIFICATIONS);
+        try {
+          localStorage.setItem(
+            'samo_admin_activity_log_v1',
+            JSON.stringify(pruned)
+          );
+        } catch {}
+        return pruned;
+      }
+      return prev;
+    });
+
+    setDismissedNotificationIds((prev) => {
+      if (prev.length > MAX_ADMIN_NOTIFICATIONS) {
+        const pruned = prev.slice(0, MAX_ADMIN_NOTIFICATIONS);
+        try {
+          localStorage.setItem(
+            'samo_admin_dismissed_notifs_v1',
+            JSON.stringify(pruned)
+          );
+        } catch {}
+        return pruned;
+      }
+      return prev;
+    });
+  }, [adminNotifications]);
 
   const unreadNotificationsCount = useMemo(
     () =>
@@ -2400,7 +2538,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [adminNotifications, playAdminNotificationChime]);
 
   const handleMarkAllNotificationsRead = () => {
-    const allIds = adminNotifications.map((n) => n.id);
+    const allIds = adminNotifications
+      .map((n) => n.id)
+      .slice(0, MAX_ADMIN_NOTIFICATIONS);
     setReadNotificationIds(allIds);
     try {
       localStorage.setItem(
@@ -2408,6 +2548,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         JSON.stringify(allIds)
       );
     } catch {}
+  };
+
+  const handleDeleteAllNotifications = () => {
+    // 1. Permanently wipe stored activity log entries
+    setAdminActivityLog([]);
+    try {
+      localStorage.removeItem('samo_admin_activity_log_v1');
+      localStorage.removeItem('samo_admin_read_notifs_v1');
+    } catch {}
+    setReadNotificationIds([]);
+
+    // 2. Dismiss any currently listed order/stock notification IDs (capped at 35)
+    const nonActivityIds = adminNotifications
+      .filter((n) => n.category !== 'activity')
+      .map((n) => n.id);
+    const nextDismissed = Array.from(
+      new Set([...nonActivityIds, ...dismissedNotificationIds])
+    ).slice(0, MAX_ADMIN_NOTIFICATIONS);
+    setDismissedNotificationIds(nextDismissed);
+    try {
+      if (nextDismissed.length === 0) {
+        localStorage.removeItem('samo_admin_dismissed_notifs_v1');
+      } else {
+        localStorage.setItem(
+          'samo_admin_dismissed_notifs_v1',
+          JSON.stringify(nextDismissed)
+        );
+      }
+    } catch {}
+    setConfirmDeleteAllNotifications(false);
   };
 
   const currentSizeConfig = sizeGuideConfig || DEFAULT_SIZE_GUIDE_CONFIG;
@@ -3220,23 +3390,392 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsNotificationCenterOpen((prev) => !prev)}
-                aria-label="Open Admin Notification Center"
-                data-testid="admin-notification-bell-btn"
-                title="Admin Notification Center (Orders, Out-of-Stock Alerts & Activity)"
-                className="relative p-2 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer shrink-0 transition-colors"
-              >
-                <BellRing className="w-4 h-4" />
-                {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-white text-zinc-950 text-[9px] font-bold flex items-center justify-center">
-                    {unreadNotificationsCount > 99
-                      ? '99+'
-                      : unreadNotificationsCount}
-                  </span>
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsNotificationCenterOpen((prev) => !prev)}
+                  aria-label="Open Admin Notification Center"
+                  aria-expanded={isNotificationCenterOpen}
+                  data-testid="admin-notification-bell-btn"
+                  title="Admin Notification Center (Orders, Out-of-Stock Alerts & Activity)"
+                  className={`relative p-2 rounded-lg border cursor-pointer shrink-0 transition-colors ${
+                    isNotificationCenterOpen
+                      ? 'bg-zinc-800 border-zinc-600 text-white'
+                      : 'bg-[#18181C] border-zinc-800 text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  <BellRing className="w-4 h-4" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-white text-zinc-950 text-[9px] font-bold flex items-center justify-center">
+                      {unreadNotificationsCount > 99
+                        ? '99+'
+                        : unreadNotificationsCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* ===============================================================
+                    ANCHORED ADMIN NOTIFICATION CENTER POPOVER (Below Bell Icon)
+                   =============================================================== */}
+                {isNotificationCenterOpen && (
+                  <>
+                    {/* Invisible click-outside backdrop */}
+                    <div
+                      className="fixed inset-0 z-[65] bg-black/35 sm:bg-transparent"
+                      onClick={() => setIsNotificationCenterOpen(false)}
+                    />
+
+                    <div
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="admin-notification-center-title"
+                      data-testid="admin-notification-center-modal"
+                      onClick={(e) => e.stopPropagation()}
+                      className="fixed top-14 left-3 right-3 sm:absolute sm:top-full sm:left-auto sm:right-0 sm:mt-2.5 sm:w-[430px] z-[70] bg-[#18181C] border border-zinc-700 rounded-2xl shadow-2xl flex flex-col max-h-[78vh] sm:max-h-[540px]"
+                    >
+                      {/* Top-Right Caret Pointer Connected to the Bell Icon */}
+                      <span
+                        aria-hidden="true"
+                        className="hidden sm:block absolute -top-1.5 right-3 w-3 h-3 bg-[#18181C] border-l border-t border-zinc-700 rotate-45 pointer-events-none"
+                      />
+
+                      {/* Header */}
+                      <div className="px-4 py-3.5 border-b border-zinc-800 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                            <BellRing className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3
+                              id="admin-notification-center-title"
+                              className="text-xs sm:text-sm font-bold text-white truncate"
+                            >
+                              Notifications
+                            </h3>
+                            <p className="text-[10px] text-zinc-400 truncate">
+                              Out-of-Stock Alerts, Orders &amp; Admin Activity
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {unreadNotificationsCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={handleMarkAllNotificationsRead}
+                              className="text-[10px] font-semibold text-zinc-300 hover:text-white underline cursor-pointer"
+                            >
+                              Mark all read
+                            </button>
+                          )}
+                          {adminNotifications.length > 0 && (
+                            <button
+                              type="button"
+                              data-testid="admin-notif-delete-all-btn"
+                              onClick={() =>
+                                setConfirmDeleteAllNotifications(true)
+                              }
+                              className="px-2 py-1 rounded-md bg-red-950/60 hover:bg-red-900/80 border border-red-800/70 text-red-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete All</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmDeleteAllNotifications(false);
+                              setIsNotificationCenterOpen(false);
+                            }}
+                            aria-label="Close Notification Center"
+                            className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inline "Are you sure?" Delete All Confirmation Banner */}
+                      {confirmDeleteAllNotifications && (
+                        <div
+                          data-testid="admin-notif-delete-all-confirm"
+                          className="px-4 py-3 bg-red-950/90 border-b border-red-800/80 flex flex-wrap items-center justify-between gap-2.5"
+                        >
+                          <div className="flex items-center gap-2 text-xs font-bold text-red-100">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-300 shrink-0" />
+                            <span>
+                              Are you sure you want to delete all notifications?
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDeleteAllNotifications(false)
+                              }
+                              className="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              data-testid="admin-notif-confirm-delete-all-yes"
+                              onClick={handleDeleteAllNotifications}
+                              className="px-2.5 py-1 rounded-md bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Yes, Delete All
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sound ON/OFF Toggle + 3 Selectable Sound Presets */}
+                      <div className="px-4 py-2.5 bg-zinc-900/75 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !soundAlertsEnabled;
+                            setSoundAlertsEnabled(next);
+                            try {
+                              localStorage.setItem(
+                                'samo_admin_sound_alerts_v1',
+                                next ? 'true' : 'false'
+                              );
+                            } catch {}
+                            if (next) {
+                              playAdminNotificationChime(true, soundPreset);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors ${
+                            soundAlertsEnabled
+                              ? 'bg-emerald-950/80 border-emerald-700/80 text-emerald-300'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                          }`}
+                        >
+                          Sound: {soundAlertsEnabled ? 'ON' : 'OFF'}
+                        </button>
+
+                        {/* 3-Sound Selector (Select + Instant Preview) */}
+                        <div
+                          role="group"
+                          aria-label="Select notification sound tone"
+                          className="inline-flex items-center rounded-lg bg-zinc-950/90 p-0.5 border border-zinc-800 gap-0.5"
+                        >
+                          {(
+                            [
+                              { id: 'tone1', label: 'Tone 1' },
+                              { id: 'tone2', label: 'Tone 2' },
+                              { id: 'tone3', label: 'Tone 3' },
+                            ] as const
+                          ).map((preset) => {
+                            const isSelected = soundPreset === preset.id;
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                data-testid={`admin-sound-preset-${preset.id}`}
+                                onClick={() => {
+                                  setSoundPreset(preset.id);
+                                  try {
+                                    localStorage.setItem(
+                                      'samo_admin_sound_preset_v1',
+                                      preset.id
+                                    );
+                                  } catch {}
+                                  playAdminNotificationChime(true, preset.id);
+                                  if (
+                                    typeof window !== 'undefined' &&
+                                    'Notification' in window &&
+                                    Notification.permission === 'default'
+                                  ) {
+                                    Notification.requestPermission().catch(
+                                      () => {}
+                                    );
+                                  }
+                                }}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? 'bg-white text-zinc-950 shadow-xs'
+                                    : 'text-zinc-400 hover:text-white'
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 4-Column Segmented Filter Tabs (Zero Horizontal Scrollbar) */}
+                      <div className="px-3.5 py-2 border-b border-zinc-800 grid grid-cols-4 gap-1">
+                        {(
+                          [
+                            {
+                              id: 'all',
+                              label: 'All',
+                              count: adminNotifications.length,
+                            },
+                            {
+                              id: 'out_of_stock',
+                              label: 'Out Stock',
+                              count: adminNotifications.filter(
+                                (n) => n.category === 'out_of_stock'
+                              ).length,
+                            },
+                            {
+                              id: 'orders',
+                              label: 'Orders',
+                              count: adminNotifications.filter(
+                                (n) => n.category === 'orders'
+                              ).length,
+                            },
+                            {
+                              id: 'activity',
+                              label: 'Activity',
+                              count: adminNotifications.filter(
+                                (n) => n.category === 'activity'
+                              ).length,
+                            },
+                          ] as const
+                        ).map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setNotificationFilter(tab.id)}
+                            className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-center truncate cursor-pointer transition-colors ${
+                              notificationFilter === tab.id
+                                ? 'bg-white text-zinc-950'
+                                : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                            }`}
+                          >
+                            {tab.label} ({tab.count})
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Notification Items List (Sleek Minimal Dark Scrollbar, Zero Scroll Arrows) */}
+                      <div className="divide-y divide-zinc-800/80 overflow-y-auto flex-1 [scrollbar-width:thin] [scrollbar-color:#3f3f46_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+                        {adminNotifications.filter((n) =>
+                          notificationFilter === 'all'
+                            ? true
+                            : n.category === notificationFilter
+                        ).length === 0 ? (
+                          <div className="p-8 text-center text-xs text-zinc-400 uppercase tracking-wider">
+                            No notifications in this view.
+                          </div>
+                        ) : (
+                          adminNotifications
+                            .filter((n) =>
+                              notificationFilter === 'all'
+                                ? true
+                                : n.category === notificationFilter
+                            )
+                            .map((notif) => {
+                              const isUnread = !readNotificationIds.includes(
+                                notif.id
+                              );
+                              return (
+                                <div
+                                  key={notif.id}
+                                  className={`p-3.5 space-y-1.5 transition-colors ${
+                                    isUnread ? 'bg-zinc-900/50' : 'bg-[#18181C]'
+                                  }`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                                        notif.badgeTone === 'red'
+                                          ? 'bg-red-950/90 border-red-700/80 text-red-200'
+                                          : notif.badgeTone === 'amber'
+                                          ? 'bg-amber-950/90 border-amber-700/80 text-amber-200'
+                                          : notif.badgeTone === 'emerald'
+                                          ? 'bg-emerald-950/90 border-emerald-700/80 text-emerald-200'
+                                          : 'bg-zinc-800 border-zinc-700 text-zinc-300'
+                                      }`}
+                                    >
+                                      {notif.badgeLabel}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 font-mono-tabular">
+                                      {new Date(
+                                        notif.timestamp
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+
+                                  <div className="text-xs font-bold text-white">
+                                    {notif.title}
+                                  </div>
+                                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                                    {notif.detail}
+                                  </p>
+
+                                  <div className="pt-0.5 flex flex-wrap items-center gap-3">
+                                    {notif.orderId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (
+                                            !readNotificationIds.includes(
+                                              notif.id
+                                            )
+                                          ) {
+                                            const nextRead = [
+                                              ...readNotificationIds,
+                                              notif.id,
+                                            ];
+                                            setReadNotificationIds(nextRead);
+                                            try {
+                                              localStorage.setItem(
+                                                'samo_admin_read_notifs_v1',
+                                                JSON.stringify(nextRead)
+                                              );
+                                            } catch {}
+                                          }
+                                          setIsNotificationCenterOpen(false);
+                                          handleSelectNav('orders');
+                                        }}
+                                        className="text-[11px] font-bold text-white hover:underline cursor-pointer"
+                                      >
+                                        View Order in Queue →
+                                      </button>
+                                    )}
+                                    {notif.productId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setIsNotificationCenterOpen(false);
+                                          handleSelectNav('items');
+                                          setProductStockFilter('out-of-stock');
+                                        }}
+                                        className="text-[11px] font-bold text-amber-300 hover:underline cursor-pointer"
+                                      >
+                                        View Out-of-Stock Product →
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                        )}
+                      </div>
+
+                      {/* Clean Footer (Removed Technical Text) */}
+                      <div className="p-3 bg-zinc-900/90 border-t border-zinc-800 flex items-center justify-end rounded-b-2xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNotificationCenterOpen(false);
+                            handleSelectNav('orders');
+                          }}
+                          className="w-full sm:w-auto px-3.5 py-1.5 rounded-lg bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer shrink-0 text-center"
+                        >
+                          Open Orders Tab
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
-              </button>
+              </div>
 
               <div className="hidden md:flex items-center gap-2.5 pl-2 border-l border-zinc-800">
                 <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-white uppercase">
@@ -8646,263 +9185,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           );
         })}
       </nav>
-
-      {/* =========================================================================
-          POP-UP MODAL 0: ADMIN NOTIFICATION CENTER POP-UP (Orders, Out-of-Stock & Activity)
-         ========================================================================= */}
-      {isNotificationCenterOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="admin-notification-center-title"
-          data-testid="admin-notification-center-modal"
-          onClick={() => setIsNotificationCenterOpen(false)}
-          className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-xl w-full mt-10 sm:mt-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
-          >
-            {/* Header */}
-            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <BellRing className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3
-                    id="admin-notification-center-title"
-                    className="text-sm sm:text-base font-bold text-white truncate"
-                  >
-                    Admin Notification Center
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 truncate">
-                    Live Out-of-Stock Alerts, Client Orders &amp; Admin Activity
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsNotificationCenterOpen(false)}
-                aria-label="Close Notification Center"
-                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Sound Chime Control Bar (iPhone, Android, Mac & Desktop) */}
-            <div className="px-4 sm:px-5 py-3 bg-zinc-900/70 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !soundAlertsEnabled;
-                    setSoundAlertsEnabled(next);
-                    try {
-                      localStorage.setItem(
-                        'samo_admin_sound_alerts_v1',
-                        next ? 'true' : 'false'
-                      );
-                    } catch {}
-                    if (next) {
-                      playAdminNotificationChime(true);
-                    }
-                  }}
-                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors ${
-                    soundAlertsEnabled
-                      ? 'bg-emerald-950/80 border-emerald-700/80 text-emerald-300'
-                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                  }`}
-                >
-                  Sound Alerts: {soundAlertsEnabled ? 'ON' : 'OFF'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playAdminNotificationChime(true);
-                    if (
-                      typeof window !== 'undefined' &&
-                      'Notification' in window &&
-                      Notification.permission === 'default'
-                    ) {
-                      Notification.requestPermission().catch(() => {});
-                    }
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-[11px] font-semibold cursor-pointer transition-colors"
-                >
-                  Test Sound
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {unreadNotificationsCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleMarkAllNotificationsRead}
-                    className="text-[11px] font-semibold text-zinc-300 hover:text-white underline cursor-pointer"
-                  >
-                    Mark All Read ({unreadNotificationsCount})
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Tabs */}
-            <div className="px-4 sm:px-5 py-2.5 border-b border-zinc-800 flex items-center gap-1.5 overflow-x-auto">
-              {(
-                [
-                  {
-                    id: 'all',
-                    label: `All (${adminNotifications.length})`,
-                  },
-                  {
-                    id: 'out_of_stock',
-                    label: `Out of Stock (${adminNotifications.filter((n) => n.category === 'out_of_stock').length})`,
-                  },
-                  {
-                    id: 'orders',
-                    label: `Orders (${adminNotifications.filter((n) => n.category === 'orders').length})`,
-                  },
-                  {
-                    id: 'activity',
-                    label: `Admin Activity (${adminNotifications.filter((n) => n.category === 'activity').length})`,
-                  },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setNotificationFilter(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer transition-colors ${
-                    notificationFilter === tab.id
-                      ? 'bg-white text-zinc-950'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Notification Items List */}
-            <div className="divide-y divide-zinc-800/80 overflow-y-auto flex-1">
-              {adminNotifications.filter((n) =>
-                notificationFilter === 'all'
-                  ? true
-                  : n.category === notificationFilter
-              ).length === 0 ? (
-                <div className="p-10 text-center text-xs text-zinc-400 uppercase tracking-wider">
-                  No notifications in this view.
-                </div>
-              ) : (
-                adminNotifications
-                  .filter((n) =>
-                    notificationFilter === 'all'
-                      ? true
-                      : n.category === notificationFilter
-                  )
-                  .map((notif) => {
-                    const isUnread = !readNotificationIds.includes(notif.id);
-                    return (
-                      <div
-                        key={notif.id}
-                        className={`p-4 space-y-1.5 transition-colors ${
-                          isUnread ? 'bg-zinc-900/50' : 'bg-[#18181C]'
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
-                              notif.badgeTone === 'red'
-                                ? 'bg-red-950/90 border-red-700/80 text-red-200'
-                                : notif.badgeTone === 'amber'
-                                ? 'bg-amber-950/90 border-amber-700/80 text-amber-200'
-                                : notif.badgeTone === 'emerald'
-                                ? 'bg-emerald-950/90 border-emerald-700/80 text-emerald-200'
-                                : 'bg-zinc-800 border-zinc-700 text-zinc-300'
-                            }`}
-                          >
-                            {notif.badgeLabel}
-                          </span>
-                          <span className="text-[10px] text-zinc-500 font-mono-tabular">
-                            {new Date(notif.timestamp).toLocaleString()}
-                          </span>
-                        </div>
-
-                        <div className="text-xs sm:text-sm font-bold text-white">
-                          {notif.title}
-                        </div>
-                        <p className="text-[11px] text-zinc-300 leading-relaxed">
-                          {notif.detail}
-                        </p>
-
-                        <div className="pt-1 flex flex-wrap items-center gap-3">
-                          {notif.orderId && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!readNotificationIds.includes(notif.id)) {
-                                  const nextRead = [
-                                    ...readNotificationIds,
-                                    notif.id,
-                                  ];
-                                  setReadNotificationIds(nextRead);
-                                  try {
-                                    localStorage.setItem(
-                                      'samo_admin_read_notifs_v1',
-                                      JSON.stringify(nextRead)
-                                    );
-                                  } catch {}
-                                }
-                                setIsNotificationCenterOpen(false);
-                                handleSelectNav('orders');
-                              }}
-                              className="text-[11px] font-bold text-white hover:underline cursor-pointer"
-                            >
-                              View Order in Queue →
-                            </button>
-                          )}
-                          {notif.productId && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsNotificationCenterOpen(false);
-                                handleSelectNav('items');
-                                setProductStockFilter('out-of-stock');
-                              }}
-                              className="text-[11px] font-bold text-amber-300 hover:underline cursor-pointer"
-                            >
-                              View Out-of-Stock Product →
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-3.5 sm:px-5 bg-zinc-900/90 border-t border-zinc-800 flex items-center justify-between gap-3">
-              <span className="text-[10px] text-zinc-400">
-                100% browser-computed · Uses 0 Resend emails &amp; 0 Cloudflare quota
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsNotificationCenterOpen(false);
-                  handleSelectNav('orders');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer shrink-0"
-              >
-                Open Orders Tab
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* =========================================================================
           POP-UP MODAL 1: DELETE ITEM CONFIRMATION ("Are you sure you want to delete?")
