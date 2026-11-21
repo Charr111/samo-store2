@@ -487,13 +487,15 @@ export default function App() {
     return mergeSizeGuideConfig(stored);
   });
 
-  // Home Page Section 2 (Categories Switcher: Women | Kids) & New Arrivals Carousel State
+  // Home Page Section 2 (Categories Switcher: Women | Kids), New Arrivals Carousel & Bags Collection Carousel State
   const [homeCategoryDept, setHomeCategoryDept] = useState<Department>('women');
   const [homeNewArrivalsDept, setHomeNewArrivalsDept] =
     useState<Department>('women');
   const [newArrivalsScrollProgress, setNewArrivalsScrollProgress] =
     useState<number>(28);
   const newArrivalsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [bagsScrollProgress, setBagsScrollProgress] = useState<number>(28);
+  const bagsScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Catalog Listing Sort State
   const [catalogSortBy, setCatalogSortBy] = useState<
@@ -2594,11 +2596,15 @@ export default function App() {
     });
   }, [homeCategoryDept, womenCategories, kidsCategories, products]);
 
-  // Home New Arrivals Carousel Products filtered by Women | Kids switcher
+  // Home New Arrivals Carousel Products filtered by Women | Kids switcher (first 3 reordered: 2nd -> 1st, 3rd -> 2nd, 1st -> 3rd)
   const homeNewArrivalsProducts = useMemo(() => {
-    return filterNewArrivalProducts(products).filter(
+    const list = filterNewArrivalProducts(products).filter(
       (p) => p.department === homeNewArrivalsDept
     );
+    if (list.length >= 3) {
+      return [list[1], list[2], list[0], ...list.slice(3)];
+    }
+    return list;
   }, [products, homeNewArrivalsDept]);
 
   const handleNewArrivalsScroll = () => {
@@ -2615,6 +2621,34 @@ export default function App() {
 
   const scrollNewArrivalsCarousel = (direction: -1 | 1) => {
     const el = newArrivalsScrollRef.current;
+    if (!el) return;
+    const step = Math.max(280, Math.round(el.clientWidth * 0.72));
+    el.scrollBy({ left: direction * step, behavior: 'smooth' });
+  };
+
+  // Home Bags Collection Carousel Products (Women's Bags only)
+  const homeBagsProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (p.department !== 'women') return false;
+      const cat = (p.category || '').trim().toLowerCase();
+      return cat === 'bags' || cat === 'bag';
+    });
+  }, [products]);
+
+  const handleBagsScroll = () => {
+    const el = bagsScrollRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 4) {
+      setBagsScrollProgress(100);
+      return;
+    }
+    const ratio = Math.min(1, Math.max(0, el.scrollLeft / maxScroll));
+    setBagsScrollProgress(Math.round(25 + ratio * 75));
+  };
+
+  const scrollBagsCarousel = (direction: -1 | 1) => {
+    const el = bagsScrollRef.current;
     if (!el) return;
     const step = Math.max(280, Math.round(el.clientWidth * 0.72));
     el.scrollBy({ left: direction * step, behavior: 'smooth' });
@@ -2928,22 +2962,26 @@ export default function App() {
                   {/* Measured contrast scrim matching top HeroVideoSection */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25" />
 
-                  {/* Bottom-Center Campaign Title & Rectangular White CTA Button */}
+                  {/* Bottom-Center Campaign Title & Underlined White CTA Link (Matching Shop Women / Shop Kids) */}
                   <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
                     <h2
-                      className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-5"
+                      className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-4"
                       style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', textWrap: 'balance' }}
                     >
-                      {siteBanners.homeMiddleTitle || 'SAMO KIDS COLLECTION'}
+                      {!siteBanners.homeMiddleTitle ||
+                      siteBanners.homeMiddleTitle.trim().toUpperCase() ===
+                        'SAMO KIDS COLLECTION'
+                        ? 'KIDS COLLECTION'
+                        : siteBanners.homeMiddleTitle}
                     </h2>
-                    <div className="flex flex-wrap items-center justify-center gap-3.5">
+                    <div className="flex flex-wrap items-center justify-center gap-7 sm:gap-9">
                       <button
                         type="button"
                         onClick={() => {
                           handleNavigate('/kids');
                           setSelectedCategory('all');
                         }}
-                        className="min-w-[180px] px-7 py-3.5 bg-white text-zinc-950 border border-zinc-950 text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-950 hover:text-white hover:border-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="px-2 py-1 text-white text-xs sm:text-[13px] font-bold tracking-[0.18em] uppercase underline underline-offset-[7px] decoration-white/80 hover:decoration-white hover:opacity-80 transition-opacity whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         Explore Kids
                       </button>
@@ -3071,6 +3109,105 @@ export default function App() {
                         className="h-full bg-zinc-950 transition-all duration-150"
                         style={{
                           width: `${Math.max(20, Math.min(100, newArrivalsScrollProgress))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Section 4B: "Bags Collection" Horizontal 4:5 Carousel (Women Only) Identical in Layout to "New Arrivals" */}
+                <section className="w-full bg-white py-7 sm:py-8 border-t border-zinc-100">
+                  <div className="max-w-xl mx-auto px-6 text-center space-y-2 mb-4">
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-zinc-950">
+                      Bags Collection
+                    </h2>
+                    <p className="text-xs sm:text-[13px] text-zinc-800 leading-relaxed font-normal">
+                      From signature silhouettes to the newest forms, architectural
+                      structure and refined details unite in modern elegance.
+                    </p>
+
+                    <div
+                      className="pt-0.5 flex items-center justify-center gap-7"
+                      role="tablist"
+                      aria-label="Bags Collection Department"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={true}
+                        onClick={() => {
+                          setBagsScrollProgress(28);
+                          if (bagsScrollRef.current) {
+                            bagsScrollRef.current.scrollTo({
+                              left: 0,
+                              behavior: 'smooth',
+                            });
+                          }
+                        }}
+                        className="pb-1 text-xs sm:text-[13px] tracking-[0.02em] transition-colors cursor-pointer font-semibold text-zinc-950 border-b-2 border-zinc-950"
+                      >
+                        Women
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Horizontal Swipeable / Scrollable 4:5 Carousel (Identical to New Arrivals) */}
+                  <div className="relative w-full group/carousel">
+                    <div
+                      ref={bagsScrollRef}
+                      onScroll={handleBagsScroll}
+                      className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar gap-[2px] bg-white"
+                    >
+                      {homeBagsProducts.map((product) => (
+                        <article
+                          key={product.id}
+                          onClick={() => handleOpenProductModal(product)}
+                          className="w-[62vw] sm:w-[40vw] lg:w-[calc(25%-1.5px)] shrink-0 snap-start cursor-pointer group bg-white flex flex-col"
+                        >
+                          <div className="aspect-[4/5] max-h-[310px] sm:max-h-[340px] lg:max-h-[360px] w-full bg-[#EFEFEF] overflow-hidden relative">
+                            <ProductImage
+                              src={product.imageUrl}
+                              alt={product.name}
+                              category={product.category}
+                              styleType={product.style}
+                              className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]"
+                            />
+                          </div>
+                          <div className="py-2.5 px-3 text-center bg-white">
+                            <h3 className="text-xs sm:text-[13px] font-semibold tracking-[0.01em] text-zinc-950 group-hover:underline truncate">
+                              {product.name}
+                            </h3>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    {/* Desktop Left / Right Navigation Chevrons */}
+                    <button
+                      type="button"
+                      onClick={() => scrollBagsCarousel(-1)}
+                      aria-label="Scroll Bags Collection Left"
+                      className="hidden lg:flex items-center justify-center w-8 h-8 absolute left-3 top-[42%] -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-zinc-950 transition-opacity cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollBagsCarousel(1)}
+                      aria-label="Scroll Bags Collection Right"
+                      className="hidden lg:flex items-center justify-center w-8 h-8 absolute right-3 top-[42%] -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-zinc-950 transition-opacity cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Centered Horizontal Scroll Progress Bar (matching New Arrivals) */}
+                  <div className="mt-2.5 flex justify-center px-6">
+                    <div className="w-44 sm:w-56 h-[2px] bg-zinc-200 relative overflow-hidden">
+                      <div
+                        className="h-full bg-zinc-950 transition-all duration-150"
+                        style={{
+                          width: `${Math.max(20, Math.min(100, bagsScrollProgress))}%`,
                         }}
                       />
                     </div>
@@ -3234,7 +3371,7 @@ export default function App() {
                   </h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-[335px] sm:max-w-[370px] md:max-w-none mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-[315px] sm:max-w-[348px] md:max-w-none mx-auto">
                   {/* Box 1: New Arrivals */}
                   <div
                     onClick={() => handleNavigate('/new-arrivals', 'women')}

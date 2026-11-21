@@ -8,6 +8,7 @@ interface ProductImageProps {
   styleType?: string;
   className?: string;
   compact?: boolean;
+  eager?: boolean;
 }
 
 /**
@@ -22,6 +23,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   styleType = 'Fine Leather',
   className = '',
   compact = false,
+  eager = false,
 }) => {
   const normalizedSrc = (src || '').trim();
   const [hasError, setHasError] = useState(false);
@@ -59,8 +61,8 @@ export const ProductImage: React.FC<ProductImageProps> = ({
           key={normalizedSrc}
           src={normalizedSrc}
           alt={seoAltText}
-          loading="lazy"
-          decoding="async"
+          loading={eager ? 'eager' : 'lazy'}
+          decoding={eager ? 'sync' : 'async'}
           referrerPolicy="no-referrer"
           onError={() => setHasError(true)}
           className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"

@@ -2184,7 +2184,7 @@ export function buildDefaultSiteBanners(
     homeMiddleBannerUrl: 'studio://kids-junior-leather-bomber',
     homeMiddleKicker:
       'SAMO KIDS · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)',
-    homeMiddleTitle: 'SAMO KIDS COLLECTION',
+    homeMiddleTitle: 'KIDS COLLECTION',
     homeMiddleSubtitle:
       'Architectural silhouettes in supple cow leather, brushed suede, and combed cashmere graded in precision centimeter sizing.',
     homeBottomNewArrivalsUrl: 'studio://women-fur-opera-coat',
@@ -2314,7 +2314,9 @@ export function mergeSiteBannersConfig(
     homeMiddleTitle:
       typeof stored.homeMiddleTitle === 'string' &&
       stored.homeMiddleTitle.trim()
-        ? stored.homeMiddleTitle
+        ? stored.homeMiddleTitle.trim().toUpperCase() === 'SAMO KIDS COLLECTION'
+          ? 'KIDS COLLECTION'
+          : stored.homeMiddleTitle
         : defaults.homeMiddleTitle,
     homeMiddleSubtitle:
       typeof stored.homeMiddleSubtitle === 'string' &&

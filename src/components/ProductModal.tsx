@@ -77,8 +77,39 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   showLowStockCount = false,
   onOpenCart,
 }) => {
-  const [selectedColor, setSelectedColor] = useState<string>('');
-  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>(() => {
+    if (
+      product &&
+      product.hasColors &&
+      Array.isArray(product.colorVariants) &&
+      product.colorVariants.length > 0
+    ) {
+      return product.colorVariants[0].colorName;
+    }
+    return '';
+  });
+  const [selectedSize, setSelectedSize] = useState<string>(() => {
+    if (!product) return '';
+    if (
+      product.hasColors &&
+      Array.isArray(product.colorVariants) &&
+      product.colorVariants.length > 0
+    ) {
+      const firstVariant = product.colorVariants[0];
+      return (
+        firstVariant.sizes.find(
+          (sz) => (firstVariant.sizeQuantities?.[sz] ?? 5) > 0
+        ) ||
+        firstVariant.sizes[0] ||
+        'M'
+      );
+    }
+    return (
+      product.sizes.find((sz) => getSizeQuantity(product, sz) > 0) ||
+      product.sizes[0] ||
+      'M'
+    );
+  });
   const [selectedSetPieceSizes, setSelectedSetPieceSizes] = useState<
     Record<number, string>
   >({});
@@ -337,9 +368,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     return getSizeQuantity(product, sz);
   };
 
+  // Synchronously resolve the active selected size on Frame 0 (before useEffect fires when product transitions from null -> ProductItem)
+  const resolvedSelectedSize =
+    selectedSize && activeSizes.includes(selectedSize)
+      ? selectedSize
+      : activeSizes.find((sz) => getActiveSizeQty(sz) > 0) ||
+        activeSizes[0] ||
+        '';
+
   // Determine stock state for Full Set vs Standard Product
   let isSelectedConfigurationOut = false;
-  let effectiveSelectedSizeLabel = selectedSize || activeSizes[0] || 'One Size';
+  let effectiveSelectedSizeLabel =
+    resolvedSelectedSize || activeSizes[0] || 'One Size';
   let resolvedSetSizesPayload: SelectedSetPieceSize[] | undefined = undefined;
 
   if (isFullSetProduct && product.setItems) {
@@ -406,7 +446,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           selectedSetPieceSizes[idx] &&
           activeSubSizes.includes(selectedSetPieceSizes[idx])
             ? selectedSetPieceSizes[idx]
-            : activeSubSizes[0] || '';
+            : activeSubSizes.find(
+                (sz) => (activeSubQtyMap?.[sz] ?? 5) > 0
+              ) ||
+              activeSubSizes[0] ||
+              '';
         const q = activeSubQtyMap?.[chosen];
         const numericQ =
           typeof q === 'number' && !Number.isNaN(q)
@@ -415,7 +459,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         return numericQ <= 0;
       });
   } else {
-    const selectedSizeQty = selectedSize ? getActiveSizeQty(selectedSize) : 0;
+    const selectedSizeQty = resolvedSelectedSize
+      ? getActiveSizeQty(resolvedSelectedSize)
+      : 0;
     const totalQty = activeVariant
       ? sumSizeQuantities(activeVariant.sizes, activeVariant.sizeQuantities)
       : sumSizeQuantities(product.sizes, product.sizeQuantities);
@@ -588,9 +634,24 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       }}
       className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white md:bg-black/70 p-0 md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
     >
+      <style>{`
+        @keyframes samoModalEnter {
+          0% {
+            opacity: 0;
+            transform: scale(0.992);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full min-h-[100dvh] md:min-h-0 max-w-none md:max-w-4xl bg-white border-0 md:border md:border-zinc-950 grid grid-cols-1 md:grid-cols-12 md:overflow-hidden my-0 md:my-auto"
+        style={{
+          animation: 'samoModalEnter 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        }}
+        className="relative w-full min-h-[100dvh] md:min-h-0 max-w-none md:max-w-4xl bg-white border-0 md:border md:border-zinc-950 grid grid-cols-1 md:grid-cols-12 md:overflow-hidden my-0 md:my-auto transform-gpu"
       >
         {/* Pinned Top-Right Tight Circular Close (×) Button (24px × 24px circle tightly hugging the 16px × 16px X icon) */}
         <button
@@ -614,7 +675,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             <div
               ref={galleryScrollRef}
               onScroll={handleGalleryScroll}
-              className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar touch-pan-x bg-[#EFEFEF]"
+              className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar touch-pan-x bg-[#EFEFEF] transform-gpu"
             >
               {allImages.map((imgUrl, idx) => (
                 <div
@@ -630,29 +691,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                     } - View ${idx + 1}`}
                     category={product.category}
                     styleType={product.style}
+                    eager={true}
                     className="h-full w-full"
                   />
                 </div>
               ))}
             </div>
 
-            {/* Top-Left Badges */}
-            <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-1.5">
-              {isSelectedConfigurationOut && (
-                <button
-                  type="button"
-                  onClick={() => scrollToPreorderBox(true)}
-                  className="pointer-events-auto cursor-pointer px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]"
-                >
-                  Out of Stock
-                </button>
-              )}
-              {pricing.hasDiscount && (
+            {/* Top-Left Badges (Discount Badge Only — Stock status is shown cleanly inside the size selector) */}
+            {pricing.hasDiscount && (
+              <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-1.5">
                 <span className="px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]">
                   {pricing.discountBadge}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Desktop Navigation Arrows (Left / Right) */}
             {allImages.length > 1 && (
@@ -702,6 +755,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                     category={product.category}
                     styleType={product.style}
                     compact={true}
+                    eager={true}
                     className="h-full w-full"
                   />
                 </button>
@@ -1165,8 +1219,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                   </span>
                                   {isLowQty && (
                                     <span
-                                      className={`text-[9px] font-semibold leading-none mt-0.5 ${
-                                        isSelected ? 'text-amber-300' : 'text-amber-700'
+                                      className={`text-[9px] font-bold leading-none mt-0.5 ${
+                                        isSelected ? 'text-white' : 'text-zinc-950'
                                       }`}
                                     >
                                       {szQty} left
@@ -1251,7 +1305,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                     const isZeroQty = sizeQty <= 0;
                     const isLowQty =
                       showLowStockCount && (sizeQty === 1 || sizeQty === 2);
-                    const isSelected = selectedSize === size;
+                    const isSelected = resolvedSelectedSize === size;
                     return (
                       <button
                         key={size}
@@ -1285,8 +1339,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         </span>
                         {isLowQty && (
                           <span
-                            className={`text-[9px] font-semibold leading-none mt-0.5 ${
-                              isSelected ? 'text-amber-300' : 'text-amber-700'
+                            className={`text-[9px] font-bold leading-none mt-0.5 ${
+                              isSelected ? 'text-white' : 'text-zinc-950'
                             }`}
                           >
                             {sizeQty} left
