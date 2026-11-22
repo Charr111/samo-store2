@@ -3287,7 +3287,7 @@ export default function App() {
           <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-12 space-y-12">
             {/* Showroom Hero & Heritage Story Since 1999 */}
             <div className="grid grid-cols-1 lg:grid-cols-12 border border-zinc-950 bg-white overflow-hidden">
-              <div className="lg:col-span-6 h-[302px] sm:h-[380px] md:h-[460px] lg:h-auto border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF] overflow-hidden">
+              <div className="lg:col-span-6 h-[317px] sm:h-[380px] md:h-[450px] lg:h-[385px] border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF] overflow-hidden">
                 <ProductImage
                   src={
                     siteBanners.showroomHeroBannerUrl ||
@@ -3302,18 +3302,18 @@ export default function App() {
                   className="h-full w-full object-cover"
                 />
               </div>
-              <div className="lg:col-span-6 p-7 md:p-12 flex flex-col justify-center">
-                <div className="space-y-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+              <div className="lg:col-span-6 p-7 md:p-10 lg:py-8 lg:px-10 flex flex-col justify-center">
+                <div className="space-y-4 lg:space-y-3.5">
+                  <div className="text-[11px] lg:text-[9.5px] font-bold uppercase tracking-[0.22em] text-zinc-500">
                     SAMO HOUSE HERITAGE · ESTABLISHED 1999
                   </div>
-                  <h1 className="font-display text-2xl md:text-4xl font-extrabold tracking-[0.1em] uppercase text-zinc-950 leading-tight">
+                  <h1 className="font-display text-2xl md:text-4xl lg:text-[31px] font-extrabold tracking-[0.1em] uppercase text-zinc-950 leading-tight">
                     THE HOUSE OF SAMO
                   </h1>
-                  <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
+                  <p className="text-xs md:text-sm lg:text-[12.2px] text-zinc-700 leading-relaxed lg:leading-[1.65]">
                     Rooted in architectural permanence since 1999, SAMO defines modern luxury through tactile mastery and sculptural precision. Every silhouette is conceived from noble raw materials including supple full grain cow leather, velvety calf suede, shearling fur, combed cashmere, and liquid silk, tailored with clean geometric lines and enduring proportions.
                   </p>
-                  <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
+                  <p className="text-xs md:text-sm lg:text-[12.2px] text-zinc-700 leading-relaxed lg:leading-[1.65]">
                     Inside the SAMO Showroom, our Women’s ready to wear and leather goods curation converges with our centimeter graded Kids collection for Minis, Children, and Teens, uniting artisanal heritage with an unmistakable contemporary attitude.
                   </p>
                 </div>
@@ -3477,7 +3477,7 @@ export default function App() {
 
                 {/* Section 3: Full-Bleed Middle Campaign Image Box (Configurable in /admin — Scaled +6% proportionally on desktop lg:) */}
                 <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] lg:h-[78.5vh] lg:min-h-[551px] lg:max-h-[869px] bg-zinc-950 overflow-hidden border-y border-zinc-950">
-                  <div className="h-full w-full opacity-90">
+                  <div className="h-full w-full opacity-95">
                     <ProductImage
                       src={
                         siteBanners.homeMiddleBannerUrl ||
@@ -3495,8 +3495,8 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Measured contrast scrim matching top HeroVideoSection */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25" />
+                  {/* Measured contrast scrim (7% lighter overlay) */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/78 via-black/28 to-black/18" />
 
                   {/* Bottom-Center Campaign Title & Underlined White CTA Link (Matching Shop Women / Shop Kids, scaled +6% on desktop) */}
                   <div className="absolute inset-x-0 bottom-10 lg:bottom-[42px] z-20 flex flex-col items-center px-4 text-center lg:scale-[1.06] lg:origin-bottom">
