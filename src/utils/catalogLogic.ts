@@ -332,8 +332,31 @@ export function findCategoryBySlug(
   });
 }
 
+function hasNonEmptyProductMedia(p: ProductItem | null | undefined): boolean {
+  if (!p) return false;
+  if (typeof p.imageUrl === 'string' && p.imageUrl.trim().length > 0) return true;
+  if (
+    Array.isArray(p.galleryUrls) &&
+    p.galleryUrls.some((u) => typeof u === 'string' && u.trim().length > 0)
+  ) {
+    return true;
+  }
+  if (
+    Array.isArray(p.colorVariants) &&
+    p.colorVariants.some(
+      (v) =>
+        (typeof v.imageUrl === 'string' && v.imageUrl.trim().length > 0) ||
+        (Array.isArray(v.galleryUrls) &&
+          v.galleryUrls.some((u) => typeof u === 'string' && u.trim().length > 0))
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
- * Finds a matching ProductItem by slug, name, or ID.
+ * Finds a matching ProductItem by slug, name, or ID, preferring items with populated images.
  */
 export function findProductBySlug(
   products: ProductItem[],
@@ -345,25 +368,33 @@ export function findProductBySlug(
   const targetSlug = createSafeSlug(rawClean);
 
   // 1. Exact ID match (case-sensitive then insensitive)
-  const byId = products.find(
+  const idMatches = products.filter(
     (p) => p.id === rawClean || p.id.toLowerCase() === rawClean.toLowerCase()
   );
-  if (byId) return byId;
+  if (idMatches.length > 0) {
+    return idMatches.find(hasNonEmptyProductMedia) || idMatches[0];
+  }
 
   // 2. Slug match within department (if provided)
   if (department) {
-    const deptMatch = products.find(
+    const deptMatches = products.filter(
       (p) =>
         p.department === department &&
         (getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug)
     );
-    if (deptMatch) return deptMatch;
+    if (deptMatches.length > 0) {
+      return deptMatches.find(hasNonEmptyProductMedia) || deptMatches[0];
+    }
   }
 
   // 3. Slug match across all products
-  return products.find(
+  const allMatches = products.filter(
     (p) => getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug
   );
+  if (allMatches.length > 0) {
+    return allMatches.find(hasNonEmptyProductMedia) || allMatches[0];
+  }
+  return undefined;
 }
 
 export interface ParsedCatalogUrlState {

@@ -62,7 +62,7 @@ interface ProductModalProps {
     customerContact: string;
   }) => Promise<void>;
   showLowStockCount?: boolean;
-  onOpenCart?: () => void;
+  onOpenCart?: (fromProduct?: ProductItem) => void;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -567,9 +567,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     }
     autoOpenBagTimerRef.current = window.setTimeout(() => {
       setAddedFeedback(false);
-      onClose();
       if (onOpenCart) {
-        onOpenCart();
+        onOpenCart(product);
       }
     }, 1200);
   };
@@ -632,7 +631,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           onClose();
         }
       }}
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white md:bg-black/70 p-0 md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+      className="fixed inset-0 z-40 flex items-start md:items-center justify-center bg-white md:bg-black/70 p-0 md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
     >
       <style>{`
         @keyframes samoModalEnter {

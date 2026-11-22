@@ -468,6 +468,10 @@ export default function App() {
   );
   const [activeProductModal, setActiveProductModal] =
     useState<ProductItem | null>(() => initialParsedUrl.matchedProduct);
+  const activeProductModalRef = useRef<ProductItem | null>(activeProductModal);
+  activeProductModalRef.current = activeProductModal;
+  const productsRef = useRef<ProductItem[]>(products);
+  productsRef.current = products;
   const directUrlInitializedRef = useRef<boolean>(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState<boolean>(false);
   const [cartDrawerInitialStep, setCartDrawerInitialStep] = useState<
@@ -782,6 +786,50 @@ export default function App() {
     newsletterPopupConfig.maxTimesPerDay,
   ]);
 
+  const hasPopulatedProductImages = (
+    p: ProductItem | null | undefined
+  ): boolean => {
+    if (!p) return false;
+    if (typeof p.imageUrl === 'string' && p.imageUrl.trim().length > 0) {
+      return true;
+    }
+    if (
+      Array.isArray(p.galleryUrls) &&
+      p.galleryUrls.some((u) => typeof u === 'string' && u.trim().length > 0)
+    ) {
+      return true;
+    }
+    if (
+      Array.isArray(p.colorVariants) &&
+      p.colorVariants.some(
+        (v) =>
+          (typeof v.imageUrl === 'string' && v.imageUrl.trim().length > 0) ||
+          (Array.isArray(v.galleryUrls) &&
+            v.galleryUrls.some(
+              (u) => typeof u === 'string' && u.trim().length > 0
+            ))
+      )
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const pickRichestProduct = (
+    candidates: Array<ProductItem | null | undefined>
+  ): ProductItem | null => {
+    const valid = candidates.filter((c): c is ProductItem => Boolean(c));
+    if (valid.length === 0) return null;
+    return valid.find(hasPopulatedProductImages) || valid[0];
+  };
+
+  useEffect(() => {
+    const win = window as unknown as {
+      __samoBagOpen?: boolean;
+    };
+    win.__samoBagOpen = cartDrawerOpen;
+  }, [cartDrawerOpen]);
+
   // Normalize initial root path '/' to '/home' and listen for browser back/forward
   useEffect(() => {
     if (window.location.pathname === '/' || window.location.pathname === '') {
@@ -796,19 +844,28 @@ export default function App() {
         previousProductId?: string | null;
       };
       const win = window as unknown as {
+        __samoBagOpen?: boolean;
+        __samoBagClosedAt?: number;
         __samoCheckoutStepBackAt?: number;
         __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
       };
       const withinCheckoutStepBackGuard =
         typeof win.__samoCheckoutStepBackAt === 'number' &&
         Date.now() - win.__samoCheckoutStepBackAt < 450;
+      const withinBagCloseGuard =
+        typeof win.__samoBagClosedAt === 'number' &&
+        Date.now() - win.__samoBagClosedAt < 450;
+
+      // 1. Stepping back from Checkout ('checkout') to Shopping Bag ('cart')
       if (
-        stateObj.samoBagOpen ||
-        withinCheckoutStepBackGuard ||
-        win.__samoBagStep === 'checkout'
+        !withinBagCloseGuard &&
+        (withinCheckoutStepBackGuard ||
+          win.__samoBagStep === 'checkout' ||
+          (stateObj.samoBagOpen && !win.__samoBagOpen))
       ) {
         win.__samoCheckoutStepBackAt = Date.now();
         win.__samoBagStep = 'cart';
+        win.__samoBagOpen = true;
         setCartDrawerOpen(true);
         if (!stateObj.samoCheckoutStep) {
           setCartDrawerInitialStep('cart');
@@ -828,41 +885,129 @@ export default function App() {
         }
         return;
       }
+
+      // 2. Stepping back from Shopping Bag ('cart') to the underlying Item Pop-Up (or page)
+      if (win.__samoBagOpen || withinBagCloseGuard) {
+        win.__samoBagOpen = false;
+        win.__samoBagClosedAt = Date.now();
+        win.__samoBagStep = undefined;
+        setCartDrawerOpen(false);
+
+        const targetProdId =
+          activeProductModalRef.current?.id ||
+          cartReturnProductRef.current?.id ||
+          stateObj.previousProductId ||
+          stateObj.productId ||
+          null;
+        const catalogMatchById = targetProdId
+          ? productsRef.current.find((p) => p.id === targetProdId) || null
+          : null;
+        const search = new URLSearchParams(window.location.search);
+        const parsedOnBagClose = parseCatalogUrlState(
+          window.location.pathname,
+          categories,
+          productsRef.current,
+          search
+        );
+        const restoredModalProd = pickRichestProduct([
+          activeProductModalRef.current,
+          cartReturnProductRef.current,
+          catalogMatchById,
+          parsedOnBagClose.matchedProduct,
+        ]);
+
+        if (restoredModalProd) {
+          setActiveProductModal(restoredModalProd);
+          try {
+            const prodUrl = buildProductUrl(
+              restoredModalProd,
+              currentRoute,
+              selectedCategory
+            );
+            window.history.replaceState(
+              {
+                modalOpen: true,
+                productId: restoredModalProd.id,
+                samoBagOpen: false,
+                samoCheckoutStep: false,
+              },
+              '',
+              prodUrl
+            );
+          } catch {}
+        }
+        return;
+      }
+
+      // 3. Standard browser back/forward navigation (e.g. swiping back from Item Pop-Up to Category Page)
       setCartDrawerOpen(false);
       setSearchQuery('');
       const search = new URLSearchParams(window.location.search);
       const parsed = parseCatalogUrlState(
         window.location.pathname,
         categories,
-        products,
+        productsRef.current,
         search
       );
       setCurrentRoute(parsed.route);
       setSelectedCategory(parsed.selectedCategory);
 
-      if (parsed.matchedProduct) {
-        setActiveProductModal(parsed.matchedProduct);
-      } else if (stateObj.modalOpen && stateObj.productId) {
-        const matchedFromState =
-          products.find((p) => p.id === stateObj.productId) || null;
-        setActiveProductModal(matchedFromState);
-      } else if (cartReturnProductRef.current) {
-        const restoredProd =
-          products.find((p) => p.id === cartReturnProductRef.current?.id) ||
-          cartReturnProductRef.current;
+      // If the user is currently viewing an open Item Pop-Up and swipes back, close the Item Pop-Up
+      // even if an unpopped duplicate history entry for the same product URL remained on the stack.
+      if (
+        activeProductModalRef.current &&
+        parsed.matchedProduct &&
+        parsed.matchedProduct.id === activeProductModalRef.current.id
+      ) {
         cartReturnProductRef.current = null;
-        setActiveProductModal(restoredProd);
+        setActiveProductModal(null);
+        const categoryUrl = buildCategoryUrl(
+          parsed.route,
+          parsed.selectedCategory
+        );
+        if (window.location.pathname !== categoryUrl) {
+          try {
+            window.history.replaceState({ modalOpen: false }, '', categoryUrl);
+          } catch {}
+        }
+        return;
+      }
+
+      if (parsed.matchedProduct) {
+        const richMatch = pickRichestProduct([
+          parsed.matchedProduct,
+          productsRef.current.find((p) => p.id === parsed.matchedProduct?.id),
+          activeProductModalRef.current?.id === parsed.matchedProduct.id
+            ? activeProductModalRef.current
+            : null,
+          cartReturnProductRef.current?.id === parsed.matchedProduct.id
+            ? cartReturnProductRef.current
+            : null,
+        ]);
+        setActiveProductModal(richMatch);
+      } else if (stateObj.modalOpen && stateObj.productId) {
+        const matchedFromState = pickRichestProduct([
+          productsRef.current.find((p) => p.id === stateObj.productId),
+          activeProductModalRef.current?.id === stateObj.productId
+            ? activeProductModalRef.current
+            : null,
+          cartReturnProductRef.current?.id === stateObj.productId
+            ? cartReturnProductRef.current
+            : null,
+        ]);
+        setActiveProductModal(matchedFromState);
       } else {
+        cartReturnProductRef.current = null;
         setActiveProductModal(null);
       }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [categories, products]);
+  }, [categories, products, currentRoute, selectedCategory]);
 
-  // Direct product or category link resolution when catalog products/categories finish loading
+  // Direct product or category link resolution and live image enrichment when catalog products finish loading
   useEffect(() => {
-    if (!directUrlInitializedRef.current && (products.length > 0 || categories.length > 0)) {
+    if (products.length > 0 || categories.length > 0) {
       const search = new URLSearchParams(window.location.search);
       const parsed = parseCatalogUrlState(
         window.location.pathname,
@@ -870,16 +1015,45 @@ export default function App() {
         products,
         search
       );
-      if (parsed.matchedProduct && !activeProductModal) {
-        setActiveProductModal(parsed.matchedProduct);
+      if (!directUrlInitializedRef.current) {
+        if (parsed.matchedProduct && !activeProductModal) {
+          setActiveProductModal(parsed.matchedProduct);
+        }
+        if (parsed.route && parsed.route !== currentRoute) {
+          setCurrentRoute(parsed.route);
+        }
+        if (
+          parsed.selectedCategory &&
+          parsed.selectedCategory !== selectedCategory
+        ) {
+          setSelectedCategory(parsed.selectedCategory);
+        }
+        directUrlInitializedRef.current = true;
+      } else if (activeProductModal) {
+        const richerFromCatalog = pickRichestProduct([
+          products.find((p) => p.id === activeProductModal.id),
+          parsed.matchedProduct?.id === activeProductModal.id
+            ? parsed.matchedProduct
+            : null,
+          activeProductModal,
+        ]);
+        if (
+          richerFromCatalog &&
+          !hasPopulatedProductImages(activeProductModal) &&
+          hasPopulatedProductImages(richerFromCatalog)
+        ) {
+          setActiveProductModal(richerFromCatalog);
+        }
       }
-      if (parsed.route && parsed.route !== currentRoute) {
-        setCurrentRoute(parsed.route);
+      if (cartReturnProductRef.current) {
+        const richerReturn = pickRichestProduct([
+          products.find((p) => p.id === cartReturnProductRef.current?.id),
+          cartReturnProductRef.current,
+        ]);
+        if (richerReturn) {
+          cartReturnProductRef.current = richerReturn;
+        }
       }
-      if (parsed.selectedCategory && parsed.selectedCategory !== selectedCategory) {
-        setSelectedCategory(parsed.selectedCategory);
-      }
-      directUrlInitializedRef.current = true;
     }
   }, [products, categories]);
 
@@ -1247,13 +1421,23 @@ export default function App() {
 
   // Product Pop-Up Modal open handler updating URL to /<department>/<category-slug>/<product-slug>
   const handleOpenProductModal = (product: ProductItem) => {
-    const productUrl = buildProductUrl(product, currentRoute, selectedCategory);
-    window.history.pushState({ modalOpen: true, productId: product.id }, '', productUrl);
-    setActiveProductModal(product);
+    const richProd =
+      pickRichestProduct([
+        product,
+        productsRef.current.find((p) => p.id === product.id),
+      ]) || product;
+    const productUrl = buildProductUrl(richProd, currentRoute, selectedCategory);
+    window.history.pushState(
+      { modalOpen: true, productId: richProd.id },
+      '',
+      productUrl
+    );
+    setActiveProductModal(richProd);
   };
 
   // Product Pop-Up Modal close handler returning cleanly to the category URL
   const handleCloseProductModal = () => {
+    cartReturnProductRef.current = null;
     setActiveProductModal(null);
     const categoryUrl = buildCategoryUrl(currentRoute, selectedCategory);
     if (window.location.pathname !== categoryUrl) {
@@ -1266,43 +1450,104 @@ export default function App() {
     step: 'cart' | 'checkout' = 'cart',
     fromProduct?: ProductItem | null
   ) => {
-    const returnProduct =
-      fromProduct !== undefined ? fromProduct : activeProductModal;
+    const returnProduct = pickRichestProduct([
+      fromProduct !== undefined ? fromProduct : activeProductModalRef.current,
+      activeProductModalRef.current,
+      fromProduct
+        ? productsRef.current.find((p) => p.id === fromProduct.id)
+        : null,
+    ]);
     cartReturnProductRef.current = returnProduct || null;
-    if (activeProductModal) {
-      setActiveProductModal(null);
+    if (returnProduct) {
+      setActiveProductModal(returnProduct);
     }
+    const win = window as unknown as {
+      __samoBagOpen?: boolean;
+      __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
+    };
+    win.__samoBagOpen = true;
+    win.__samoBagStep = step;
     setCartDrawerInitialStep(step);
     setCartDrawerOpen(true);
     const currentHistState = (window.history.state || {}) as {
       samoBagOpen?: boolean;
     };
+    const targetUrl = returnProduct
+      ? buildProductUrl(returnProduct, currentRoute, selectedCategory)
+      : window.location.pathname + window.location.search;
     if (!currentHistState.samoBagOpen) {
       window.history.pushState(
         {
           samoBagOpen: true,
+          samoCheckoutStep: step === 'checkout',
           previousProductId: returnProduct ? returnProduct.id : null,
+          modalOpen: Boolean(returnProduct),
+          productId: returnProduct ? returnProduct.id : undefined,
         },
         '',
-        window.location.pathname + window.location.search
+        targetUrl
       );
     }
   };
 
-  const handleCloseCartDrawer = (restorePreviousIfSwipe = false) => {
-    setCartDrawerOpen(false);
-    const currentHistState = (window.history.state || {}) as {
-      samoBagOpen?: boolean;
-      previousProductId?: string | null;
+  const handleCloseCartDrawer = (_restorePreviousIfSwipe = false) => {
+    const win = window as unknown as {
+      __samoBagOpen?: boolean;
+      __samoBagClosedAt?: number;
+      __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
     };
-    if (restorePreviousIfSwipe && currentHistState.samoBagOpen) {
-      window.history.back();
+    win.__samoBagOpen = false;
+    win.__samoBagClosedAt = Date.now();
+    win.__samoBagStep = undefined;
+    setCartDrawerOpen(false);
+
+    const openProd = pickRichestProduct([
+      activeProductModalRef.current,
+      cartReturnProductRef.current,
+      activeProductModalRef.current || cartReturnProductRef.current
+        ? productsRef.current.find(
+            (p) =>
+              p.id ===
+              (activeProductModalRef.current?.id ||
+                cartReturnProductRef.current?.id)
+          )
+        : null,
+    ]);
+
+    if (openProd) {
+      setActiveProductModal(openProd);
+      try {
+        const prodUrl = buildProductUrl(openProd, currentRoute, selectedCategory);
+        window.history.replaceState(
+          {
+            modalOpen: true,
+            productId: openProd.id,
+            samoBagOpen: false,
+            samoCheckoutStep: false,
+          },
+          '',
+          prodUrl
+        );
+      } catch {}
       return;
     }
+
     cartReturnProductRef.current = null;
+    const currentHistState = (window.history.state || {}) as {
+      samoBagOpen?: boolean;
+    };
     if (currentHistState.samoBagOpen) {
-      const categoryUrl = buildCategoryUrl(currentRoute, selectedCategory);
-      window.history.replaceState({ modalOpen: false }, '', categoryUrl);
+      try {
+        window.history.replaceState(
+          {
+            modalOpen: false,
+            samoBagOpen: false,
+            samoCheckoutStep: false,
+          },
+          '',
+          window.location.pathname + window.location.search
+        );
+      } catch {}
     }
   };
 
@@ -3680,8 +3925,8 @@ export default function App() {
         onBuyNow={handleBuyNow}
         onSubmitPreorder={handleSubmitPreorder}
         showLowStockCount={showLowStockCount}
-        onOpenCart={() => {
-          handleOpenCartDrawer('cart', activeProductModal);
+        onOpenCart={(fromProd) => {
+          handleOpenCartDrawer('cart', fromProd || activeProductModal);
         }}
       />
 

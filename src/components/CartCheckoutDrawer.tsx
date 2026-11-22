@@ -105,11 +105,14 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
   React.useEffect(() => {
     const win = window as unknown as {
+      __samoBagOpen?: boolean;
       __samoBagStep?: 'cart' | 'checkout' | 'confirmed';
     };
+    win.__samoBagOpen = isOpen;
     win.__samoBagStep = isOpen ? step : undefined;
     return () => {
       if (!isOpen) {
+        win.__samoBagOpen = false;
         win.__samoBagStep = undefined;
       }
     };
@@ -211,16 +214,22 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       if (deltaX > 75 && deltaY < 40 && deltaX > deltaY * 1.5) {
         const win = window as unknown as {
           __samoCheckoutStepBackAt?: number;
+          __samoBagClosedAt?: number;
         };
         const recentlySteppedBackFromCheckout =
           typeof win.__samoCheckoutStepBackAt === 'number' &&
           Date.now() - win.__samoCheckoutStepBackAt < 450;
+        const recentlyClosedBag =
+          typeof win.__samoBagClosedAt === 'number' &&
+          Date.now() - win.__samoBagClosedAt < 450;
         if (step === 'checkout' || recentlySteppedBackFromCheckout) {
           stepBackToCart();
-        } else if (onSwipeBack) {
-          onSwipeBack();
-        } else {
-          onClose();
+        } else if (!recentlyClosedBag) {
+          if (onSwipeBack) {
+            onSwipeBack();
+          } else {
+            onClose();
+          }
         }
       }
     }
