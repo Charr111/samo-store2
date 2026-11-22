@@ -3032,10 +3032,15 @@ export default function App() {
   ]);
 
   const categoryBannerSplitIndex = useMemo(() => {
+    const hasBannerImage = Boolean(
+      (activeCategoryBanner?.imageUrl && activeCategoryBanner.imageUrl.trim()) ||
+        (activeCategoryBanner?.desktopImageUrl &&
+          activeCategoryBanner.desktopImageUrl.trim())
+    );
     if (
       !activeCategoryBanner ||
       !activeCategoryBanner.enabled ||
-      !activeCategoryBanner.imageUrl ||
+      !hasBannerImage ||
       displayedProducts.length === 0
     ) {
       return -1;
@@ -3286,8 +3291,10 @@ export default function App() {
                 <ProductImage
                   src={
                     siteBanners.showroomHeroBannerUrl ||
+                    siteBanners.showroomHeroDesktopBannerUrl ||
                     'studio://women-trench-suede-coat'
                   }
+                  desktopSrc={siteBanners.showroomHeroDesktopBannerUrl}
                   alt="SAMO Flagship Showroom & Weave — Established 1999"
                   category="Trench Coat"
                   styleType="Suede"
@@ -3373,7 +3380,9 @@ export default function App() {
                     onSelectCategory={handleSelectCategory}
                     mediaType={siteBanners.homeHeroMediaType}
                     videoUrl={siteBanners.homeHeroVideoUrl}
+                    desktopVideoUrl={siteBanners.homeHeroDesktopVideoUrl}
                     imageUrl={siteBanners.homeHeroImageUrl}
+                    desktopImageUrl={siteBanners.homeHeroDesktopImageUrl}
                     title={
                       typeof siteBanners.heroHeadlineText === 'string'
                         ? siteBanners.heroHeadlineText
@@ -3472,8 +3481,10 @@ export default function App() {
                     <ProductImage
                       src={
                         siteBanners.homeMiddleBannerUrl ||
+                        siteBanners.homeMiddleDesktopBannerUrl ||
                         'studio://kids-junior-leather-bomber'
                       }
+                      desktopSrc={siteBanners.homeMiddleDesktopBannerUrl}
                       alt={
                         siteBanners.homeMiddleTitle ||
                         'SAMO Kids Campaign — MINIS 1 To 5, CHILDREN 6+ & Teen 13+'
@@ -3834,6 +3845,7 @@ export default function App() {
                           <div className="h-full w-full opacity-90">
                             <ProductImage
                               src={activeCategoryBanner.imageUrl}
+                              desktopSrc={activeCategoryBanner.desktopImageUrl}
                               alt={
                                 activeCategoryBanner.title ||
                                 `${activeCategoryBanner.categoryName} Editorial`

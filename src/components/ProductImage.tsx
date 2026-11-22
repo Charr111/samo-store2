@@ -1,8 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { buildProductImageSeoAlt } from '../utils/seoLogic';
+import { resolveBannerMediaPair } from '../utils/catalogLogic';
 
 interface ProductImageProps {
   src: string;
+  desktopSrc?: string;
   alt: string;
   category?: string;
   styleType?: string;
@@ -13,11 +15,12 @@ interface ProductImageProps {
 
 /**
  * High-contrast architectural studio plate renderer for studio:// URIs
- * and resilient <img> loader with referrerPolicy="no-referrer" for external URLs
+ * and resilient <img> / <picture> loader with referrerPolicy="no-referrer" for external URLs
  * (Cloudflare Images, Cloudinary, or custom URLs).
  */
 export const ProductImage: React.FC<ProductImageProps> = ({
   src,
+  desktopSrc,
   alt,
   category = 'Jacket',
   styleType = 'Fine Leather',
@@ -25,7 +28,14 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   compact = false,
   eager = false,
 }) => {
-  const normalizedSrc = (src || '').trim();
+  const resolvedMedia = resolveBannerMediaPair(src, desktopSrc, '');
+  const normalizedSrc = resolvedMedia.mobileUrl;
+  const normalizedDesktopSrc = resolvedMedia.desktopUrl;
+  const hasSeparateDesktopExternal =
+    resolvedMedia.hasSeparateDesktop &&
+    !normalizedSrc.startsWith('studio://') &&
+    !normalizedDesktopSrc.startsWith('studio://');
+
   const imgRef = useRef<HTMLImageElement | null>(null);
   const retriedRef = useRef<boolean>(false);
   const [loaded, setLoaded] = useState<boolean>(true);
@@ -44,7 +54,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     } else {
       setLoaded(true);
     }
-  }, [normalizedSrc]);
+  }, [normalizedSrc, normalizedDesktopSrc]);
 
   const seoAltText = buildProductImageSeoAlt({
     alt,
@@ -71,46 +81,92 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   if (!isStudioUri) {
     return (
       <div className={`relative overflow-hidden bg-[#F3F3F4] ${className}`}>
-        <img
-          ref={(el) => {
-            imgRef.current = el;
-            if (el && el.complete && el.naturalWidth > 0) {
-              if (!loaded) setLoaded(true);
-              if (failed) setFailed(false);
-            }
-          }}
-          key={normalizedSrc}
-          src={normalizedSrc}
-          alt={seoAltText}
-          loading={eager ? 'eager' : 'lazy'}
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onLoad={() => {
-            setLoaded(true);
-            setFailed(false);
-          }}
-          onError={() => {
-            if (
-              imgRef.current &&
-              imgRef.current.complete &&
-              imgRef.current.naturalWidth > 0
-            ) {
+        {hasSeparateDesktopExternal ? (
+          <picture className="block h-full w-full">
+            <source media="(min-width: 1024px)" srcSet={normalizedDesktopSrc} />
+            <img
+              ref={(el) => {
+                imgRef.current = el;
+                if (el && el.complete && el.naturalWidth > 0) {
+                  if (!loaded) setLoaded(true);
+                  if (failed) setFailed(false);
+                }
+              }}
+              key={`${normalizedSrc}::${normalizedDesktopSrc}`}
+              src={normalizedSrc}
+              alt={seoAltText}
+              loading={eager ? 'eager' : 'lazy'}
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onLoad={() => {
+                setLoaded(true);
+                setFailed(false);
+              }}
+              onError={() => {
+                if (
+                  imgRef.current &&
+                  imgRef.current.complete &&
+                  imgRef.current.naturalWidth > 0
+                ) {
+                  setLoaded(true);
+                  setFailed(false);
+                  return;
+                }
+                if (!retriedRef.current && imgRef.current) {
+                  retriedRef.current = true;
+                  const sep = normalizedSrc.includes('?') ? '&' : '?';
+                  imgRef.current.src = `${normalizedSrc}${sep}r=1`;
+                  return;
+                }
+                setFailed(true);
+              }}
+              className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
+                loaded ? 'opacity-100' : 'opacity-100'
+              }`}
+            />
+          </picture>
+        ) : (
+          <img
+            ref={(el) => {
+              imgRef.current = el;
+              if (el && el.complete && el.naturalWidth > 0) {
+                if (!loaded) setLoaded(true);
+                if (failed) setFailed(false);
+              }
+            }}
+            key={normalizedSrc}
+            src={normalizedSrc}
+            alt={seoAltText}
+            loading={eager ? 'eager' : 'lazy'}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onLoad={() => {
               setLoaded(true);
               setFailed(false);
-              return;
-            }
-            if (!retriedRef.current && imgRef.current) {
-              retriedRef.current = true;
-              const sep = normalizedSrc.includes('?') ? '&' : '?';
-              imgRef.current.src = `${normalizedSrc}${sep}r=1`;
-              return;
-            }
-            setFailed(true);
-          }}
-          className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
-            loaded ? 'opacity-100' : 'opacity-100'
-          }`}
-        />
+            }}
+            onError={() => {
+              if (
+                imgRef.current &&
+                imgRef.current.complete &&
+                imgRef.current.naturalWidth > 0
+              ) {
+                setLoaded(true);
+                setFailed(false);
+                return;
+              }
+              if (!retriedRef.current && imgRef.current) {
+                retriedRef.current = true;
+                const sep = normalizedSrc.includes('?') ? '&' : '?';
+                imgRef.current.src = `${normalizedSrc}${sep}r=1`;
+                return;
+              }
+              setFailed(true);
+            }}
+            className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
+              loaded ? 'opacity-100' : 'opacity-100'
+            }`}
+          />
+        )}
       </div>
     );
   }

@@ -31,6 +31,7 @@ import {
   EyeOff,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Sun,
   Moon,
   Mail,
@@ -216,14 +217,21 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
   );
 };
 
+export const DESKTOP_BANNER_COMPRESSION_OPTIONS: ImageCompressionOptions = {
+  maxWidth: 2560,
+  maxHeight: 1600,
+};
+
 interface R2VideoUploadButtonProps {
   onUploaded: (url: string) => void;
   ariaLabel: string;
+  label?: string;
 }
 
 const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
   onUploaded,
   ariaLabel,
+  label = 'Upload Video',
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -272,7 +280,7 @@ const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
         className="px-3 py-2 text-[11px] bg-white text-zinc-950 font-bold uppercase tracking-wider rounded-lg hover:bg-zinc-200 disabled:opacity-60 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
       >
         <Film className="w-3.5 h-3.5 shrink-0" />
-        <span>{uploading ? 'Uploading Video...' : 'Upload Video'}</span>
+        <span>{uploading ? 'Uploading Video...' : label}</span>
       </button>
       {statusMessage && (
         <span className="text-[10px] font-mono-tabular font-bold text-emerald-400 mt-1">
@@ -574,6 +582,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<AdminSectionTab>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [isQuickCategoriesOpen, setIsQuickCategoriesOpen] = useState(false);
+  const [isQuickProductsOpen, setIsQuickProductsOpen] = useState(false);
+  const [isPendingOrdersOpen, setIsPendingOrdersOpen] = useState(false);
   const adminTheme = 'dark' as const;
 
   useEffect(() => {
@@ -3435,13 +3447,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* LEFT SIDEBAR NAVIGATION (Matches Reference Image Layout & SAMO Colors) */}
       <aside
-        className={`w-64 bg-[#141417] border-r border-zinc-800/90 flex-col justify-between shrink-0 ${
+        className={`w-64 bg-[#141417] border-r border-zinc-800/90 flex-col justify-between shrink-0 transition-all duration-200 ${
           mobileSidebarOpen
             ? 'flex fixed inset-y-0 left-0 z-50 h-screen shadow-2xl'
-            : 'hidden lg:flex lg:sticky lg:top-0 lg:h-screen'
+            : desktopSidebarOpen
+            ? 'hidden lg:flex lg:sticky lg:top-0 lg:h-screen'
+            : 'hidden'
         }`}
       >
-        <div className="p-5 space-y-6 overflow-y-auto">
+        <div className="p-5 space-y-5 overflow-y-auto flex-1 [scrollbar-width:thin] [scrollbar-color:#27272a_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-800 hover:[&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
           {/* Brand Lockup */}
           <div className="flex items-center justify-between px-2 pt-1">
             <button
@@ -3456,17 +3470,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Weave Admin
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen(false)}
-              aria-label="Close navigation menu"
-              className="lg:hidden p-2 text-zinc-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setDesktopSidebarOpen(false)}
+                aria-label="Hide desktop navigation sidebar"
+                title="Hide Navigation Sidebar"
+                className="hidden lg:inline-flex p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(false)}
+                aria-label="Close navigation menu"
+                className="lg:hidden p-2 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Mobile Return to Live Website Button */}
+          {/* Mobile Compact Live Website Button */}
           <div className="lg:hidden px-1">
             <button
               type="button"
@@ -3474,10 +3499,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setMobileSidebarOpen(false);
                 onNavigateHome('/home');
               }}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+              data-testid="admin-mobile-live-website-btn"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-white hover:bg-zinc-200 text-zinc-950 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Return to Live Website</span>
+              <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+              <span>Live website</span>
             </button>
           </div>
 
@@ -3523,14 +3549,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {/* Bottom Storefront & Logout Actions */}
-        <div className="p-4 border-t border-zinc-800/80 space-y-2">
+        <div className="p-3.5 border-t border-zinc-800/80 space-y-1.5">
           <button
             type="button"
             onClick={() => onNavigateHome('/home')}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
+            className="w-full px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-[11px] font-semibold flex items-center gap-2 transition-colors cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 shrink-0" />
-            <span>Storefront (/home)</span>
+            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+            <span>Live website</span>
           </button>
 
           <button
@@ -3549,13 +3575,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* TOP HEADER BAR (Matches Reference Image: Breadcrumb Left, Search + Theme Toggle + Bell + Admin Profile Right) */}
         <header className="sticky top-0 z-30 bg-[#0E0E10]/95 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-6 lg:px-8 py-3.5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-            {/* Left: Hamburger (Mobile) + Breadcrumb */}
-            <div className="flex items-center gap-3 min-w-0">
+            {/* Left: Hamburger (Mobile & Desktop Sidebar Toggle) + Breadcrumb */}
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(true)}
                 aria-label="Open admin menu"
-                className="lg:hidden p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white cursor-pointer"
+                className="lg:hidden p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white cursor-pointer shrink-0"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDesktopSidebarOpen((prev) => !prev)}
+                aria-label={
+                  desktopSidebarOpen
+                    ? 'Hide navigation sidebar'
+                    : 'Show navigation sidebar'
+                }
+                title={
+                  desktopSidebarOpen
+                    ? 'Hide Navigation Sidebar'
+                    : 'Show Navigation Sidebar'
+                }
+                data-testid="admin-desktop-sidebar-toggle"
+                className="hidden lg:inline-flex items-center justify-center p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white transition-colors cursor-pointer shrink-0"
               >
                 <Menu className="w-4 h-4" />
               </button>
@@ -4418,347 +4462,459 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Quick Categories Row (Matches Reference Image + Edit Category Name Button) */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xs sm:text-sm font-semibold text-zinc-200">
+              {/* Quick Categories Section (Collapsible on Dashboard — Hidden by Default on Entry) */}
+              <div className="bg-[#18181C]/60 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIsQuickCategoriesOpen((prev) => !prev)
+                    }
+                    aria-expanded={
+                      activeTab === 'items' ? true : isQuickCategoriesOpen
+                    }
+                    data-testid="toggle-quick-categories-section"
+                    className="flex items-center gap-2 text-left group cursor-pointer"
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-zinc-900 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+                      {(activeTab === 'items' || isQuickCategoriesOpen) ? (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      )}
+                    </span>
+                    <h2 className="text-xs sm:text-sm font-bold text-white">
                       Quick Categories
                     </h2>
-                    <span className="text-[11px] text-zinc-500 hidden sm:inline">
-                      (Click pencil icon on any category to rename it)
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono-tabular text-zinc-400">
+                      ({quickCategoriesWithCounts.length})
                     </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    {(
-                      [
-                        { id: 'all', label: 'All Depts' },
-                        { id: 'women', label: 'Women' },
-                        { id: 'kids', label: 'Kids' },
-                      ] as const
-                    ).map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedDeptFilter(d.id);
-                          setSelectedQuickCategory('all');
-                        }}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
-                          selectedDeptFilter === d.id
-                            ? 'bg-white text-zinc-950'
-                            : 'bg-[#18181C] text-zinc-400 hover:text-white border border-zinc-800'
-                        }`}
-                      >
-                        {d.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedQuickCategory('all')}
-                    className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-                      selectedQuickCategory === 'all'
-                        ? 'bg-white text-zinc-950 border-white'
-                        : 'bg-[#18181C] text-zinc-200 border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <Package className="w-3.5 h-3.5" />
-                    <span>All Categories</span>
-                    <span
-                      className={`text-[11px] font-mono-tabular ${
-                        selectedQuickCategory === 'all'
-                          ? 'text-zinc-700'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      ({products.length})
+                    <span className="text-[11px] text-zinc-500 hidden md:inline">
+                      {(activeTab === 'items' || isQuickCategoriesOpen)
+                        ? 'Click arrow to hide'
+                        : 'Click arrow to unhide'}
                     </span>
                   </button>
 
-                  {quickCategoriesWithCounts
-                    .filter(
-                      (c) =>
-                        selectedDeptFilter === 'all' ||
-                        c.department === selectedDeptFilter
-                    )
-                    .map((cat) => {
-                      const catFilterKey = `${cat.department}::${cat.name}`;
-                      const isSelected = selectedQuickCategory === catFilterKey;
-                      return (
-                        <div
-                          key={cat.id}
-                          className={` rounded-xl border text-xs font-semibold flex items-center whitespace-nowrap shrink-0 transition-all ${
-                            isSelected
-                              ? 'bg-white text-zinc-950 border-white'
-                              : 'bg-[#18181C] text-zinc-200 border-zinc-800 hover:border-zinc-700'
+                  {(activeTab === 'items' || isQuickCategoriesOpen) && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      {(
+                        [
+                          { id: 'all', label: 'All Depts' },
+                          { id: 'women', label: 'Women' },
+                          { id: 'kids', label: 'Kids' },
+                        ] as const
+                      ).map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDeptFilter(d.id);
+                            setSelectedQuickCategory('all');
+                          }}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                            selectedDeptFilter === d.id
+                              ? 'bg-white text-zinc-950'
+                              : 'bg-[#18181C] text-zinc-400 hover:text-white border border-zinc-800'
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedQuickCategory(
-                                isSelected ? 'all' : catFilterKey
-                              )
-                            }
-                            className="pl-3.5 pr-2 py-2.5 flex items-center gap-2 cursor-pointer"
-                          >
-                            <span>
-                              {cat.department === 'kids'
-                                ? `Kids · ${cat.name}`
-                                : cat.name}
-                            </span>
-                            <span
-                              className={`text-[11px] font-mono-tabular ${
-                                isSelected ? 'text-zinc-700' : 'text-zinc-500'
-                              }`}
-                            >
-                              ({cat.count})
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingCategory(cat);
-                              setEditCatName(cat.name);
-                              setEditCatDesc(cat.description || '');
-                              setEditCatSizeGuides(
-                                cat.sizeGuides ||
-                                  inferDefaultSizeGuidesForCategory(cat.name)
-                              );
-                            }}
-                            aria-label={`Edit category name ${cat.name}`}
-                            title={`Rename "${cat.name}" category`}
-                            className={`pr-2.5 pl-1 py-2.5 cursor-pointer transition-colors ${
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {(activeTab === 'items' || isQuickCategoriesOpen) && (
+                  <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pt-1 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedQuickCategory('all')}
+                      className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                        selectedQuickCategory === 'all'
+                          ? 'bg-white text-zinc-950 border-white'
+                          : 'bg-[#18181C] text-zinc-200 border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      <span>All Categories</span>
+                      <span
+                        className={`text-[11px] font-mono-tabular ${
+                          selectedQuickCategory === 'all'
+                            ? 'text-zinc-700'
+                            : 'text-zinc-500'
+                        }`}
+                      >
+                        ({products.length})
+                      </span>
+                    </button>
+
+                    {quickCategoriesWithCounts
+                      .filter(
+                        (c) =>
+                          selectedDeptFilter === 'all' ||
+                          c.department === selectedDeptFilter
+                      )
+                      .map((cat) => {
+                        const catFilterKey = `${cat.department}::${cat.name}`;
+                        const isSelected =
+                          selectedQuickCategory === catFilterKey;
+                        return (
+                          <div
+                            key={cat.id}
+                            className={`rounded-xl border text-xs font-semibold flex items-center whitespace-nowrap shrink-0 transition-all ${
                               isSelected
-                                ? 'text-zinc-600 hover:text-zinc-950'
-                                : 'text-zinc-500 hover:text-white'
+                                ? 'bg-white text-zinc-950 border-white'
+                                : 'bg-[#18181C] text-zinc-200 border-zinc-800 hover:border-zinc-700'
                             }`}
                           >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedQuickCategory(
+                                  isSelected ? 'all' : catFilterKey
+                                )
+                              }
+                              className="pl-3.5 pr-2 py-2.5 flex items-center gap-2 cursor-pointer"
+                            >
+                              <span>
+                                {cat.department === 'kids'
+                                  ? `Kids · ${cat.name}`
+                                  : cat.name}
+                              </span>
+                              <span
+                                className={`text-[11px] font-mono-tabular ${
+                                  isSelected
+                                    ? 'text-zinc-700'
+                                    : 'text-zinc-500'
+                                }`}
+                              >
+                                ({cat.count})
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingCategory(cat);
+                                setEditCatName(cat.name);
+                                setEditCatDesc(cat.description || '');
+                                setEditCatSizeGuides(
+                                  cat.sizeGuides ||
+                                    inferDefaultSizeGuidesForCategory(cat.name)
+                                );
+                              }}
+                              aria-label={`Edit category name ${cat.name}`}
+                              title={`Rename "${cat.name}" category`}
+                              className={`pr-2.5 pl-1 py-2.5 cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'text-zinc-600 hover:text-zinc-950'
+                                  : 'text-zinc-500 hover:text-white'
+                              }`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCategoryModalOpen(true)}
+                      aria-label="Quick add category"
+                      title="Add New Category"
+                      className="w-9 h-9 rounded-full bg-[#18181C] border border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Products List Card (Collapsible on Dashboard — Hidden by Default on Entry) */}
+              <div className="bg-[#18181C]/60 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickProductsOpen((prev) => !prev)}
+                    aria-expanded={
+                      activeTab === 'items' ? true : isQuickProductsOpen
+                    }
+                    data-testid="toggle-quick-products-section"
+                    className="flex items-center gap-2 text-left group cursor-pointer"
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-zinc-900 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+                      {(activeTab === 'items' || isQuickProductsOpen) ? (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      )}
+                    </span>
+                    <h2 className="text-xs sm:text-sm font-bold text-white">
+                      Products List
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono-tabular text-zinc-400">
+                      ({products.length})
+                    </span>
+                    {outOfStockCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-950/70 border border-amber-800/70 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                        {outOfStockCount} Out of Stock
+                      </span>
+                    )}
+                    <span className="text-[11px] text-zinc-500 hidden md:inline">
+                      {(activeTab === 'items' || isQuickProductsOpen)
+                        ? 'Click arrow to hide'
+                        : 'Click arrow to unhide'}
+                    </span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => setIsAddCategoryModalOpen(true)}
-                    aria-label="Quick add category"
-                    title="Add New Category"
-                    className="w-9 h-9 rounded-full bg-[#18181C] border border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer"
+                    onClick={() => handleSelectNav('banners')}
+                    className="text-[11px] font-semibold text-zinc-300 hover:text-white underline cursor-pointer flex items-center gap-1"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Film className="w-3.5 h-3.5" />
+                    <span>Manage Homepage &amp; Category Banners →</span>
                   </button>
                 </div>
+
+                {(activeTab === 'items' || isQuickProductsOpen) && (
+                  <div className="space-y-3 pt-1">
+                    {/* All Products | Out of Stock Tabs */}
+                    <div className="flex items-center gap-6 border-b border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => setProductStockFilter('all')}
+                        className={`pb-2.5 text-xs font-semibold transition-colors cursor-pointer border-b-2 ${
+                          productStockFilter === 'all'
+                            ? 'text-white border-white'
+                            : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                        }`}
+                      >
+                        All Products ({products.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductStockFilter('out-of-stock')}
+                        className={`pb-2.5 text-xs font-semibold transition-colors cursor-pointer border-b-2 ${
+                          productStockFilter === 'out-of-stock'
+                            ? 'text-white border-white'
+                            : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                        }`}
+                      >
+                        Out of Stock ({outOfStockCount})
+                      </button>
+                    </div>
+
+                    {/* Products Rows Container */}
+                    <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl divide-y divide-zinc-800/80 overflow-hidden">
+                      {displayedAdminProducts.length === 0 ? (
+                        <div className="p-10 text-center space-y-3">
+                          <p className="text-xs text-zinc-400">
+                            {productStockFilter === 'out-of-stock'
+                              ? 'No products are currently marked Out of Stock.'
+                              : 'No products match the selected filter.'}
+                          </p>
+                          {selectedQuickCategory !== 'all' && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedQuickCategory('all')}
+                              className="px-3.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              Show All Categories
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        displayedAdminProducts.map((prod) =>
+                          renderProductRow(prod)
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Main Grid: Products List (Left 8 cols on Dashboard, 12 cols on Items) + Pending Orders & Banners Shortcut (Right 4 cols on Dashboard) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Products List Card */}
-                <div
-                  className={`${
-                    activeTab === 'dashboard'
-                      ? 'lg:col-span-8'
-                      : 'lg:col-span-12'
-                  } space-y-3`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-sm sm:text-base font-bold text-white">
-                      Products List
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectNav('banners')}
-                      className="text-[11px] font-semibold text-zinc-300 hover:text-white underline cursor-pointer flex items-center gap-1"
-                    >
-                      <Film className="w-3.5 h-3.5" />
-                      <span>Manage Homepage &amp; Category Banners →</span>
-                    </button>
-                  </div>
-
-                  {/* All Products | Out of Stock Tabs */}
-                  <div className="flex items-center gap-6 border-b border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setProductStockFilter('all')}
-                      className={`pb-2.5 text-xs font-semibold transition-colors cursor-pointer border-b-2 ${
-                        productStockFilter === 'all'
-                          ? 'text-white border-white'
-                          : 'text-zinc-400 hover:text-zinc-200 border-transparent'
-                      }`}
-                    >
-                      All Products ({products.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProductStockFilter('out-of-stock')}
-                      className={`pb-2.5 text-xs font-semibold transition-colors cursor-pointer border-b-2 ${
-                        productStockFilter === 'out-of-stock'
-                          ? 'text-white border-white'
-                          : 'text-zinc-400 hover:text-zinc-200 border-transparent'
-                      }`}
-                    >
-                      Out of Stock ({outOfStockCount})
-                    </button>
-                  </div>
-
-                  {/* Products Rows Container */}
-                  <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl divide-y divide-zinc-800/80 overflow-hidden">
-                    {displayedAdminProducts.length === 0 ? (
-                      <div className="p-10 text-center space-y-3">
-                        <p className="text-xs text-zinc-400">
-                          {productStockFilter === 'out-of-stock'
-                            ? 'No products are currently marked Out of Stock.'
-                            : 'No products match the selected filter.'}
-                        </p>
-                        {selectedQuickCategory !== 'all' && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedQuickCategory('all')}
-                            className="px-3.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Show All Categories
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      displayedAdminProducts.map((prod) =>
-                        renderProductRow(prod)
-                      )
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Column on Dashboard: Pending Client Orders & Quick Site Banners Card (Instead of Customer Reviews) */}
-                {activeTab === 'dashboard' && (
-                  <div className="lg:col-span-4 space-y-6">
-                    {/* Pending Orders Queue Card */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-sm sm:text-base font-bold text-white">
-                          Pending Orders{' '}
-                          <span className="text-zinc-400 font-normal">
-                            ({pendingOrders.length})
-                          </span>
+              {/* Dashboard Pending Orders & Quick Site Banners Section (Full-Width Balanced Desktop Layout) */}
+              {activeTab === 'dashboard' && (
+                <div className="space-y-4">
+                  {/* Pending Orders Queue Card (Collapsible — Hidden by Default on Entry) */}
+                  <div className="bg-[#18181C]/60 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIsPendingOrdersOpen((prev) => !prev)
+                        }
+                        aria-expanded={isPendingOrdersOpen}
+                        data-testid="toggle-pending-orders-section"
+                        className="flex items-center gap-2 text-left group cursor-pointer"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-zinc-900 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+                          {isPendingOrdersOpen ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
+                        </span>
+                        <h2 className="text-xs sm:text-sm font-bold text-white">
+                          Pending Orders
                         </h2>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectNav('orders')}
-                          className="text-xs text-zinc-400 hover:text-white cursor-pointer"
-                        >
-                          View All ({orders.length})
-                        </button>
-                      </div>
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono-tabular text-zinc-300">
+                          ({pendingOrders.length})
+                        </span>
+                        <span className="text-[11px] text-zinc-500 hidden md:inline">
+                          {isPendingOrdersOpen
+                            ? 'Click arrow to hide'
+                            : 'Click arrow to unhide'}
+                        </span>
+                      </button>
 
+                      <button
+                        type="button"
+                        onClick={() => handleSelectNav('orders')}
+                        className="text-xs font-semibold text-zinc-300 hover:text-white underline cursor-pointer"
+                      >
+                        View All Orders ({orders.length}) →
+                      </button>
+                    </div>
+
+                    {isPendingOrdersOpen && (
                       <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl divide-y divide-zinc-800/80 overflow-hidden">
-                        {orders.slice(0, 4).map((ord) => {
-                          const ordStockAlerts = getOrderStockAlerts(ord);
-                          return (
-                          <div key={ord.id} className="p-4 space-y-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-bold text-white">
-                                {ord.customerName}
-                              </span>
-                              <span className="font-mono-tabular text-xs font-bold text-zinc-200">
-                                ${ord.totalPrice.toLocaleString()}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-zinc-400 line-clamp-2">
-                              {ord.orderNumber} · {ord.itemsSummary}
-                            </p>
-                            {ordStockAlerts.length > 0 && (
-                              <div className="space-y-1 pt-0.5">
-                                {ordStockAlerts.map((alert) => (
-                                  <div
-                                    key={alert.id}
-                                    data-testid="admin-order-stock-alert"
-                                    className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold tracking-wide flex items-start gap-1.5 ${
-                                      alert.type === 'product'
-                                        ? 'bg-red-950/85 border-red-700/80 text-red-200'
-                                        : 'bg-amber-950/85 border-amber-700/80 text-amber-200'
-                                    }`}
-                                  >
-                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                    <span>{alert.message}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between pt-1">
-                              <span
-                                className={`text-[10px] font-bold uppercase tracking-wider ${
-                                  ord.status === 'accepted'
-                                    ? 'text-emerald-400'
-                                    : ord.status === 'rejected'
-                                    ? 'text-red-400'
-                                    : 'text-amber-400'
-                                }`}
+                        {orders.length === 0 ? (
+                          <div className="p-8 text-center text-xs text-zinc-400">
+                            No orders received yet.
+                          </div>
+                        ) : (
+                          orders.slice(0, 6).map((ord) => {
+                            const ordStockAlerts = getOrderStockAlerts(ord);
+                            const isWhishOrOmt =
+                              ord.paymentMethod === 'Whish/OMT Payment' ||
+                              ord.paymentMethod === 'Whish' ||
+                              ord.paymentMethod === 'OMT' ||
+                              String(ord.paymentMethod || '')
+                                .toLowerCase()
+                                .includes('whish') ||
+                              String(ord.paymentMethod || '')
+                                .toLowerCase()
+                                .includes('omt');
+
+                            return (
+                              <div
+                                key={ord.id}
+                                className="p-4 sm:p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors"
                               >
-                                {ord.status}
-                              </span>
-                              <div className="flex flex-wrap items-center gap-2.5 text-xs font-semibold">
-                                {(ord.paymentMethod === 'Whish/OMT Payment' ||
-                                  ord.paymentMethod === 'Whish' ||
-                                  ord.paymentMethod === 'OMT' ||
-                                  String(ord.paymentMethod || '')
-                                    .toLowerCase()
-                                    .includes('whish') ||
-                                  String(ord.paymentMethod || '')
-                                    .toLowerCase()
-                                    .includes('omt')) &&
-                                  (!ord.paymentVerified ? (
+                                {/* Left Column: Customer Info, Summary & Stock Alerts */}
+                                <div className="min-w-0 flex-1 space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-bold text-white truncate">
+                                      {ord.customerName}
+                                    </span>
+                                    <span className="text-[11px] font-mono-tabular text-zinc-400">
+                                      {ord.orderNumber}
+                                    </span>
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border ${
+                                        ord.status === 'accepted'
+                                          ? 'bg-emerald-950/70 border-emerald-700/70 text-emerald-300'
+                                          : ord.status === 'rejected'
+                                          ? 'bg-red-950/70 border-red-700/70 text-red-300'
+                                          : 'bg-amber-950/70 border-amber-700/70 text-amber-300'
+                                      }`}
+                                    >
+                                      {ord.status}
+                                    </span>
+                                    {ord.paymentMethod && (
+                                      <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 text-[9.5px] font-bold uppercase tracking-wider">
+                                        {ord.paymentMethod}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-xs text-zinc-400 leading-relaxed break-words">
+                                    {ord.itemsSummary}
+                                  </p>
+
+                                  {ordStockAlerts.length > 0 && (
+                                    <div className="space-y-1 pt-1">
+                                      {ordStockAlerts.map((alert) => (
+                                        <div
+                                          key={alert.id}
+                                          data-testid="admin-order-stock-alert"
+                                          className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold tracking-wide flex items-start gap-1.5 ${
+                                            alert.type === 'product'
+                                              ? 'bg-red-950/85 border-red-700/80 text-red-200'
+                                              : 'bg-amber-950/85 border-amber-700/80 text-amber-200'
+                                          }`}
+                                        >
+                                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                          <span>{alert.message}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Right Dedicated Action Rail: Whish/OMT Badge + Total Price + Approve/Reject */}
+                                <div className="flex flex-wrap sm:flex-nowrap items-center justify-between xl:justify-end gap-3 pt-2.5 xl:pt-0 border-t xl:border-t-0 border-zinc-800/70 shrink-0">
+                                  {isWhishOrOmt &&
+                                    (!ord.paymentVerified ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          onConfirmOrderPayment
+                                            ? onConfirmOrderPayment(ord.id)
+                                            : onUpdateOrderStatus(
+                                                ord.id,
+                                                'accepted'
+                                              )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors whitespace-nowrap"
+                                      >
+                                        Payment Received? Yes — Send Email
+                                      </button>
+                                    ) : (
+                                      <span className="px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-700/70 text-emerald-300 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        ✓ Payment Received · Email Sent
+                                      </span>
+                                    ))}
+
+                                  <div className="font-mono-tabular text-xs sm:text-sm font-bold text-white min-w-[72px] text-left sm:text-right">
+                                    ${ord.totalPrice.toLocaleString()}
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        onConfirmOrderPayment
-                                          ? onConfirmOrderPayment(ord.id)
-                                          : onUpdateOrderStatus(
-                                              ord.id,
-                                              'accepted'
-                                            )
+                                        onUpdateOrderStatus(ord.id, 'accepted')
                                       }
-                                      className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                                      className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/70 text-emerald-300 text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
                                     >
-                                      Payment Received? Yes — Send Client Email
+                                      Approve
                                     </button>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-700/70 text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
-                                      ✓ Payment Received · Email Sent
-                                    </span>
-                                  ))}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onUpdateOrderStatus(ord.id, 'accepted')
-                                  }
-                                  className="text-emerald-400 hover:underline cursor-pointer"
-                                >
-                                  Approve
-                                </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onUpdateOrderStatus(ord.id, 'rejected')
-                                    }
-                                    className="text-zinc-400 hover:text-red-400 cursor-pointer"
-                                  >
-                                    Reject
-                                  </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onUpdateOrderStatus(ord.id, 'rejected')
+                                      }
+                                      className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/80 border border-zinc-700 hover:border-red-800/70 text-zinc-300 hover:text-red-200 text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                                    >
+                                      Reject
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                        )}
                       </div>
-                    </div>
+                    )}
+                  </div>
 
-                    {/* Quick Shortcut Card to Site & Category Banners */}
-                    <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-5 space-y-3">
+                  {/* Quick Shortcut Card to Site & Category Banners */}
+                  <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="space-y-1 max-w-2xl">
                       <div className="flex items-center gap-2 text-white font-bold text-xs uppercase tracking-wider">
                         <Film className="w-4 h-4" />
                         <span>Site &amp; Category Banners</span>
@@ -4768,28 +4924,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         Banner, 3 Bottom Section Banners, Showroom Banner, or
                         the in-feed banners inside every product category.
                       </p>
-                      <div className="grid grid-cols-1 gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectNav('banners')}
-                          className="w-full py-2.5 px-3.5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer flex items-center justify-between"
-                        >
-                          <span>Edit Homepage &amp; Showroom Banners</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectNav('categories')}
-                          className="w-full py-2.5 px-3.5 rounded-xl bg-zinc-900 text-zinc-200 border border-zinc-700 text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-between"
-                        >
-                          <span>Edit Category Mid-Page Banners</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectNav('banners')}
+                        className="py-2.5 px-4 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <span>Edit Homepage &amp; Showroom Banners</span>
+                        <ChevronRight className="w-4 h-4 shrink-0" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectNav('categories')}
+                        className="py-2.5 px-4 rounded-xl bg-zinc-900 text-zinc-200 border border-zinc-700 text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <span>Edit Category Mid-Page Banners</span>
+                        <ChevronRight className="w-4 h-4 shrink-0" />
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -4935,7 +5091,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                         <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-                          Hero Video URL (.mp4 or .webm) — Active when &ldquo;Use
+                          Hero Video URL (.mp4 or .webm — Primary / Mobile &amp; Default) — Active when &ldquo;Use
                           Video&rdquo; is selected
                         </label>
                         {siteBanners.homeHeroVideoUrl !==
@@ -4986,11 +5142,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }}
                         />
                       </div>
+
+                      {/* Optional Desktop Hero Video Override */}
+                      <div className="mt-2.5 pt-2.5 border-t border-zinc-800/80 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Optional Desktop Hero Video Override (Displays on Desktop &ge; 1024px; falls back to Mobile video if empty)
+                          </label>
+                          {Boolean(
+                            siteBanners.homeHeroDesktopVideoUrl &&
+                              siteBanners.homeHeroDesktopVideoUrl.trim()
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateSiteBannerField(
+                                  'homeHeroDesktopVideoUrl',
+                                  '',
+                                  'Hero Desktop Video Reset to Same as Mobile'
+                                )
+                              }
+                              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Reset Desktop to Same as Mobile
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          <input
+                            type="text"
+                            value={siteBanners.homeHeroDesktopVideoUrl || ''}
+                            onChange={(e) =>
+                              updateSiteBannerField(
+                                'homeHeroDesktopVideoUrl',
+                                e.target.value,
+                                'Homepage Desktop Hero Video'
+                              )
+                            }
+                            placeholder="Optional Desktop Video URL (leave empty to use Mobile/Primary video on both)"
+                            className="flex-1 px-3 py-2 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                          />
+                          <R2VideoUploadButton
+                            ariaLabel="Upload Homepage Desktop Hero Video"
+                            label="Upload Desktop Version (Optional)"
+                            onUploaded={(url) => {
+                              onUpdateSiteBanners({
+                                ...siteBanners,
+                                homeHeroMediaType: 'video',
+                                homeHeroDesktopVideoUrl: url,
+                              });
+                              setBannerFeedback(
+                                '✓ Uploaded & Activated Desktop Homepage Hero Video'
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                        Hero Photo Banner URL (Auto-Shrink WebP) — Active when
+                        Hero Photo Banner URL (Primary / Mobile &amp; Default) — Active when
                         &ldquo;Use Photo Banner&rdquo; is selected
                       </label>
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
@@ -5020,6 +5232,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             );
                           }}
                         />
+                      </div>
+
+                      {/* Optional Desktop Hero Photo Override */}
+                      <div className="mt-2.5 pt-2.5 border-t border-zinc-800/80 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Optional Desktop Hero Photo Override (2560&times;1600 Wide Desktop Crop — falls back to Mobile photo if empty)
+                          </label>
+                          {Boolean(
+                            siteBanners.homeHeroDesktopImageUrl &&
+                              siteBanners.homeHeroDesktopImageUrl.trim()
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateSiteBannerField(
+                                  'homeHeroDesktopImageUrl',
+                                  '',
+                                  'Hero Desktop Photo Reset to Same as Mobile'
+                                )
+                              }
+                              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Reset Desktop to Same as Mobile
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          <input
+                            type="text"
+                            value={siteBanners.homeHeroDesktopImageUrl || ''}
+                            onChange={(e) =>
+                              updateSiteBannerField(
+                                'homeHeroDesktopImageUrl',
+                                e.target.value,
+                                'Homepage Desktop Hero Photo'
+                              )
+                            }
+                            placeholder="Optional Desktop Hero Photo URL (leave empty to use Mobile/Primary photo on both)"
+                            className="flex-1 px-3 py-2 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                          />
+                          <R2ImageUploadButton
+                            ariaLabel="Upload Homepage Desktop Hero Image Banner"
+                            label="Upload Desktop Version (Optional)"
+                            compressionOptions={DESKTOP_BANNER_COMPRESSION_OPTIONS}
+                            onUploaded={(url) => {
+                              onUpdateSiteBanners({
+                                ...siteBanners,
+                                homeHeroMediaType: 'image',
+                                homeHeroDesktopImageUrl: url,
+                              });
+                              setBannerFeedback(
+                                '✓ Uploaded & Activated Desktop Homepage Hero Photo Banner'
+                              );
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -5171,36 +5440,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
                   <div className="lg:col-span-8 space-y-4">
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                        Middle Banner Image URL (Paste URL or Auto-Shrink &amp;
-                        Upload Photo)
-                      </label>
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
-                        <input
-                          type="text"
-                          value={siteBanners.homeMiddleBannerUrl}
-                          onChange={(e) =>
-                            updateSiteBannerField(
-                              'homeMiddleBannerUrl',
-                              e.target.value,
-                              'Homepage Middle Banner'
-                            )
-                          }
-                          placeholder="https://..."
-                          className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
-                        />
-                        <R2ImageUploadButton
-                          ariaLabel="Upload Homepage Middle Banner Photo"
-                          label="Upload & Shrink Photo"
-                          onUploaded={(url) =>
-                            updateSiteBannerField(
-                              'homeMiddleBannerUrl',
-                              url,
-                              'Homepage Middle Banner'
-                            )
-                          }
-                        />
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                          Middle Banner Image URL (Primary / Mobile &amp; Default — Auto-Shrink &amp;
+                          Upload Photo)
+                        </label>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          <input
+                            type="text"
+                            value={siteBanners.homeMiddleBannerUrl}
+                            onChange={(e) =>
+                              updateSiteBannerField(
+                                'homeMiddleBannerUrl',
+                                e.target.value,
+                                'Homepage Middle Banner'
+                              )
+                            }
+                            placeholder="https://..."
+                            className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                          />
+                          <R2ImageUploadButton
+                            ariaLabel="Upload Homepage Middle Banner Photo"
+                            label="Upload & Shrink Photo"
+                            onUploaded={(url) =>
+                              updateSiteBannerField(
+                                'homeMiddleBannerUrl',
+                                url,
+                                'Homepage Middle Banner'
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {/* Optional Desktop Override for Middle Banner */}
+                      <div className="pt-2.5 border-t border-zinc-800/80 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Optional Desktop Middle Banner Override (2560&times;1600 Wide Desktop Crop — falls back to Mobile banner if empty)
+                          </label>
+                          {Boolean(
+                            siteBanners.homeMiddleDesktopBannerUrl &&
+                              siteBanners.homeMiddleDesktopBannerUrl.trim()
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateSiteBannerField(
+                                  'homeMiddleDesktopBannerUrl',
+                                  '',
+                                  'Middle Desktop Banner Reset to Same as Mobile'
+                                )
+                              }
+                              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Reset Desktop to Same as Mobile
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          <input
+                            type="text"
+                            value={siteBanners.homeMiddleDesktopBannerUrl || ''}
+                            onChange={(e) =>
+                              updateSiteBannerField(
+                                'homeMiddleDesktopBannerUrl',
+                                e.target.value,
+                                'Homepage Desktop Middle Banner'
+                              )
+                            }
+                            placeholder="Optional Desktop Banner URL (leave empty to use Mobile/Primary banner on both)"
+                            className="flex-1 px-3 py-2 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                          />
+                          <R2ImageUploadButton
+                            ariaLabel="Upload Homepage Desktop Middle Banner Photo"
+                            label="Upload Desktop Version (Optional)"
+                            compressionOptions={DESKTOP_BANNER_COMPRESSION_OPTIONS}
+                            onUploaded={(url) =>
+                              updateSiteBannerField(
+                                'homeMiddleDesktopBannerUrl',
+                                url,
+                                'Homepage Desktop Middle Banner'
+                              )
+                            }
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -5404,35 +5729,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
                   <div className="lg:col-span-8 space-y-3">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-                      Showroom Page Banner Image URL (Paste URL or Auto-Shrink
-                      &amp; Upload Photo)
-                    </label>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
-                      <input
-                        type="text"
-                        value={siteBanners.showroomHeroBannerUrl}
-                        onChange={(e) =>
-                          updateSiteBannerField(
-                            'showroomHeroBannerUrl',
-                            e.target.value,
-                            'Showroom Page Banner'
-                          )
-                        }
-                        placeholder="https://..."
-                        className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
-                      />
-                      <R2ImageUploadButton
-                        ariaLabel="Upload Showroom Page Banner Photo"
-                        label="Upload & Shrink Photo"
-                        onUploaded={(url) =>
-                          updateSiteBannerField(
-                            'showroomHeroBannerUrl',
-                            url,
-                            'Showroom Page Banner'
-                          )
-                        }
-                      />
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                        Showroom Page Banner Image URL (Primary / Mobile &amp; Default — Auto-Shrink
+                        &amp; Upload Photo)
+                      </label>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                        <input
+                          type="text"
+                          value={siteBanners.showroomHeroBannerUrl}
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'showroomHeroBannerUrl',
+                              e.target.value,
+                              'Showroom Page Banner'
+                            )
+                          }
+                          placeholder="https://..."
+                          className="flex-1 px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                        <R2ImageUploadButton
+                          ariaLabel="Upload Showroom Page Banner Photo"
+                          label="Upload & Shrink Photo"
+                          onUploaded={(url) =>
+                            updateSiteBannerField(
+                              'showroomHeroBannerUrl',
+                              url,
+                              'Showroom Page Banner'
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* Optional Desktop Override for Showroom Page Banner */}
+                    <div className="pt-2.5 border-t border-zinc-800/80 space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          Optional Desktop Showroom Banner Override (2560&times;1600 Wide Desktop Crop — falls back to Mobile banner if empty)
+                        </label>
+                        {Boolean(
+                          siteBanners.showroomHeroDesktopBannerUrl &&
+                            siteBanners.showroomHeroDesktopBannerUrl.trim()
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateSiteBannerField(
+                                'showroomHeroDesktopBannerUrl',
+                                '',
+                                'Showroom Desktop Banner Reset to Same as Mobile'
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                          >
+                            Reset Desktop to Same as Mobile
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                        <input
+                          type="text"
+                          value={siteBanners.showroomHeroDesktopBannerUrl || ''}
+                          onChange={(e) =>
+                            updateSiteBannerField(
+                              'showroomHeroDesktopBannerUrl',
+                              e.target.value,
+                              'Showroom Desktop Page Banner'
+                            )
+                          }
+                          placeholder="Optional Desktop Showroom Banner URL (leave empty to use Mobile/Primary banner on both)"
+                          className="flex-1 px-3 py-2 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                        />
+                        <R2ImageUploadButton
+                          ariaLabel="Upload Showroom Desktop Page Banner Photo"
+                          label="Upload Desktop Version (Optional)"
+                          compressionOptions={DESKTOP_BANNER_COMPRESSION_OPTIONS}
+                          onUploaded={(url) =>
+                            updateSiteBannerField(
+                              'showroomHeroDesktopBannerUrl',
+                              url,
+                              'Showroom Desktop Page Banner'
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -6244,7 +6625,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const isBannerActive =
                           Boolean(bannerCfg.enabled) &&
                           Boolean(
-                            bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                            (bannerCfg.imageUrl && bannerCfg.imageUrl.trim()) ||
+                              (bannerCfg.desktopImageUrl &&
+                                bannerCfg.desktopImageUrl.trim())
                           );
                         const currentOrderNum = cat.sortOrder ?? idx + 1;
                         const draftVal =
@@ -6549,7 +6932,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
                                 {isBannerActive ? (
                                   <ProductImage
-                                    src={bannerCfg.imageUrl}
+                                    src={bannerCfg.imageUrl || bannerCfg.desktopImageUrl || ''}
+                                    desktopSrc={bannerCfg.desktopImageUrl}
                                     alt={`${cat.name} In-Feed Banner`}
                                     category={cat.name}
                                     className="w-full h-full object-cover"
@@ -6564,7 +6948,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="sm:col-span-8 space-y-2.5">
                                 <div className="flex flex-col gap-1.5">
                                   <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                    In-Feed Banner Image URL for {cat.name}
+                                    In-Feed Banner Image URL for {cat.name} (Primary / Mobile &amp; Default)
                                   </label>
                                   <input
                                     type="text"
@@ -6578,7 +6962,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         (prev) => ({
                                           ...prev,
                                           imageUrl: val,
-                                          enabled: Boolean(val.trim()),
+                                          enabled: Boolean(
+                                            val.trim() ||
+                                              (prev.desktopImageUrl &&
+                                                prev.desktopImageUrl.trim())
+                                          ),
                                         })
                                       );
                                     }}
@@ -6638,7 +7026,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         )
                                       }
                                     />
-                                    {(isBannerActive || bannerCfg.imageUrl) && (
+                                    {(isBannerActive ||
+                                      bannerCfg.imageUrl ||
+                                      bannerCfg.desktopImageUrl) && (
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -6649,6 +7039,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             (prev) => ({
                                               ...prev,
                                               imageUrl: '',
+                                              desktopImageUrl: '',
                                               enabled: false,
                                             }),
                                             `Removed banner from ${cat.name} — no banner will appear in this category`
@@ -6659,6 +7050,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         Delete Banner
                                       </button>
                                     )}
+                                  </div>
+                                </div>
+
+                                {/* Optional Desktop Banner Override */}
+                                <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <label className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400">
+                                      Optional Desktop Override (2560&times;1600 Wide Desktop Crop)
+                                    </label>
+                                    <span className="text-[9px] font-mono-tabular uppercase tracking-wider text-zinc-500">
+                                      {bannerCfg.desktopImageUrl &&
+                                      bannerCfg.desktopImageUrl.trim()
+                                        ? 'Custom Desktop Active'
+                                        : 'Using Mobile Banner'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-2">
+                                    <input
+                                      type="text"
+                                      value={bannerCfg.desktopImageUrl || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'women',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            desktopImageUrl: val,
+                                            enabled: Boolean(
+                                              val.trim() ||
+                                                (prev.imageUrl &&
+                                                  prev.imageUrl.trim())
+                                            ),
+                                          })
+                                        );
+                                      }}
+                                      placeholder="Optional Desktop Banner URL (falls back to Mobile if empty)"
+                                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <R2ImageUploadButton
+                                        compact={true}
+                                        ariaLabel={`Upload desktop banner photo for ${cat.name}`}
+                                        label="Upload Desktop Version (Optional)"
+                                        compressionOptions={
+                                          DESKTOP_BANNER_COMPRESSION_OPTIONS
+                                        }
+                                        onUploaded={(url) =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'women',
+                                            cat.name,
+                                            (prev) => ({
+                                              ...prev,
+                                              desktopImageUrl: url,
+                                              enabled: true,
+                                            }),
+                                            `Uploaded desktop banner override for ${cat.name}`
+                                          )
+                                        }
+                                      />
+                                      {Boolean(
+                                        bannerCfg.desktopImageUrl &&
+                                          bannerCfg.desktopImageUrl.trim()
+                                      ) && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateCategoryBanner(
+                                              bKey,
+                                              'women',
+                                              cat.name,
+                                              (prev) => ({
+                                                ...prev,
+                                                desktopImageUrl: '',
+                                              }),
+                                              `Reset ${cat.name} desktop banner to same as mobile`
+                                            )
+                                          }
+                                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                        >
+                                          Reset Desktop to Same as Mobile
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -6683,7 +7160,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const isBannerActive =
                         Boolean(bannerCfg.enabled) &&
                         Boolean(
-                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                          (bannerCfg.imageUrl && bannerCfg.imageUrl.trim()) ||
+                            (bannerCfg.desktopImageUrl &&
+                              bannerCfg.desktopImageUrl.trim())
                         );
 
                       return (
@@ -6764,7 +7243,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
                               {isBannerActive ? (
                                 <ProductImage
-                                  src={bannerCfg.imageUrl}
+                                  src={bannerCfg.imageUrl || bannerCfg.desktopImageUrl || ''}
+                                  desktopSrc={bannerCfg.desktopImageUrl}
                                   alt={`${catDisplayName} In-Feed Banner`}
                                   category="Fur"
                                   className="w-full h-full object-cover"
@@ -6779,7 +7259,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-8 space-y-2.5">
                               <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                  In-Feed Banner Image URL for {catDisplayName}
+                                  In-Feed Banner Image URL for {catDisplayName} (Primary / Mobile &amp; Default)
                                 </label>
                                 <input
                                   type="text"
@@ -6793,7 +7273,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       (prev) => ({
                                         ...prev,
                                         imageUrl: val,
-                                        enabled: Boolean(val.trim()),
+                                        enabled: Boolean(
+                                          val.trim() ||
+                                            (prev.desktopImageUrl &&
+                                              prev.desktopImageUrl.trim())
+                                        ),
                                       })
                                     );
                                   }}
@@ -6853,7 +7337,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       )
                                     }
                                   />
-                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                  {(isBannerActive ||
+                                    bannerCfg.imageUrl ||
+                                    bannerCfg.desktopImageUrl) && (
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -6864,6 +7350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           (prev) => ({
                                             ...prev,
                                             imageUrl: '',
+                                            desktopImageUrl: '',
                                             enabled: false,
                                           }),
                                           `Removed banner from ${catDisplayName} — no banner will appear in this category`
@@ -6874,6 +7361,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       Delete Banner
                                     </button>
                                   )}
+                                </div>
+                              </div>
+
+                              {/* Optional Desktop Banner Override */}
+                              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <label className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400">
+                                    Optional Desktop Override (2560&times;1600 Wide Desktop Crop)
+                                  </label>
+                                  <span className="text-[9px] font-mono-tabular uppercase tracking-wider text-zinc-500">
+                                    {bannerCfg.desktopImageUrl &&
+                                    bannerCfg.desktopImageUrl.trim()
+                                      ? 'Custom Desktop Active'
+                                      : 'Using Mobile Banner'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <input
+                                    type="text"
+                                    value={bannerCfg.desktopImageUrl || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          desktopImageUrl: val,
+                                          enabled: Boolean(
+                                            val.trim() ||
+                                              (prev.imageUrl &&
+                                                prev.imageUrl.trim())
+                                          ),
+                                        })
+                                      );
+                                    }}
+                                    placeholder="Optional Desktop Banner URL (falls back to Mobile if empty)"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload desktop banner photo for ${catDisplayName}`}
+                                      label="Upload Desktop Version (Optional)"
+                                      compressionOptions={
+                                        DESKTOP_BANNER_COMPRESSION_OPTIONS
+                                      }
+                                      onUploaded={(url) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            desktopImageUrl: url,
+                                            enabled: true,
+                                          }),
+                                          `Uploaded desktop banner override for ${catDisplayName}`
+                                        )
+                                      }
+                                    />
+                                    {Boolean(
+                                      bannerCfg.desktopImageUrl &&
+                                        bannerCfg.desktopImageUrl.trim()
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'collection',
+                                            catDisplayName,
+                                            (prev) => ({
+                                              ...prev,
+                                              desktopImageUrl: '',
+                                            }),
+                                            `Reset ${catDisplayName} desktop banner to same as mobile`
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Reset Desktop to Same as Mobile
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -6897,7 +7470,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const isBannerActive =
                         Boolean(bannerCfg.enabled) &&
                         Boolean(
-                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                          (bannerCfg.imageUrl && bannerCfg.imageUrl.trim()) ||
+                            (bannerCfg.desktopImageUrl &&
+                              bannerCfg.desktopImageUrl.trim())
                         );
 
                       return (
@@ -6981,7 +7556,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
                               {isBannerActive ? (
                                 <ProductImage
-                                  src={bannerCfg.imageUrl}
+                                  src={bannerCfg.imageUrl || bannerCfg.desktopImageUrl || ''}
+                                  desktopSrc={bannerCfg.desktopImageUrl}
                                   alt={`${catDisplayName} In-Feed Banner`}
                                   category="Bags"
                                   className="w-full h-full object-cover"
@@ -6996,7 +7572,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-8 space-y-2.5">
                               <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                  In-Feed Banner Image URL for {catDisplayName}
+                                  In-Feed Banner Image URL for {catDisplayName} (Primary / Mobile &amp; Default)
                                 </label>
                                 <input
                                   type="text"
@@ -7010,7 +7586,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       (prev) => ({
                                         ...prev,
                                         imageUrl: val,
-                                        enabled: Boolean(val.trim()),
+                                        enabled: Boolean(
+                                          val.trim() ||
+                                            (prev.desktopImageUrl &&
+                                              prev.desktopImageUrl.trim())
+                                        ),
                                       })
                                     );
                                   }}
@@ -7070,7 +7650,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       )
                                     }
                                   />
-                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                  {(isBannerActive ||
+                                    bannerCfg.imageUrl ||
+                                    bannerCfg.desktopImageUrl) && (
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -7081,6 +7663,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           (prev) => ({
                                             ...prev,
                                             imageUrl: '',
+                                            desktopImageUrl: '',
                                             enabled: false,
                                           }),
                                           `Removed banner from ${catDisplayName} — no banner will appear in this category`
@@ -7091,6 +7674,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       Delete Banner
                                     </button>
                                   )}
+                                </div>
+                              </div>
+
+                              {/* Optional Desktop Banner Override */}
+                              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <label className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400">
+                                    Optional Desktop Override (2560&times;1600 Wide Desktop Crop)
+                                  </label>
+                                  <span className="text-[9px] font-mono-tabular uppercase tracking-wider text-zinc-500">
+                                    {bannerCfg.desktopImageUrl &&
+                                    bannerCfg.desktopImageUrl.trim()
+                                      ? 'Custom Desktop Active'
+                                      : 'Using Mobile Banner'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <input
+                                    type="text"
+                                    value={bannerCfg.desktopImageUrl || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          desktopImageUrl: val,
+                                          enabled: Boolean(
+                                            val.trim() ||
+                                              (prev.imageUrl &&
+                                                prev.imageUrl.trim())
+                                          ),
+                                        })
+                                      );
+                                    }}
+                                    placeholder="Optional Desktop Banner URL (falls back to Mobile if empty)"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload desktop banner photo for ${catDisplayName}`}
+                                      label="Upload Desktop Version (Optional)"
+                                      compressionOptions={
+                                        DESKTOP_BANNER_COMPRESSION_OPTIONS
+                                      }
+                                      onUploaded={(url) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            desktopImageUrl: url,
+                                            enabled: true,
+                                          }),
+                                          `Uploaded desktop banner override for ${catDisplayName}`
+                                        )
+                                      }
+                                    />
+                                    {Boolean(
+                                      bannerCfg.desktopImageUrl &&
+                                        bannerCfg.desktopImageUrl.trim()
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'collection',
+                                            catDisplayName,
+                                            (prev) => ({
+                                              ...prev,
+                                              desktopImageUrl: '',
+                                            }),
+                                            `Reset ${catDisplayName} desktop banner to same as mobile`
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Reset Desktop to Same as Mobile
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -7167,7 +7836,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const isBannerActive =
                           Boolean(bannerCfg.enabled) &&
                           Boolean(
-                            bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                            (bannerCfg.imageUrl && bannerCfg.imageUrl.trim()) ||
+                              (bannerCfg.desktopImageUrl &&
+                                bannerCfg.desktopImageUrl.trim())
                           );
                         const currentOrderNum = cat.sortOrder ?? idx + 1;
                         const draftVal =
@@ -7471,7 +8142,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
                                 {isBannerActive ? (
                                   <ProductImage
-                                    src={bannerCfg.imageUrl}
+                                    src={bannerCfg.imageUrl || bannerCfg.desktopImageUrl || ''}
+                                    desktopSrc={bannerCfg.desktopImageUrl}
                                     alt={`${cat.name} In-Feed Banner`}
                                     category={cat.name}
                                     className="w-full h-full object-cover"
@@ -7486,7 +8158,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="sm:col-span-8 space-y-2.5">
                                 <div className="flex flex-col gap-1.5">
                                   <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                    In-Feed Banner Image URL for {cat.name}
+                                    In-Feed Banner Image URL for {cat.name} (Primary / Mobile &amp; Default)
                                   </label>
                                   <input
                                     type="text"
@@ -7500,7 +8172,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         (prev) => ({
                                           ...prev,
                                           imageUrl: val,
-                                          enabled: Boolean(val.trim()),
+                                          enabled: Boolean(
+                                            val.trim() ||
+                                              (prev.desktopImageUrl &&
+                                                prev.desktopImageUrl.trim())
+                                          ),
                                         })
                                       );
                                     }}
@@ -7560,7 +8236,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         )
                                       }
                                     />
-                                    {(isBannerActive || bannerCfg.imageUrl) && (
+                                    {(isBannerActive ||
+                                      bannerCfg.imageUrl ||
+                                      bannerCfg.desktopImageUrl) && (
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -7571,6 +8249,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             (prev) => ({
                                               ...prev,
                                               imageUrl: '',
+                                              desktopImageUrl: '',
                                               enabled: false,
                                             }),
                                             `Removed banner from ${cat.name} — no banner will appear in this category`
@@ -7581,6 +8260,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         Delete Banner
                                       </button>
                                     )}
+                                  </div>
+                                </div>
+
+                                {/* Optional Desktop Banner Override */}
+                                <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <label className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400">
+                                      Optional Desktop Override (2560&times;1600 Wide Desktop Crop)
+                                    </label>
+                                    <span className="text-[9px] font-mono-tabular uppercase tracking-wider text-zinc-500">
+                                      {bannerCfg.desktopImageUrl &&
+                                      bannerCfg.desktopImageUrl.trim()
+                                        ? 'Custom Desktop Active'
+                                        : 'Using Mobile Banner'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-2">
+                                    <input
+                                      type="text"
+                                      value={bannerCfg.desktopImageUrl || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'kids',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            desktopImageUrl: val,
+                                            enabled: Boolean(
+                                              val.trim() ||
+                                                (prev.imageUrl &&
+                                                  prev.imageUrl.trim())
+                                            ),
+                                          })
+                                        );
+                                      }}
+                                      placeholder="Optional Desktop Banner URL (falls back to Mobile if empty)"
+                                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <R2ImageUploadButton
+                                        compact={true}
+                                        ariaLabel={`Upload desktop banner photo for ${cat.name}`}
+                                        label="Upload Desktop Version (Optional)"
+                                        compressionOptions={
+                                          DESKTOP_BANNER_COMPRESSION_OPTIONS
+                                        }
+                                        onUploaded={(url) =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'kids',
+                                            cat.name,
+                                            (prev) => ({
+                                              ...prev,
+                                              desktopImageUrl: url,
+                                              enabled: true,
+                                            }),
+                                            `Uploaded desktop banner override for ${cat.name}`
+                                          )
+                                        }
+                                      />
+                                      {Boolean(
+                                        bannerCfg.desktopImageUrl &&
+                                          bannerCfg.desktopImageUrl.trim()
+                                      ) && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateCategoryBanner(
+                                              bKey,
+                                              'kids',
+                                              cat.name,
+                                              (prev) => ({
+                                                ...prev,
+                                                desktopImageUrl: '',
+                                              }),
+                                              `Reset ${cat.name} desktop banner to same as mobile`
+                                            )
+                                          }
+                                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                        >
+                                          Reset Desktop to Same as Mobile
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -7605,7 +8370,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const isBannerActive =
                         Boolean(bannerCfg.enabled) &&
                         Boolean(
-                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                          (bannerCfg.imageUrl && bannerCfg.imageUrl.trim()) ||
+                            (bannerCfg.desktopImageUrl &&
+                              bannerCfg.desktopImageUrl.trim())
                         );
 
                       return (
@@ -7686,7 +8453,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
                               {isBannerActive ? (
                                 <ProductImage
-                                  src={bannerCfg.imageUrl}
+                                  src={bannerCfg.imageUrl || bannerCfg.desktopImageUrl || ''}
+                                  desktopSrc={bannerCfg.desktopImageUrl}
                                   alt={`${catDisplayName} In-Feed Banner`}
                                   category="MINIS 1 To 5"
                                   className="w-full h-full object-cover"
@@ -7701,7 +8469,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="sm:col-span-8 space-y-2.5">
                               <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                  In-Feed Banner Image URL for {catDisplayName}
+                                  In-Feed Banner Image URL for {catDisplayName} (Primary / Mobile &amp; Default)
                                 </label>
                                 <input
                                   type="text"
@@ -7715,7 +8483,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       (prev) => ({
                                         ...prev,
                                         imageUrl: val,
-                                        enabled: Boolean(val.trim()),
+                                        enabled: Boolean(
+                                          val.trim() ||
+                                            (prev.desktopImageUrl &&
+                                              prev.desktopImageUrl.trim())
+                                        ),
                                       })
                                     );
                                   }}
@@ -7775,7 +8547,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       )
                                     }
                                   />
-                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                  {(isBannerActive ||
+                                    bannerCfg.imageUrl ||
+                                    bannerCfg.desktopImageUrl) && (
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -7786,6 +8560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           (prev) => ({
                                             ...prev,
                                             imageUrl: '',
+                                            desktopImageUrl: '',
                                             enabled: false,
                                           }),
                                           `Removed banner from ${catDisplayName} — no banner will appear in this category`
@@ -7796,6 +8571,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       Delete Banner
                                     </button>
                                   )}
+                                </div>
+                              </div>
+
+                              {/* Optional Desktop Banner Override */}
+                              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <label className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400">
+                                    Optional Desktop Override (2560&times;1600 Wide Desktop Crop)
+                                  </label>
+                                  <span className="text-[9px] font-mono-tabular uppercase tracking-wider text-zinc-500">
+                                    {bannerCfg.desktopImageUrl &&
+                                    bannerCfg.desktopImageUrl.trim()
+                                      ? 'Custom Desktop Active'
+                                      : 'Using Mobile Banner'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <input
+                                    type="text"
+                                    value={bannerCfg.desktopImageUrl || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          desktopImageUrl: val,
+                                          enabled: Boolean(
+                                            val.trim() ||
+                                              (prev.imageUrl &&
+                                                prev.imageUrl.trim())
+                                          ),
+                                        })
+                                      );
+                                    }}
+                                    placeholder="Optional Desktop Banner URL (falls back to Mobile if empty)"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-900/80 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload desktop banner photo for ${catDisplayName}`}
+                                      label="Upload Desktop Version (Optional)"
+                                      compressionOptions={
+                                        DESKTOP_BANNER_COMPRESSION_OPTIONS
+                                      }
+                                      onUploaded={(url) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            desktopImageUrl: url,
+                                            enabled: true,
+                                          }),
+                                          `Uploaded desktop banner override for ${catDisplayName}`
+                                        )
+                                      }
+                                    />
+                                    {Boolean(
+                                      bannerCfg.desktopImageUrl &&
+                                        bannerCfg.desktopImageUrl.trim()
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'collection',
+                                            catDisplayName,
+                                            (prev) => ({
+                                              ...prev,
+                                              desktopImageUrl: '',
+                                            }),
+                                            `Reset ${catDisplayName} desktop banner to same as mobile`
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Reset Desktop to Same as Mobile
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>

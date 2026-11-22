@@ -2143,11 +2143,49 @@ export function buildDefaultCategoryBannerForCategory(
     department,
     categoryName,
     imageUrl,
+    desktopImageUrl: '',
     kicker: `SAMO · ${displayCat.toUpperCase()}`,
     title: `${displayCat.toUpperCase()} EDITORIAL ARCHIVE`,
     enabled: true,
     insertAfterCount: 4,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Resolves a banner's Mobile/Primary and Desktop media URLs using Automatic Mutual Fallback:
+ * - If only one version (either Mobile/Primary OR Desktop) is uploaded, BOTH mobile and desktop
+ *   automatically fall back to displaying that single banner.
+ * - If BOTH Mobile/Primary AND Desktop versions are uploaded, Mobile & Tablet (< 1024px) display
+ *   the Mobile/Primary version while Desktop (>= 1024px) displays the Desktop version.
+ */
+export function resolveBannerMediaPair(
+  mobileOrPrimaryUrl?: string | null,
+  desktopOverrideUrl?: string | null,
+  fallbackDefaultUrl = ''
+): {
+  mobileUrl: string;
+  desktopUrl: string;
+  hasSeparateDesktop: boolean;
+  hasAnyMedia: boolean;
+} {
+  const cleanMobile =
+    typeof mobileOrPrimaryUrl === 'string' ? mobileOrPrimaryUrl.trim() : '';
+  const cleanDesktop =
+    typeof desktopOverrideUrl === 'string' ? desktopOverrideUrl.trim() : '';
+  const cleanFallback =
+    typeof fallbackDefaultUrl === 'string' ? fallbackDefaultUrl.trim() : '';
+
+  const resolvedMobile = cleanMobile || cleanDesktop || cleanFallback;
+  const resolvedDesktop = cleanDesktop || cleanMobile || cleanFallback;
+
+  return {
+    mobileUrl: resolvedMobile,
+    desktopUrl: resolvedDesktop,
+    hasSeparateDesktop: Boolean(
+      cleanMobile && cleanDesktop && cleanMobile !== cleanDesktop
+    ),
+    hasAnyMedia: Boolean(cleanMobile || cleanDesktop),
   };
 }
 
@@ -2208,12 +2246,15 @@ export function buildDefaultSiteBanners(
   return {
     homeHeroMediaType: 'video',
     homeHeroVideoUrl: 'https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4',
+    homeHeroDesktopVideoUrl: '',
     homeHeroImageUrl: 'studio://women-jacket-black-leather-biker',
+    homeHeroDesktopImageUrl: '',
     homeHeroKicker: '',
     homeHeroTitle: 'WINTER EDITION',
     heroHeadlineText: 'WINTER EDITION',
     heroHeadlineSize: 'md',
     homeMiddleBannerUrl: 'studio://kids-junior-leather-bomber',
+    homeMiddleDesktopBannerUrl: '',
     homeMiddleKicker:
       'SAMO KIDS · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)',
     homeMiddleTitle: 'KIDS COLLECTION',
@@ -2223,6 +2264,7 @@ export function buildDefaultSiteBanners(
     homeBottomGiftsUrl: 'studio://women-bags-hourglass-burgundy',
     homeBottomShowroomUrl: 'studio://women-trench-suede-coat',
     showroomHeroBannerUrl: 'studio://women-trench-suede-coat',
+    showroomHeroDesktopBannerUrl: '',
     orderEmailBannerUrl: '',
     orderEmailBannerLinkUrl: 'https://samoweave.com/new-arrivals/women',
     orderEmailSenderAddress: 'orders@samoweave.com',
@@ -2260,14 +2302,20 @@ export function mergeSiteBannersConfig(
                 .replace(/SAMO WEAVE/gi, 'SAMO')
                 .replace(/\bATELIER\b/gi, 'SAMO')
             : fallback?.kicker || 'SAMO';
+        const storedImage =
+          typeof val.imageUrl === 'string'
+            ? val.imageUrl.trim()
+            : fallback?.imageUrl || '';
+        const storedDesktopImage =
+          typeof val.desktopImageUrl === 'string'
+            ? val.desktopImageUrl.trim()
+            : fallback?.desktopImageUrl || '';
         mergedCategoryBanners[key] = {
           categoryKey: key,
           department: val.department || fallback?.department || 'women',
           categoryName: val.categoryName || fallback?.categoryName || key,
-          imageUrl:
-            typeof val.imageUrl === 'string'
-              ? val.imageUrl
-              : fallback?.imageUrl || '',
+          imageUrl: storedImage,
+          desktopImageUrl: storedDesktopImage,
           kicker: rawKicker,
           title:
             typeof val.title === 'string'
@@ -2314,11 +2362,19 @@ export function mergeSiteBannersConfig(
       stored.homeHeroVideoUrl.trim()
         ? stored.homeHeroVideoUrl.trim()
         : defaults.homeHeroVideoUrl,
+    homeHeroDesktopVideoUrl:
+      typeof stored.homeHeroDesktopVideoUrl === 'string'
+        ? stored.homeHeroDesktopVideoUrl.trim()
+        : defaults.homeHeroDesktopVideoUrl || '',
     homeHeroImageUrl:
       typeof stored.homeHeroImageUrl === 'string' &&
       stored.homeHeroImageUrl.trim()
         ? stored.homeHeroImageUrl.trim()
         : defaults.homeHeroImageUrl,
+    homeHeroDesktopImageUrl:
+      typeof stored.homeHeroDesktopImageUrl === 'string'
+        ? stored.homeHeroDesktopImageUrl.trim()
+        : defaults.homeHeroDesktopImageUrl || '',
     homeHeroKicker:
       typeof stored.homeHeroKicker === 'string'
         ? stored.homeHeroKicker
@@ -2334,6 +2390,10 @@ export function mergeSiteBannersConfig(
       stored.homeMiddleBannerUrl.trim()
         ? stored.homeMiddleBannerUrl.trim()
         : defaults.homeMiddleBannerUrl,
+    homeMiddleDesktopBannerUrl:
+      typeof stored.homeMiddleDesktopBannerUrl === 'string'
+        ? stored.homeMiddleDesktopBannerUrl.trim()
+        : defaults.homeMiddleDesktopBannerUrl || '',
     homeMiddleKicker:
       typeof stored.homeMiddleKicker === 'string' &&
       stored.homeMiddleKicker.trim()
@@ -2375,6 +2435,10 @@ export function mergeSiteBannersConfig(
       stored.showroomHeroBannerUrl.trim()
         ? stored.showroomHeroBannerUrl.trim()
         : defaults.showroomHeroBannerUrl,
+    showroomHeroDesktopBannerUrl:
+      typeof stored.showroomHeroDesktopBannerUrl === 'string'
+        ? stored.showroomHeroDesktopBannerUrl.trim()
+        : defaults.showroomHeroDesktopBannerUrl || '',
     orderEmailBannerUrl:
       typeof stored.orderEmailBannerUrl === 'string'
         ? stored.orderEmailBannerUrl.trim()

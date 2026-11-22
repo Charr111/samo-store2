@@ -582,6 +582,7 @@ import {
   getCategoryBannerKey,
   getCategoryBannerSplitIndex,
   mergeSiteBannersConfig,
+  resolveBannerMediaPair,
   toggleProductInStockState,
 } from './catalogLogic';
 import { INITIAL_CATEGORIES } from '../data/seedCatalog';
@@ -650,6 +651,9 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
     {
       homeHeroMediaType: 'image',
       homeHeroImageUrl: 'https://images.samoweave.com/products/custom-hero.webp',
+      homeHeroDesktopImageUrl: 'https://images.samoweave.com/banners/custom-hero-desktop.webp',
+      homeMiddleDesktopBannerUrl: 'https://images.samoweave.com/banners/kids-middle-desktop.webp',
+      showroomHeroDesktopBannerUrl: 'https://images.samoweave.com/banners/showroom-desktop.webp',
       heroHeadlineText: '',
       heroHeadlineSize: 'xl',
       categoryBanners: {
@@ -659,6 +663,7 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
           categoryName: 'Jacket',
           enabled: true,
           imageUrl: 'https://images.samoweave.com/products/jacket-banner.webp',
+          desktopImageUrl: 'https://images.samoweave.com/banners/jacket-banner-desktop.webp',
           title: 'CUSTOM JACKET ARCHIVE',
           kicker: 'LIMITED EDITION',
           insertAfterCount: 6,
@@ -671,12 +676,50 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
   assert.equal(merged.heroHeadlineText, '');
   assert.equal(merged.heroHeadlineSize, 'xl');
   assert.equal(
+    merged.homeHeroDesktopImageUrl,
+    'https://images.samoweave.com/banners/custom-hero-desktop.webp'
+  );
+  assert.equal(
+    merged.homeMiddleDesktopBannerUrl,
+    'https://images.samoweave.com/banners/kids-middle-desktop.webp'
+  );
+  assert.equal(
+    merged.showroomHeroDesktopBannerUrl,
+    'https://images.samoweave.com/banners/showroom-desktop.webp'
+  );
+  assert.equal(
     merged.categoryBanners['women:jacket'].imageUrl,
     'https://images.samoweave.com/products/jacket-banner.webp'
+  );
+  assert.equal(
+    merged.categoryBanners['women:jacket'].desktopImageUrl,
+    'https://images.samoweave.com/banners/jacket-banner-desktop.webp'
   );
   assert.equal(merged.categoryBanners['women:jacket'].insertAfterCount, 6);
   // Other categories retain their defaults
   assert.equal(Boolean(merged.categoryBanners['women:bags']?.imageUrl), true);
+
+  // Mutual Fallback verification via resolveBannerMediaPair:
+  // 1. Only Mobile/Primary uploaded -> displays on both Mobile and Desktop
+  const mobileOnly = resolveBannerMediaPair('https://images.samoweave.com/banners/m.webp', '');
+  assert.equal(mobileOnly.mobileUrl, 'https://images.samoweave.com/banners/m.webp');
+  assert.equal(mobileOnly.desktopUrl, 'https://images.samoweave.com/banners/m.webp');
+  assert.equal(mobileOnly.hasSeparateDesktop, false);
+
+  // 2. Only Desktop uploaded -> displays on both Desktop and Mobile
+  const desktopOnly = resolveBannerMediaPair('', 'https://images.samoweave.com/banners/d.webp');
+  assert.equal(desktopOnly.mobileUrl, 'https://images.samoweave.com/banners/d.webp');
+  assert.equal(desktopOnly.desktopUrl, 'https://images.samoweave.com/banners/d.webp');
+  assert.equal(desktopOnly.hasSeparateDesktop, false);
+
+  // 3. Both Mobile and Desktop uploaded -> Mobile uses m.webp, Desktop uses d.webp
+  const bothPair = resolveBannerMediaPair(
+    'https://images.samoweave.com/banners/m.webp',
+    'https://images.samoweave.com/banners/d.webp'
+  );
+  assert.equal(bothPair.mobileUrl, 'https://images.samoweave.com/banners/m.webp');
+  assert.equal(bothPair.desktopUrl, 'https://images.samoweave.com/banners/d.webp');
+  assert.equal(bothPair.hasSeparateDesktop, true);
 });
 
 import {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { HeroHeadlineSize, RoutePath } from '../types/samo';
+import { resolveBannerMediaPair } from '../utils/catalogLogic';
 import { ProductImage } from './ProductImage';
 
 interface HeroVideoSectionProps {
@@ -8,7 +9,9 @@ interface HeroVideoSectionProps {
   onSelectCategory: (catName: string) => void;
   mediaType?: 'video' | 'image';
   videoUrl?: string;
+  desktopVideoUrl?: string;
   imageUrl?: string;
+  desktopImageUrl?: string;
   kicker?: string;
   title?: string;
   headlineSize?: HeroHeadlineSize;
@@ -29,7 +32,9 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   onSelectCategory,
   mediaType = 'video',
   videoUrl = DEFAULT_HERO_VIDEO,
+  desktopVideoUrl,
   imageUrl = 'studio://women-jacket-black-leather-biker',
+  desktopImageUrl,
   title = 'WINTER EDITION',
   headlineSize = 'md',
 }) => {
@@ -40,6 +45,12 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   const [isMuted, setIsMuted] = useState(true);
   const [customVideoFailed, setCustomVideoFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return false;
+  });
   const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768 && window.innerHeight > 300) {
       return window.innerHeight;
@@ -52,6 +63,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
     let lastWidth = window.innerWidth;
 
     const syncMobileHeight = () => {
+      setIsDesktopViewport(window.innerWidth >= 1024);
       if (window.innerWidth < 768 && window.innerHeight > 300) {
         setMobileViewportHeight(window.innerHeight);
       } else {
@@ -66,6 +78,8 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
       const currentWidth = window.innerWidth;
       if (
         Math.abs(currentWidth - lastWidth) > 20 ||
+        (currentWidth >= 1024 && lastWidth < 1024) ||
+        (currentWidth < 1024 && lastWidth >= 1024) ||
         (currentWidth >= 768 && lastWidth < 768) ||
         (currentWidth < 768 && lastWidth >= 768)
       ) {
@@ -85,10 +99,23 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
     };
   }, []);
 
-  const requestedVideoUrl = (videoUrl || DEFAULT_HERO_VIDEO).trim();
+  const resolvedVideoPair = resolveBannerMediaPair(
+    videoUrl,
+    desktopVideoUrl,
+    DEFAULT_HERO_VIDEO
+  );
+  const requestedVideoUrl = isDesktopViewport
+    ? resolvedVideoPair.desktopUrl
+    : resolvedVideoPair.mobileUrl;
   const effectiveVideoUrl = customVideoFailed
     ? DEFAULT_HERO_VIDEO
     : requestedVideoUrl;
+
+  const resolvedImagePair = resolveBannerMediaPair(
+    imageUrl,
+    desktopImageUrl,
+    'studio://women-jacket-black-leather-biker'
+  );
 
   const showImageBanner = mediaType === 'image' || videoFailed;
 
@@ -222,7 +249,8 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
       ) : (
         <div className="h-full w-full opacity-90">
           <ProductImage
-            src={imageUrl || 'studio://women-jacket-black-leather-biker'}
+            src={resolvedImagePair.mobileUrl}
+            desktopSrc={resolvedImagePair.desktopUrl}
             alt={title || 'SAMO Campaign Hero'}
             category="Jacket"
             styleType="Fine Leather"

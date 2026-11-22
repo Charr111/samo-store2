@@ -222,6 +222,7 @@ export interface CategoryBannerConfig {
   department: Department | 'collection';
   categoryName: string;
   imageUrl: string;
+  desktopImageUrl?: string;
   kicker?: string;
   title?: string;
   enabled: boolean;
@@ -229,17 +230,22 @@ export interface CategoryBannerConfig {
   updatedAt?: string;
 }
 
+export type CategoryBannerItem = CategoryBannerConfig;
+
 export type HeroHeadlineSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 export interface SiteBannersConfig {
   homeHeroMediaType: 'video' | 'image';
   homeHeroVideoUrl: string;
+  homeHeroDesktopVideoUrl?: string;
   homeHeroImageUrl: string;
+  homeHeroDesktopImageUrl?: string;
   homeHeroKicker: string;
   homeHeroTitle: string;
   heroHeadlineText?: string;
   heroHeadlineSize?: HeroHeadlineSize;
   homeMiddleBannerUrl: string;
+  homeMiddleDesktopBannerUrl?: string;
   homeMiddleKicker: string;
   homeMiddleTitle: string;
   homeMiddleSubtitle: string;
@@ -247,6 +253,7 @@ export interface SiteBannersConfig {
   homeBottomGiftsUrl: string;
   homeBottomShowroomUrl: string;
   showroomHeroBannerUrl: string;
+  showroomHeroDesktopBannerUrl?: string;
   orderEmailBannerUrl?: string;
   orderEmailBannerLinkUrl?: string;
   orderEmailSenderAddress?: string;
