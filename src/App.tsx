@@ -3466,8 +3466,8 @@ export default function App() {
                   </div>
                 </section>
 
-                {/* Section 3: Full-Bleed Middle Campaign Image Box (Configurable in /admin) */}
-                <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] bg-zinc-950 overflow-hidden border-y border-zinc-950">
+                {/* Section 3: Full-Bleed Middle Campaign Image Box (Configurable in /admin — Scaled +6% proportionally on desktop lg:) */}
+                <section className="relative w-full h-[74vh] min-h-[520px] max-h-[820px] lg:h-[78.5vh] lg:min-h-[551px] lg:max-h-[869px] bg-zinc-950 overflow-hidden border-y border-zinc-950">
                   <div className="h-full w-full opacity-90">
                     <ProductImage
                       src={
@@ -3487,8 +3487,8 @@ export default function App() {
                   {/* Measured contrast scrim matching top HeroVideoSection */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25" />
 
-                  {/* Bottom-Center Campaign Title & Underlined White CTA Link (Matching Shop Women / Shop Kids) */}
-                  <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
+                  {/* Bottom-Center Campaign Title & Underlined White CTA Link (Matching Shop Women / Shop Kids, scaled +6% on desktop) */}
+                  <div className="absolute inset-x-0 bottom-10 lg:bottom-[42px] z-20 flex flex-col items-center px-4 text-center lg:scale-[1.06] lg:origin-bottom">
                     <h2
                       className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-4"
                       style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', textWrap: 'balance' }}
