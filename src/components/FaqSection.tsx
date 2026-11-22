@@ -205,12 +205,15 @@ export const FaqSection: React.FC<FaqSectionProps> = ({
                 {isOpen && (
                   <div
                     data-testid={`faq-content-${item.id}`}
-                    className="px-5 sm:px-6 pb-5 sm:pb-6 pt-0.5 text-[14px] sm:text-[15px] text-zinc-900 leading-relaxed"
+                    className="px-5 sm:px-6 pb-5 sm:pb-6 pt-0.5 text-[14px] sm:text-[15px] text-zinc-900 leading-relaxed [word-spacing:0.02em]"
                   >
                     {item.paragraphs && item.paragraphs.length > 0 && (
                       <div className="space-y-2">
                         {item.paragraphs.map((line, pIdx) => (
-                          <p key={pIdx} className="leading-relaxed">
+                          <p
+                            key={pIdx}
+                            className="leading-relaxed [word-spacing:0.02em]"
+                          >
                             {line}
                           </p>
                         ))}

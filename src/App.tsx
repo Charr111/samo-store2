@@ -214,7 +214,7 @@ function mergeStoredCategories(
 
   for (const c of INITIAL_CATEGORIES) {
     if (!deletedSet.has(c.id)) {
-      map.set(c.id, c);
+      map.set(c.id, { ...c, active: c.active !== false });
     }
   }
 
@@ -229,14 +229,30 @@ function mergeStoredCategories(
     const seedFallback = INITIAL_CATEGORIES.find((ic) => ic.id === c.id);
     const cleanName = c.name.trim();
     const cleanSlug = createSafeSlug(cleanName);
+    const rawAny = c as CategoryItem & {
+      displayOrder?: number;
+      hiddenFromNav?: boolean;
+    };
+    const resolvedSortOrder =
+      typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder) && c.sortOrder > 0
+        ? c.sortOrder
+        : typeof rawAny.displayOrder === 'number' &&
+          Number.isFinite(rawAny.displayOrder) &&
+          rawAny.displayOrder > 0
+        ? rawAny.displayOrder
+        : seedFallback?.sortOrder;
+    const resolvedActive =
+      typeof c.active === 'boolean'
+        ? c.active
+        : typeof rawAny.hiddenFromNav === 'boolean'
+        ? !rawAny.hiddenFromNav
+        : true;
     map.set(c.id, {
       ...c,
       name: cleanName,
       slug: cleanSlug,
-      sortOrder:
-        typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder)
-          ? c.sortOrder
-          : seedFallback?.sortOrder,
+      sortOrder: resolvedSortOrder,
+      active: resolvedActive,
     });
   }
   return Array.from(map.values());
@@ -2008,6 +2024,27 @@ export default function App() {
     await pushServerCatalogPatch({ categories: nextCategories });
   };
 
+  const handleToggleCategoryActive = async (
+    categoryId: string,
+    nextActive: boolean
+  ) => {
+    const targetCat = categories.find((c) => c.id === categoryId);
+    const nextCategories = categories.map((c) =>
+      c.id === categoryId ? { ...c, active: nextActive } : c
+    );
+    setCategories(nextCategories);
+    if (
+      !nextActive &&
+      targetCat &&
+      selectedCategory !== 'all' &&
+      selectedCategory.trim().toLowerCase() ===
+        targetCat.name.trim().toLowerCase()
+    ) {
+      setSelectedCategory('all');
+    }
+    await pushServerCatalogPatch({ categories: nextCategories });
+  };
+
   const handleDeleteCategory = async (id: string) => {
     setDeletedCategoryIds((prevDel) => {
       const nextDel = Array.from(new Set([...prevDel, id]));
@@ -2813,13 +2850,64 @@ export default function App() {
   };
 
   const womenCategories = useMemo(
-    () => getCategoriesByDepartment(categories, 'women'),
+    () =>
+      getCategoriesByDepartment(categories, 'women').filter(
+        (c) => c.active !== false
+      ),
     [categories]
   );
   const kidsCategories = useMemo(
-    () => getCategoriesByDepartment(categories, 'kids'),
+    () =>
+      getCategoriesByDepartment(categories, 'kids').filter(
+        (c) => c.active !== false
+      ),
     [categories]
   );
+
+  // Filter out products belonging to any category that the admin has toggled OFF (active === false)
+  // while keeping the full products list intact for the Admin Dashboard.
+  const publicProducts = useMemo(() => {
+    const disabledWomenCats = new Set(
+      getCategoriesByDepartment(categories, 'women')
+        .filter((c) => c.active === false)
+        .map((c) => c.name.trim().toLowerCase())
+    );
+    const disabledKidsCats = new Set(
+      getCategoriesByDepartment(categories, 'kids')
+        .filter((c) => c.active === false)
+        .map((c) => normalizeKidsCategoryName(c.name).trim().toLowerCase())
+    );
+    if (disabledWomenCats.size === 0 && disabledKidsCats.size === 0) {
+      return products;
+    }
+    return products.filter((p) => {
+      if (p.department === 'women') {
+        const catLower = (p.category || '').trim().toLowerCase();
+        const canonicalWomenCat =
+          catLower === 'jackets'
+            ? 'jacket'
+            : catLower === 'bag'
+            ? 'bags'
+            : catLower === 'belt'
+            ? 'belts'
+            : catLower;
+        if (
+          disabledWomenCats.has(catLower) ||
+          disabledWomenCats.has(canonicalWomenCat)
+        ) {
+          return false;
+        }
+        if (Boolean(p.isFullSet) && disabledWomenCats.has('full set')) {
+          return false;
+        }
+        return true;
+      }
+      const kidsCatNorm = normalizeKidsCategoryName(p.category || '')
+        .trim()
+        .toLowerCase();
+      return !disabledKidsCats.has(kidsCatNorm);
+    });
+  }, [products, categories]);
 
   const activeDepartment: Department | 'all' =
     currentRoute === '/women'
@@ -2832,7 +2920,7 @@ export default function App() {
   const displayedProducts = useMemo(() => {
     let baseList: ProductItem[];
     if (searchQuery.trim()) {
-      baseList = filterCatalogProducts(products, {
+      baseList = filterCatalogProducts(publicProducts, {
         department: activeDepartment,
         category: selectedCategory,
         searchQuery,
@@ -2840,15 +2928,15 @@ export default function App() {
     } else if (currentRoute === '/new-arrivals') {
       const targetNaDept: Department =
         selectedCategory.toLowerCase() === 'kids' ? 'kids' : 'women';
-      baseList = filterNewArrivalProducts(products).filter(
+      baseList = filterNewArrivalProducts(publicProducts).filter(
         (p) => p.department === targetNaDept
       );
     } else if (currentRoute === '/gifts') {
-      baseList = filterGiftsProducts(products);
+      baseList = filterGiftsProducts(publicProducts);
     } else if (currentRoute === '/home') {
-      baseList = filterNewArrivalProducts(products);
+      baseList = filterNewArrivalProducts(publicProducts);
     } else {
-      baseList = filterCatalogProducts(products, {
+      baseList = filterCatalogProducts(publicProducts, {
         department: activeDepartment,
         category: selectedCategory,
         searchQuery,
@@ -2863,7 +2951,7 @@ export default function App() {
     }
     return baseList;
   }, [
-    products,
+    publicProducts,
     currentRoute,
     activeDepartment,
     selectedCategory,
@@ -2887,7 +2975,24 @@ export default function App() {
       return {
         ...configured,
         department: naDept,
-        categoryName: naCatName,
+        categoryName: 'New Arrivals',
+      };
+    }
+
+    if (currentRoute === '/gifts') {
+      const giftsKey = getCategoryBannerKey('/gifts', 'all');
+      const configuredGifts =
+        siteBanners.categoryBanners?.[giftsKey] ||
+        siteBanners.categoryBanners?.[getCategoryBannerKey('women', 'Bags')] ||
+        buildDefaultCategoryBannerForCategory(
+          'collection',
+          'Gifts (Bags & Belts)',
+          giftsKey
+        );
+      return {
+        ...configuredGifts,
+        department: 'women' as Department,
+        categoryName: 'Gifts',
       };
     }
 
@@ -2906,9 +3011,6 @@ export default function App() {
         selectedCategory && selectedCategory !== 'all'
           ? selectedCategory
           : womenCategories[0]?.name || 'Jacket';
-    } else if (currentRoute === '/gifts') {
-      targetDept = 'women';
-      targetCatName = 'Bags';
     }
 
     const key = getCategoryBannerKey(targetDept, targetCatName);
@@ -3021,8 +3123,8 @@ export default function App() {
 
   // Home New Arrivals Carousel Products filtered by Women | Kids switcher (Women: SAHARA CROC CRESCENT 1st, old 1st -> 3rd, old 3rd -> 4th)
   const homeNewArrivalsProducts = useMemo(
-    () => orderHomeNewArrivalsProducts(products, homeNewArrivalsDept),
-    [products, homeNewArrivalsDept]
+    () => orderHomeNewArrivalsProducts(publicProducts, homeNewArrivalsDept),
+    [publicProducts, homeNewArrivalsDept]
   );
 
   const handleNewArrivalsScroll = () => {
@@ -3046,12 +3148,12 @@ export default function App() {
 
   // Home Bags Collection Carousel Products (Women's Bags only)
   const homeBagsProducts = useMemo(() => {
-    return products.filter((p) => {
+    return publicProducts.filter((p) => {
       if (p.department !== 'women') return false;
       const cat = (p.category || '').trim().toLowerCase();
       return cat === 'bags' || cat === 'bag';
     });
-  }, [products]);
+  }, [publicProducts]);
 
   const handleBagsScroll = () => {
     const el = bagsScrollRef.current;
@@ -3113,6 +3215,7 @@ export default function App() {
           onUpdateCategorySortOrder={handleUpdateCategorySortOrder}
           onMoveCategoryOrder={handleMoveCategoryOrder}
           onRenumberDepartmentCategories={handleRenumberDepartmentCategories}
+          onToggleCategoryActive={handleToggleCategoryActive}
           onDeleteCategory={handleDeleteCategory}
           onAddProduct={handleAddProduct}
           onUpdateProductSizeQuantity={handleUpdateProductSizeQuantity}
@@ -3179,7 +3282,7 @@ export default function App() {
           <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-12 space-y-12">
             {/* Showroom Hero & Heritage Story Since 1999 */}
             <div className="grid grid-cols-1 lg:grid-cols-12 border border-zinc-950 bg-white overflow-hidden">
-              <div className="lg:col-span-6 h-[39vh] min-h-[290px] max-h-[445px] lg:h-auto border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF] overflow-hidden">
+              <div className="lg:col-span-6 h-[302px] sm:h-[380px] md:h-[460px] lg:h-auto border-b lg:border-b-0 lg:border-r border-zinc-950 bg-[#EFEFEF] overflow-hidden">
                 <ProductImage
                   src={
                     siteBanners.showroomHeroBannerUrl ||
@@ -3188,6 +3291,7 @@ export default function App() {
                   alt="SAMO Flagship Showroom & Weave — Established 1999"
                   category="Trench Coat"
                   styleType="Suede"
+                  eager={true}
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -3200,10 +3304,10 @@ export default function App() {
                     THE HOUSE OF SAMO
                   </h1>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Rooted in architectural permanence since 1999, SAMO defines modern luxury through tactile mastery and sculptural precision. Every silhouette is conceived from noble raw materials—supple full-grain cow leather, velvety calf suede, shearling fur, combed cashmere, and liquid silk—tailored with clean geometric lines and enduring proportions.
+                    Rooted in architectural permanence since 1999, SAMO defines modern luxury through tactile mastery and sculptural precision. Every silhouette is conceived from noble raw materials including supple full grain cow leather, velvety calf suede, shearling fur, combed cashmere, and liquid silk, tailored with clean geometric lines and enduring proportions.
                   </p>
                   <p className="text-xs md:text-sm text-zinc-700 leading-relaxed">
-                    Inside the SAMO Showroom, our Women’s ready-to-wear and leather goods curation converges with our centimeter-graded Kids collection for Minis, Children, and Teens—uniting artisanal heritage with an unmistakable contemporary attitude.
+                    Inside the SAMO Showroom, our Women’s ready to wear and leather goods curation converges with our centimeter graded Kids collection for Minis, Children, and Teens, uniting artisanal heritage with an unmistakable contemporary attitude.
                   </p>
                 </div>
               </div>
@@ -3221,8 +3325,7 @@ export default function App() {
                     VISIT OUR SHOWROOM
                   </h2>
                   <div className="pt-2 space-y-1.5 text-xs font-mono-tabular text-zinc-300">
-                    <div>HOURS: MONDAY – SATURDAY · 10:00 AM – 8:00 PM</div>
-                    <div>SERVICES: PRIVATE STYLING · BOUTIQUE PICKUP · ARCHIVE VIEWING</div>
+                    <div>HOURS: MONDAY – SATURDAY · 10:00 AM – 7:00 PM</div>
                   </div>
                 </div>
               </div>
@@ -3244,14 +3347,14 @@ export default function App() {
                   />
                 </div>
 
-                <div className="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="mt-4 flex items-center justify-start">
                   <a
                     href="https://maps.app.goo.gl/3i4C59ucrmTFBvmx5"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3 px-5 bg-white text-zinc-950 text-[11px] font-bold uppercase tracking-[0.16em] inline-flex items-center justify-center gap-2 hover:bg-zinc-200 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-white text-[11px] font-display font-bold uppercase tracking-[0.2em] border-b border-white pb-1 hover:opacity-75 transition-opacity cursor-pointer"
                   >
-                    <span>OPEN ON GOOGLE MAPS</span>
+                    <span>Open on Maps</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>
                 </div>
@@ -3740,19 +3843,9 @@ export default function App() {
                               className="h-full w-full object-cover"
                             />
                           </div>
-                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/15" />
-                          <div className="absolute inset-x-0 bottom-6 sm:bottom-8 z-10 px-5 sm:px-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                            <div className="space-y-1.5">
-                              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300">
-                                {activeCategoryBanner.kicker ||
-                                  'SAMO CURATION · HAND-FINISHED IN OUR STUDIO'}
-                              </div>
-                              <h2 className="font-display text-lg sm:text-2xl md:text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
-                                {activeCategoryBanner.title ||
-                                  `SAMO ${activeCategoryBanner.categoryName.toUpperCase()} ARCHIVE`}
-                              </h2>
-                            </div>
-                            <span className="text-[10px] font-mono-tabular uppercase tracking-[0.18em] text-zinc-300 border border-white/30 bg-black/40 px-3 py-1.5 self-start sm:self-auto">
+                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent" />
+                          <div className="absolute inset-x-0 bottom-5 sm:bottom-7 z-10 px-5 sm:px-8 flex items-end justify-start">
+                            <span className="text-[10px] font-mono-tabular uppercase tracking-[0.18em] text-zinc-200 border border-white/35 bg-black/50 px-3 py-1.5">
                               {activeCategoryBanner.department.toUpperCase()} ·{' '}
                               {activeCategoryBanner.categoryName.toUpperCase()}
                             </span>
@@ -3964,7 +4057,7 @@ export default function App() {
 
       {/* BALENCIAGA-INSPIRED ARCHITECTURAL MULTI-COLUMN FOOTER */}
       <footer className="bg-[#D4D4D4] text-zinc-950 border-t border-zinc-950 text-xs">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-400 border-b border-zinc-400">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-400 border-b border-zinc-400">
           {/* Col 1: Newsletter */}
           <div className="p-6 space-y-3">
             <div className="font-display font-bold uppercase tracking-[0.14em]">
@@ -4073,63 +4166,6 @@ export default function App() {
                 >
                   Showroom
                 </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Col 5: Contact & Routes */}
-          <div className="p-6 space-y-2">
-            <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
-              Direct Routes
-            </div>
-            <ul className="space-y-1.5 text-[11px]">
-              <li>
-                <a
-                  href="/home"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavigate('/home');
-                  }}
-                  className="underline"
-                >
-                  samoweave.com/home
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/new-arrivals/women"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavigate('/new-arrivals', 'women');
-                  }}
-                  className="underline"
-                >
-                  samoweave.com/new-arrivals/women
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/gifts"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavigate('/gifts');
-                  }}
-                  className="underline"
-                >
-                  samoweave.com/gifts
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/showroom"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavigate('/showroom');
-                  }}
-                  className="underline"
-                >
-                  samoweave.com/showroom
-                </a>
               </li>
             </ul>
           </div>

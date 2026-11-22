@@ -1955,6 +1955,7 @@ export function getCategoriesByDepartment(
           name: normalizedName,
           slug: createSafeSlug(normalizedName),
           sortOrder: numericOrder,
+          active: c.active !== false,
         },
         initialOrder: fallbackOrder,
       });

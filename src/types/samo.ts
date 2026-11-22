@@ -36,6 +36,7 @@ export interface CategoryItem {
   department: Department;
   description: string;
   sortOrder?: number;
+  active?: boolean;
   sizeGuides?: ('tops_guide' | 'trousers_guide')[];
   createdAt?: string;
 }

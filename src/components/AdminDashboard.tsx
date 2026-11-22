@@ -464,6 +464,10 @@ interface AdminDashboardProps {
     direction: 'up' | 'down'
   ) => Promise<void>;
   onRenumberDepartmentCategories?: (department: Department) => Promise<void>;
+  onToggleCategoryActive?: (
+    categoryId: string,
+    nextActive: boolean
+  ) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onAddProduct: (prod: Omit<ProductItem, 'id'>) => Promise<void>;
   onUpdateProductSizeQuantity: (
@@ -539,6 +543,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateCategorySortOrder,
   onMoveCategoryOrder,
   onRenumberDepartmentCategories,
+  onToggleCategoryActive,
   onDeleteCategory,
   onAddProduct,
   onUpdateProductSizeQuantity,
@@ -6247,10 +6252,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ? catOrderDrafts[cat.id]
                             : String(currentOrderNum);
 
+                        const isCategoryLive = cat.active !== false;
+
                         return (
                           <div
                             key={cat.id}
-                            className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                            className={`bg-[#18181C] border rounded-2xl p-4 sm:p-5 space-y-4 transition-opacity ${
+                              isCategoryLive
+                                ? 'border-zinc-800'
+                                : 'border-amber-800/70 opacity-85'
+                            }`}
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                               <div className="space-y-1">
@@ -6259,6 +6270,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     #{idx + 1}
                                   </span>
                                   <span>Women · {cat.name}</span>
+                                  {!isCategoryLive && (
+                                    <span className="px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-700/70 text-[9.5px] font-bold uppercase tracking-wider">
+                                      Hidden on Website
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -6283,11 +6299,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                                 <div className="text-[11px] text-zinc-400">
                                   Banner appears between products in /women (
-                                  {cat.name})
+                                  {cat.name}) · Tag:{' '}
+                                  <code className="text-zinc-200">
+                                    WOMEN · {cat.name.toUpperCase()}
+                                  </code>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2">
+                                {onToggleCategoryActive && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextActive = !isCategoryLive;
+                                      await onToggleCategoryActive(
+                                        cat.id,
+                                        nextActive
+                                      );
+                                      setCatFeedback(
+                                        nextActive
+                                          ? `✓ Turned ON "${cat.name}" category — now live on the website.`
+                                          : `✓ Turned OFF "${cat.name}" category — hidden from the website until turned back ON.`
+                                      );
+                                    }}
+                                    title={
+                                      isCategoryLive
+                                        ? 'Turn OFF this category on the website (keeps all products safe in Admin)'
+                                        : 'Turn ON this category on the website'
+                                    }
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                      isCategoryLive
+                                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                        : 'bg-amber-950/80 text-amber-300 border border-amber-700/70'
+                                    }`}
+                                  >
+                                    {isCategoryLive ? (
+                                      <>
+                                        <Eye className="w-3 h-3" />
+                                        <span>Category: ON</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <EyeOff className="w-3 h-3" />
+                                        <span>Category: OFF</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -6316,8 +6375,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       },
                                       `${cat.name} Banner ${
                                         isBannerActive
-                                          ? 'Removed/Hidden'
-                                          : 'Added/Enabled'
+                                          ? 'Turned OFF (Hidden)'
+                                          : 'Turned ON (Active)'
                                       }`
                                     )
                                   }
@@ -6330,12 +6389,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   {isBannerActive ? (
                                     <>
                                       <Eye className="w-3 h-3" />
-                                      <span>Banner Active</span>
+                                      <span>Banner: ON</span>
                                     </>
                                   ) : (
                                     <>
                                       <EyeOff className="w-3 h-3" />
-                                      <span>No Banner</span>
+                                      <span>Banner: OFF</span>
                                     </>
                                   )}
                                 </button>
@@ -6689,12 +6748,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {isBannerActive ? (
                                   <>
                                     <Eye className="w-3 h-3" />
-                                    <span>Banner Active</span>
+                                    <span>Banner: ON</span>
                                   </>
                                 ) : (
                                   <>
                                     <EyeOff className="w-3 h-3" />
-                                    <span>No Banner</span>
+                                    <span>Banner: OFF</span>
                                   </>
                                 )}
                               </button>
@@ -6708,6 +6767,223 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   src={bannerCfg.imageUrl}
                                   alt={`${catDisplayName} In-Feed Banner`}
                                   category="Fur"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
+                                  No Banner Active (Hidden on Website)
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="sm:col-span-8 space-y-2.5">
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                  In-Feed Banner Image URL for {catDisplayName}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={bannerCfg.imageUrl}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateCategoryBanner(
+                                      bKey,
+                                      'collection',
+                                      catDisplayName,
+                                      (prev) => ({
+                                        ...prev,
+                                        imageUrl: val,
+                                        enabled: Boolean(val.trim()),
+                                      })
+                                    );
+                                  }}
+                                  placeholder="https://... (Leave empty or click Delete Banner for no banner)"
+                                  className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                                  <span>Show after:</span>
+                                  <select
+                                    value={bannerCfg.insertAfterCount || 4}
+                                    onChange={(e) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          insertAfterCount: Number(
+                                            e.target.value
+                                          ),
+                                        }),
+                                        `Updated ${catDisplayName} banner position`
+                                      )
+                                    }
+                                    className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
+                                  >
+                                    <option value={2}>2 products</option>
+                                    <option value={4}>4 products</option>
+                                    <option value={6}>6 products</option>
+                                    <option value={8}>8 products</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <R2ImageUploadButton
+                                    compact={true}
+                                    ariaLabel={`Upload banner photo for ${catDisplayName}`}
+                                    label={
+                                      isBannerActive
+                                        ? 'Replace Photo'
+                                        : 'Upload Banner'
+                                    }
+                                    onUploaded={(url) =>
+                                      updateCategoryBanner(
+                                        bKey,
+                                        'collection',
+                                        catDisplayName,
+                                        (prev) => ({
+                                          ...prev,
+                                          imageUrl: url,
+                                          enabled: true,
+                                        }),
+                                        `Uploaded new banner for ${catDisplayName}`
+                                      )
+                                    }
+                                  />
+                                  {(isBannerActive || bannerCfg.imageUrl) && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'collection',
+                                          catDisplayName,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: '',
+                                            enabled: false,
+                                          }),
+                                          `Removed banner from ${catDisplayName} — no banner will appear in this category`
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                    >
+                                      Delete Banner
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Dedicated Gifts (Bags & Belts) Category In-Feed Banner Card */}
+                    {(() => {
+                      const bKey = getCategoryBannerKey('/gifts', 'all');
+                      const catDisplayName = 'Gifts (Bags & Belts)';
+                      const storedBanner = siteBanners.categoryBanners?.[bKey];
+                      const bannerCfg =
+                        storedBanner ||
+                        buildDefaultCategoryBannerForCategory(
+                          'collection',
+                          catDisplayName,
+                          bKey
+                        );
+                      const isBannerActive =
+                        Boolean(bannerCfg.enabled) &&
+                        Boolean(
+                          bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                        );
+
+                      return (
+                        <div
+                          key={bKey}
+                          data-testid="admin-banner-card-gifts"
+                          className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                            <div className="space-y-1">
+                              <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-white text-zinc-950 font-mono-tabular text-[11px] font-extrabold">
+                                  COLLECTION
+                                </span>
+                                <span>Women · {catDisplayName}</span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400">
+                                Banner appears between products in /gifts · Tag:{' '}
+                                <code className="text-zinc-200">
+                                  WOMEN · GIFTS
+                                </code>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCategoryBanner(
+                                    bKey,
+                                    'collection',
+                                    catDisplayName,
+                                    (prev) => {
+                                      const nextEnabled = !isBannerActive;
+                                      const fallbackDefault =
+                                        buildDefaultCategoryBannerForCategory(
+                                          'collection',
+                                          catDisplayName,
+                                          bKey
+                                        );
+                                      return {
+                                        ...prev,
+                                        enabled: nextEnabled,
+                                        imageUrl:
+                                          nextEnabled &&
+                                          (!prev.imageUrl ||
+                                            !prev.imageUrl.trim())
+                                            ? fallbackDefault.imageUrl
+                                            : prev.imageUrl,
+                                      };
+                                    },
+                                    `${catDisplayName} Banner ${
+                                      isBannerActive
+                                        ? 'Turned OFF (Hidden)'
+                                        : 'Turned ON (Active)'
+                                    }`
+                                  )
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                  isBannerActive
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                    : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {isBannerActive ? (
+                                  <>
+                                    <Eye className="w-3 h-3" />
+                                    <span>Banner: ON</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <EyeOff className="w-3 h-3" />
+                                    <span>Banner: OFF</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                            <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                              {isBannerActive ? (
+                                <ProductImage
+                                  src={bannerCfg.imageUrl}
+                                  alt={`${catDisplayName} In-Feed Banner`}
+                                  category="Bags"
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
@@ -6899,10 +7175,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ? catOrderDrafts[cat.id]
                             : String(currentOrderNum);
 
+                        const isCategoryLive = cat.active !== false;
+
                         return (
                           <div
                             key={cat.id}
-                            className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                            className={`bg-[#18181C] border rounded-2xl p-4 sm:p-5 space-y-4 transition-opacity ${
+                              isCategoryLive
+                                ? 'border-zinc-800'
+                                : 'border-amber-800/70 opacity-85'
+                            }`}
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                               <div className="space-y-1">
@@ -6911,6 +7193,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     #{idx + 1}
                                   </span>
                                   <span>Kids · {cat.name}</span>
+                                  {!isCategoryLive && (
+                                    <span className="px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-700/70 text-[9.5px] font-bold uppercase tracking-wider">
+                                      Hidden on Website
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -6935,11 +7222,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                                 <div className="text-[11px] text-zinc-400">
                                   Banner appears between products in /kids (
-                                  {cat.name})
+                                  {cat.name}) · Tag:{' '}
+                                  <code className="text-zinc-200">
+                                    KIDS · {cat.name.toUpperCase()}
+                                  </code>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2">
+                                {onToggleCategoryActive && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextActive = !isCategoryLive;
+                                      await onToggleCategoryActive(
+                                        cat.id,
+                                        nextActive
+                                      );
+                                      setCatFeedback(
+                                        nextActive
+                                          ? `✓ Turned ON "${cat.name}" category — now live on the website.`
+                                          : `✓ Turned OFF "${cat.name}" category — hidden from the website until turned back ON.`
+                                      );
+                                    }}
+                                    title={
+                                      isCategoryLive
+                                        ? 'Turn OFF this category on the website (keeps all products safe in Admin)'
+                                        : 'Turn ON this category on the website'
+                                    }
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                      isCategoryLive
+                                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                        : 'bg-amber-950/80 text-amber-300 border border-amber-700/70'
+                                    }`}
+                                  >
+                                    {isCategoryLive ? (
+                                      <>
+                                        <Eye className="w-3 h-3" />
+                                        <span>Category: ON</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <EyeOff className="w-3 h-3" />
+                                        <span>Category: OFF</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -6968,8 +7298,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       },
                                       `${cat.name} Banner ${
                                         isBannerActive
-                                          ? 'Removed/Hidden'
-                                          : 'Added/Enabled'
+                                          ? 'Turned OFF (Hidden)'
+                                          : 'Turned ON (Active)'
                                       }`
                                     )
                                   }
@@ -6982,12 +7312,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   {isBannerActive ? (
                                     <>
                                       <Eye className="w-3 h-3" />
-                                      <span>Banner Active</span>
+                                      <span>Banner: ON</span>
                                     </>
                                   ) : (
                                     <>
                                       <EyeOff className="w-3 h-3" />
-                                      <span>No Banner</span>
+                                      <span>Banner: OFF</span>
                                     </>
                                   )}
                                 </button>
@@ -7340,12 +7670,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {isBannerActive ? (
                                   <>
                                     <Eye className="w-3 h-3" />
-                                    <span>Banner Active</span>
+                                    <span>Banner: ON</span>
                                   </>
                                 ) : (
                                   <>
                                     <EyeOff className="w-3 h-3" />
-                                    <span>No Banner</span>
+                                    <span>Banner: OFF</span>
                                   </>
                                 )}
                               </button>

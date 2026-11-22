@@ -137,7 +137,12 @@ async function readFromD1(
       id: c.id,
       name: c.name,
       department: c.department,
+      sortOrder:
+        typeof c.display_order === 'number' && c.display_order > 0
+          ? c.display_order
+          : undefined,
       displayOrder: c.display_order ?? 0,
+      active: !Boolean(c.hidden_from_nav),
       hiddenFromNav: Boolean(c.hidden_from_nav),
       sizeGuides: c.size_guides ? safeJsonParse(c.size_guides, undefined) : undefined,
       createdAt: c.created_at || new Date().toISOString(),
@@ -424,6 +429,11 @@ async function writeToD1(
   if (Array.isArray(patch.categories)) {
     for (const c of patch.categories as any[]) {
       if (!c || !c.id) continue;
+      const isHidden = c.active === false || Boolean(c.hiddenFromNav);
+      const dispOrder =
+        typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder)
+          ? c.sortOrder
+          : c.displayOrder ?? 0;
       statements.push(
         db
           .prepare(
@@ -441,8 +451,8 @@ async function writeToD1(
             c.id,
             c.name || '',
             c.department || 'women',
-            c.displayOrder ?? 0,
-            c.hiddenFromNav ? 1 : 0,
+            dispOrder,
+            isHidden ? 1 : 0,
             c.sizeGuides ? JSON.stringify(c.sizeGuides) : null,
             c.createdAt || new Date().toISOString()
           )
