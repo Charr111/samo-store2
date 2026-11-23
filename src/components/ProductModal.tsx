@@ -921,7 +921,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <div className="pt-3.5 border-t border-zinc-200">
                   <div className="mb-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
-                      Materials Composition
+                      Material &amp; Fabric
                     </span>
                   </div>
                   <p className="text-xs font-medium text-zinc-800 tracking-wide">
