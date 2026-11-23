@@ -27,6 +27,7 @@ import {
   type GoogleSheetsSyncRequestPayload,
 } from './functions/api/sheets-sync.ts';
 import { buildSitemapXml } from './functions/sitemap.xml.ts';
+import { buildGoogleMerchantFeedXml } from './functions/merchant-feed.xml.ts';
 import {
   INITIAL_CATEGORIES,
   INITIAL_PRODUCTS,
@@ -277,6 +278,50 @@ async function startServer() {
         .send(xml);
     } catch {
       const xml = buildSitemapXml(INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+      res
+        .status(200)
+        .set('Content-Type', 'application/xml; charset=utf-8')
+        .send(xml);
+    }
+  });
+
+  // Dynamic Google Merchant Center XML Product Feed Endpoint (Merchant ID: 5917302248)
+  app.get('/merchant-feed.xml', async (_req, res) => {
+    try {
+      const state = await readCatalogState();
+      const products =
+        Array.isArray(state.products) && state.products.length > 0
+          ? (state.products as ProductItem[])
+          : INITIAL_PRODUCTS;
+      const banners =
+        state.siteBanners && typeof state.siteBanners === 'object'
+          ? (state.siteBanners as Record<string, unknown>)
+          : {};
+      const xml = buildGoogleMerchantFeedXml(products, {
+        shippingFeeEnabled:
+          typeof banners.shippingFeeEnabled === 'boolean'
+            ? banners.shippingFeeEnabled
+            : true,
+        standardDeliveryFee:
+          typeof banners.standardDeliveryFee === 'number' &&
+          Number.isFinite(banners.standardDeliveryFee) &&
+          banners.standardDeliveryFee >= 0
+            ? banners.standardDeliveryFee
+            : 6,
+        freeShippingThreshold:
+          typeof banners.freeShippingThreshold === 'number' &&
+          Number.isFinite(banners.freeShippingThreshold) &&
+          banners.freeShippingThreshold >= 0
+            ? banners.freeShippingThreshold
+            : 80,
+      });
+      res
+        .status(200)
+        .set('Content-Type', 'application/xml; charset=utf-8')
+        .set('Cache-Control', 'public, max-age=300')
+        .send(xml);
+    } catch {
+      const xml = buildGoogleMerchantFeedXml(INITIAL_PRODUCTS);
       res
         .status(200)
         .set('Content-Type', 'application/xml; charset=utf-8')

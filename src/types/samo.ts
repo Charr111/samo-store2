@@ -263,6 +263,9 @@ export interface SiteBannersConfig {
   orderEmailPromoCode?: string;
   orderEmailPromoDescription?: string;
   orderEmailPromoBannerUrl?: string;
+  shippingFeeEnabled?: boolean;
+  standardDeliveryFee?: number;
+  freeShippingThreshold?: number;
   googleSheetsSync?: GoogleSheetsSyncConfig;
   categoryBanners: Record<string, CategoryBannerConfig>;
 }

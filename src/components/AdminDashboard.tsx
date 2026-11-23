@@ -939,6 +939,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newAdminGmail, setNewAdminGmail] = useState('');
   const [adminFeedback, setAdminFeedback] = useState('');
 
+  // Standard Delivery Shipping Fee & Free Threshold Draft State
+  const [shippingFeeDraft, setShippingFeeDraft] = useState<string>(() =>
+    String(
+      typeof siteBanners.standardDeliveryFee === 'number' &&
+        Number.isFinite(siteBanners.standardDeliveryFee)
+        ? siteBanners.standardDeliveryFee
+        : 6
+    )
+  );
+  const [freeThresholdDraft, setFreeThresholdDraft] = useState<string>(() =>
+    String(
+      typeof siteBanners.freeShippingThreshold === 'number' &&
+        Number.isFinite(siteBanners.freeShippingThreshold)
+        ? siteBanners.freeShippingThreshold
+        : 80
+    )
+  );
+  const [shippingSaveFeedback, setShippingSaveFeedback] = useState<string>('');
+
+  useEffect(() => {
+    const nextFee =
+      typeof siteBanners.standardDeliveryFee === 'number' &&
+      Number.isFinite(siteBanners.standardDeliveryFee)
+        ? siteBanners.standardDeliveryFee
+        : 6;
+    const nextThresh =
+      typeof siteBanners.freeShippingThreshold === 'number' &&
+      Number.isFinite(siteBanners.freeShippingThreshold)
+        ? siteBanners.freeShippingThreshold
+        : 80;
+    setShippingFeeDraft(String(nextFee));
+    setFreeThresholdDraft(String(nextThresh));
+  }, [siteBanners.standardDeliveryFee, siteBanners.freeShippingThreshold]);
+
   const allMaterials = mergeMaterialsList(customMaterials);
   const allColors = mergeColorsList(customColors);
   const deptCategories = getCategoriesByDepartment(categories, itemDept);
@@ -4073,7 +4107,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Store Quick Toggles &amp; Controls
                     </h1>
                     <p className="text-xs text-zinc-400 mt-0.5">
-                      All 6 live website &amp; checkout switches in one dedicated page — synced across Cloudflare &amp; all devices
+                      All 7 live website, shipping &amp; checkout switches in one dedicated page — synced across Cloudflare &amp; all devices
                     </p>
                   </div>
                 </div>
@@ -4411,6 +4445,166 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}
                     />
                   </button>
+                </div>
+
+                {/* 7. Standard Delivery Shipping Fee & Free-Shipping Threshold (ON/OFF + Custom Rates) */}
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 md:col-span-2 xl:col-span-3 flex flex-col gap-4">
+                  <div className="flex items-center justify-between gap-3.5">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs sm:text-sm font-bold text-white">
+                          Standard Delivery Shipping Fee &amp; Free Threshold
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            siteBanners.shippingFeeEnabled !== false
+                              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                          }`}
+                        >
+                          {siteBanners.shippingFeeEnabled !== false
+                            ? `ON · $${siteBanners.standardDeliveryFee ?? 6} / FREE OVER $${siteBanners.freeShippingThreshold ?? 80}`
+                            : 'OFF · FREE SHIPPING ON ALL ORDERS'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
+                        {siteBanners.shippingFeeEnabled !== false
+                          ? `Charging $${siteBanners.standardDeliveryFee ?? 6} USD for Standard Delivery, and $0 (Complimentary Free) for orders $${siteBanners.freeShippingThreshold ?? 80} USD and above.`
+                          : 'Shipping fee is turned OFF — all Standard Delivery orders receive complimentary $0 free delivery.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={siteBanners.shippingFeeEnabled !== false}
+                      data-testid="dashboard-toggle-shipping-fee"
+                      aria-label="Toggle Standard Delivery Shipping Fee On or Off"
+                      onClick={async () => {
+                        const currentEnabled =
+                          siteBanners.shippingFeeEnabled !== false;
+                        const nextEnabled = !currentEnabled;
+                        await onUpdateSiteBanners({
+                          ...siteBanners,
+                          shippingFeeEnabled: nextEnabled,
+                        });
+                        recordAdminActivity(
+                          'Shipping Fee Toggled',
+                          `Standard Delivery Shipping Fee turned ${
+                            nextEnabled ? 'ON' : 'OFF (Free Shipping on All Orders)'
+                          }`
+                        );
+                        setShippingSaveFeedback(
+                          nextEnabled
+                            ? `✓ Shipping fee turned ON ($${siteBanners.standardDeliveryFee ?? 6} / Free over $${siteBanners.freeShippingThreshold ?? 80})`
+                            : '✓ Shipping fee turned OFF (Free Shipping on all orders)'
+                        );
+                        setTimeout(() => setShippingSaveFeedback(''), 3500);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                        siteBanners.shippingFeeEnabled !== false
+                          ? 'bg-white border-white'
+                          : 'bg-zinc-800 border-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                          siteBanners.shippingFeeEnabled !== false
+                            ? 'translate-x-5 bg-zinc-950'
+                            : 'translate-x-1 bg-zinc-400'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                        Shipping Fee ($ USD)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={shippingFeeDraft}
+                          onChange={(e) => setShippingFeeDraft(e.target.value)}
+                          placeholder="6"
+                          className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                        Free Shipping After ($ USD)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={freeThresholdDraft}
+                          onChange={(e) =>
+                            setFreeThresholdDraft(e.target.value)
+                          }
+                          placeholder="80"
+                          className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const parsedFee = Math.max(
+                            0,
+                            Math.round((Number(shippingFeeDraft) || 0) * 100) /
+                              100
+                          );
+                          const parsedThreshold = Math.max(
+                            0,
+                            Math.round(
+                              (Number(freeThresholdDraft) || 0) * 100
+                            ) / 100
+                          );
+                          setShippingFeeDraft(String(parsedFee));
+                          setFreeThresholdDraft(String(parsedThreshold));
+                          await onUpdateSiteBanners({
+                            ...siteBanners,
+                            shippingFeeEnabled:
+                              siteBanners.shippingFeeEnabled !== false,
+                            standardDeliveryFee: parsedFee,
+                            freeShippingThreshold: parsedThreshold,
+                          });
+                          recordAdminActivity(
+                            'Shipping Rates Updated',
+                            `Standard Delivery set to $${parsedFee} USD (Free over $${parsedThreshold} USD)`
+                          );
+                          setShippingSaveFeedback(
+                            `✓ Saved: $${parsedFee} shipping · Free over $${parsedThreshold}`
+                          );
+                          setTimeout(() => setShippingSaveFeedback(''), 3500);
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer"
+                      >
+                        Save Shipping Rates
+                      </button>
+                    </div>
+                  </div>
+
+                  {shippingSaveFeedback && (
+                    <div className="text-[11px] font-semibold text-emerald-400">
+                      {shippingSaveFeedback}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -44,6 +44,9 @@ interface CartCheckoutDrawerProps {
   onSelectProduct?: (product: ProductItem) => void;
   onSubmitOrder: (orderPayload: Omit<OrderItem, 'id' | 'createdAt' | 'status'>) => Promise<OrderItem>;
   codEnabled?: boolean;
+  shippingFeeEnabled?: boolean;
+  standardDeliveryFee?: number;
+  freeShippingThreshold?: number;
 }
 
 export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
@@ -61,6 +64,9 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   onSelectProduct,
   onSubmitOrder,
   codEnabled = false,
+  shippingFeeEnabled = true,
+  standardDeliveryFee = 6,
+  freeShippingThreshold = 80,
 }) => {
   const [step, setStep] = useState<'cart' | 'checkout' | 'confirmed'>(initialStep);
   const [customerName, setCustomerName] = useState('');
@@ -239,13 +245,39 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     touchCurrentYRef.current = null;
   };
 
+  const activeDeliveryFee =
+    typeof standardDeliveryFee === 'number' &&
+    Number.isFinite(standardDeliveryFee) &&
+    standardDeliveryFee >= 0
+      ? Math.round(standardDeliveryFee * 100) / 100
+      : 6;
+  const activeFreeThreshold =
+    typeof freeShippingThreshold === 'number' &&
+    Number.isFinite(freeShippingThreshold) &&
+    freeShippingThreshold >= 0
+      ? Math.round(freeShippingThreshold * 100) / 100
+      : 80;
+  const isShippingFeeActive =
+    shippingFeeEnabled !== false && activeDeliveryFee > 0;
+
+  const standardDeliveryOptionLabel = !isShippingFeeActive
+    ? 'Standard Delivery (Complimentary Free Delivery)'
+    : activeFreeThreshold > 0
+    ? `Standard Delivery (Complimentary over $${activeFreeThreshold}, otherwise $${activeDeliveryFee})`
+    : `Standard Delivery ($${activeDeliveryFee} flat rate)`;
+
   const totals = calculateOrderTotals(
     cartItems.map((ci) => ({
       price: getEffectiveProductPrice(ci.product).effectivePrice,
       quantity: ci.quantity,
     })),
     deliveryMethod,
-    appliedPromo
+    appliedPromo,
+    {
+      shippingFeeEnabled,
+      standardDeliveryFee: activeDeliveryFee,
+      freeShippingThreshold: activeFreeThreshold,
+    }
   );
 
   const bagTotalWithoutDelivery = Math.max(0, totals.subtotal - totals.discountAmount);
@@ -861,7 +893,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     [
                       {
                         method: 'Standard Delivery' as DeliveryMethod,
-                        label: 'Standard Delivery (Complimentary over $80, otherwise $6)',
+                        label: standardDeliveryOptionLabel,
                       },
                       {
                         method: 'SAMO Showroom Pickup' as DeliveryMethod,

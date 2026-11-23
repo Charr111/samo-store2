@@ -1667,7 +1667,12 @@ export function isAuthorizedAdminEmail(
 export function calculateOrderTotals(
   items: { price: number; quantity: number }[],
   deliveryMethod: DeliveryMethod,
-  appliedPromo?: Pick<PromoCodeItem, 'discountType' | 'discountValue' | 'active'> | null
+  appliedPromo?: Pick<PromoCodeItem, 'discountType' | 'discountValue' | 'active'> | null,
+  shippingConfig?: {
+    shippingFeeEnabled?: boolean;
+    standardDeliveryFee?: number;
+    freeShippingThreshold?: number;
+  } | null
 ): {
   subtotal: number;
   discountAmount: number;
@@ -1699,9 +1704,35 @@ export function calculateOrderTotals(
 
   const discountedSubtotal = Math.max(0, subtotal - discountAmount);
 
+  const isShippingFeeEnabled =
+    typeof shippingConfig?.shippingFeeEnabled === 'boolean'
+      ? shippingConfig.shippingFeeEnabled
+      : true;
+  const activeDeliveryFee =
+    typeof shippingConfig?.standardDeliveryFee === 'number' &&
+    Number.isFinite(shippingConfig.standardDeliveryFee) &&
+    shippingConfig.standardDeliveryFee >= 0
+      ? Math.round(shippingConfig.standardDeliveryFee * 100) / 100
+      : 6;
+  const activeFreeThreshold =
+    typeof shippingConfig?.freeShippingThreshold === 'number' &&
+    Number.isFinite(shippingConfig.freeShippingThreshold) &&
+    shippingConfig.freeShippingThreshold >= 0
+      ? Math.round(shippingConfig.freeShippingThreshold * 100) / 100
+      : 80;
+
   let deliveryFee = 0;
   if (deliveryMethod === 'Standard Delivery') {
-    deliveryFee = discountedSubtotal >= 80 || subtotal === 0 ? 0 : 6;
+    if (!isShippingFeeEnabled || subtotal === 0) {
+      deliveryFee = 0;
+    } else if (
+      activeFreeThreshold > 0 &&
+      discountedSubtotal >= activeFreeThreshold
+    ) {
+      deliveryFee = 0;
+    } else {
+      deliveryFee = activeDeliveryFee;
+    }
   } else {
     deliveryFee = 0; // SAMO Showroom Pickup (Free / Reserved for 1 Day)
   }
@@ -2277,6 +2308,9 @@ export function buildDefaultSiteBanners(
     orderEmailPromoCode: 'SAMO10',
     orderEmailPromoDescription: 'Enjoy 10% off your next order',
     orderEmailPromoBannerUrl: '',
+    shippingFeeEnabled: true,
+    standardDeliveryFee: 6,
+    freeShippingThreshold: 80,
     googleSheetsSync: {
       enabled: true,
       webhookUrl: '',
@@ -2496,6 +2530,22 @@ export function mergeSiteBannersConfig(
       typeof stored.orderEmailPromoBannerUrl === 'string'
         ? stored.orderEmailPromoBannerUrl.trim()
         : defaults.orderEmailPromoBannerUrl,
+    shippingFeeEnabled:
+      typeof stored.shippingFeeEnabled === 'boolean'
+        ? stored.shippingFeeEnabled
+        : defaults.shippingFeeEnabled ?? true,
+    standardDeliveryFee:
+      typeof stored.standardDeliveryFee === 'number' &&
+      Number.isFinite(stored.standardDeliveryFee) &&
+      stored.standardDeliveryFee >= 0
+        ? Math.round(stored.standardDeliveryFee * 100) / 100
+        : defaults.standardDeliveryFee ?? 6,
+    freeShippingThreshold:
+      typeof stored.freeShippingThreshold === 'number' &&
+      Number.isFinite(stored.freeShippingThreshold) &&
+      stored.freeShippingThreshold >= 0
+        ? Math.round(stored.freeShippingThreshold * 100) / 100
+        : defaults.freeShippingThreshold ?? 80,
     googleSheetsSync: {
       enabled: true,
       webhookUrl:
