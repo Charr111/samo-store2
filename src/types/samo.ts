@@ -263,7 +263,46 @@ export interface SiteBannersConfig {
   orderEmailPromoCode?: string;
   orderEmailPromoDescription?: string;
   orderEmailPromoBannerUrl?: string;
+  googleSheetsSync?: GoogleSheetsSyncConfig;
   categoryBanners: Record<string, CategoryBannerConfig>;
+}
+
+export interface GoogleSheetsSyncConfig {
+  enabled: boolean;
+  webhookUrl: string;
+  syncSecret: string;
+  lastSyncedAt?: string;
+  lastSyncStatus?: string;
+  lastSyncMessage?: string;
+}
+
+export interface GoogleSheetInventoryRow {
+  sku: string;
+  garmentCode: string;
+  section: string;
+  category: string;
+  newArrivals: 'YES' | 'NO';
+  productName: string;
+  colorOption: string;
+  sizeSystem: string;
+  size: string;
+  quantity: number;
+  sellingPriceFormatted: string;
+  sellingPrice: number;
+  websiteStatus: 'Live' | 'Sold Out';
+  productId: string;
+}
+
+export interface GoogleSheetIncomingUpdateRow {
+  sku?: string;
+  productId?: string;
+  garmentCode?: string;
+  productName?: string;
+  colorOption?: string;
+  size?: string;
+  quantity?: number | string;
+  sellingPrice?: number | string;
+  websiteStatus?: string;
 }
 
 export interface NewsletterSubscriber {

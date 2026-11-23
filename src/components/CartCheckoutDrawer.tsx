@@ -1190,6 +1190,33 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   setWhishInfoOpen(true);
                   setStep('checkout');
                   try {
+                    const win = window as unknown as {
+                      dataLayer?: Array<Record<string, unknown>>;
+                    };
+                    win.dataLayer = win.dataLayer || [];
+                    win.dataLayer.push({ ecommerce: null });
+                    win.dataLayer.push({
+                      event: 'begin_checkout',
+                      ecommerce: {
+                        currency: 'USD',
+                        value: bagTotalWithoutDelivery,
+                        items: cartItems.map((ci) => ({
+                          item_id:
+                            ci.garmentCode ||
+                            ci.product.garmentCode ||
+                            ci.product.id,
+                          item_name: ci.product.name,
+                          item_category: ci.product.category,
+                          item_variant: [ci.selectedColor, ci.selectedSize]
+                            .filter(Boolean)
+                            .join(' / '),
+                          price: getEffectiveProductPrice(ci.product).effectivePrice,
+                          quantity: ci.quantity,
+                        })),
+                      },
+                    });
+                  } catch {}
+                  try {
                     const currentHistState = (window.history.state || {}) as {
                       samoBagOpen?: boolean;
                       samoCheckoutStep?: boolean;

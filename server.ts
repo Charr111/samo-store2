@@ -21,6 +21,11 @@ import {
   type NewsletterSubscriberRecord,
 } from './server/d1.ts';
 import { buildResendEmailPayload } from './functions/api/order-confirmation-email.ts';
+import { sanitizeCatalogStateForClient } from './functions/api/catalog.ts';
+import {
+  executeGoogleSheetsSyncRequest,
+  type GoogleSheetsSyncRequestPayload,
+} from './functions/api/sheets-sync.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -239,7 +244,11 @@ async function startServer() {
   app.get('/api/catalog', async (_req, res) => {
     res.set('Cache-Control', 'no-store');
     const state = await readCatalogState();
-    res.json(state);
+    res.json(
+      sanitizeCatalogStateForClient(
+        state as unknown as Record<string, unknown>
+      )
+    );
   });
 
   app.post('/api/catalog', async (req, res) => {
@@ -273,6 +282,35 @@ async function startServer() {
         )
       : undefined;
 
+    let mergedSiteBanners: Record<string, unknown> | undefined;
+    if (body.siteBanners && typeof body.siteBanners === 'object') {
+      const incomingBanners = body.siteBanners as Record<string, unknown>;
+      const existingBanners =
+        current.siteBanners && typeof current.siteBanners === 'object'
+          ? (current.siteBanners as Record<string, unknown>)
+          : {};
+      const incomingSheets =
+        incomingBanners.googleSheetsSync &&
+        typeof incomingBanners.googleSheetsSync === 'object'
+          ? (incomingBanners.googleSheetsSync as Record<string, unknown>)
+          : {};
+      const existingSheets =
+        existingBanners.googleSheetsSync &&
+        typeof existingBanners.googleSheetsSync === 'object'
+          ? (existingBanners.googleSheetsSync as Record<string, unknown>)
+          : {};
+      mergedSiteBanners = {
+        ...incomingBanners,
+        googleSheetsSync: {
+          ...existingSheets,
+          ...incomingSheets,
+          enabled: true,
+          webhookUrl: '',
+          syncSecret: '',
+        },
+      };
+    }
+
     const updated = await writeCatalogState({
       ...(Array.isArray(body.products) ? { products: body.products } : {}),
       ...(Array.isArray(body.categories) ? { categories: body.categories } : {}),
@@ -286,9 +324,7 @@ async function startServer() {
       ...(nextOrders !== undefined ? { orders: nextOrders } : {}),
       ...(Array.isArray(body.preorders) ? { preorders: body.preorders } : {}),
       ...(Array.isArray(body.admins) ? { admins: body.admins } : {}),
-      ...(body.siteBanners && typeof body.siteBanners === 'object'
-        ? { siteBanners: body.siteBanners as Record<string, unknown> }
-        : {}),
+      ...(mergedSiteBanners ? { siteBanners: mergedSiteBanners } : {}),
       ...(typeof body.autoAcceptOrders === 'boolean'
         ? { autoAcceptOrders: body.autoAcceptOrders }
         : {}),
@@ -332,7 +368,62 @@ async function startServer() {
       deletedCategoryIds: mergedDeletedCategories,
       deletedOrderIds: mergedDeletedOrders,
     });
-    res.json(updated);
+    res.json(
+      sanitizeCatalogStateForClient(
+        updated as unknown as Record<string, unknown>
+      )
+    );
+  });
+
+  // Two-Way Google Sheets Live Inventory & Price Sync Endpoint
+  app.options('/api/sheets-sync', (_req, res) => {
+    res
+      .set({
+        ...R2_CORS_HEADERS,
+        'Access-Control-Allow-Headers':
+          'Content-Type, Authorization, X-Samo-Sheet-Secret',
+      })
+      .status(204)
+      .end();
+  });
+
+  app.post('/api/sheets-sync', async (req, res) => {
+    res.set({
+      ...R2_CORS_HEADERS,
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, X-Samo-Sheet-Secret',
+      'Cache-Control': 'no-store',
+    });
+    try {
+      const payload = (req.body || {}) as GoogleSheetsSyncRequestPayload;
+      const headerSecret =
+        (req.headers['x-samo-sheet-secret'] as string | undefined) || undefined;
+
+      const result = await executeGoogleSheetsSyncRequest(
+        payload,
+        headerSecret,
+        {
+          readState: async () =>
+            (await readCatalogState()) as unknown as Record<string, unknown>,
+          writeState: async (patch) =>
+            (await writeCatalogState(
+              patch as Partial<PersistedCatalogState>
+            )) as unknown as Record<string, unknown>,
+          envWebhookUrl: process.env.GOOGLE_SHEETS_WEBHOOK_URL,
+          envSyncSecret: process.env.GOOGLE_SHEETS_SYNC_SECRET,
+        }
+      );
+
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Failed to process Google Sheets sync request.',
+      });
+    }
   });
 
   // 0. Cloudflare R2 Image Upload Endpoint (with full CORS + Cross-Origin-Resource-Policy headers)

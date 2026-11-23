@@ -6,6 +6,9 @@ import {
   Department,
   DiscountType,
   FullSetSubItem,
+  GoogleSheetIncomingUpdateRow,
+  GoogleSheetInventoryRow,
+  GoogleSheetsSyncConfig,
   NewsletterPopupConfig,
   OrderItem,
   ProductColorVariant,
@@ -2274,6 +2277,13 @@ export function buildDefaultSiteBanners(
     orderEmailPromoCode: 'SAMO10',
     orderEmailPromoDescription: 'Enjoy 10% off your next order',
     orderEmailPromoBannerUrl: '',
+    googleSheetsSync: {
+      enabled: true,
+      webhookUrl: '',
+      syncSecret: '',
+      lastSyncedAt: '',
+      lastSyncStatus: '',
+    },
     categoryBanners,
   };
 }
@@ -2486,6 +2496,25 @@ export function mergeSiteBannersConfig(
       typeof stored.orderEmailPromoBannerUrl === 'string'
         ? stored.orderEmailPromoBannerUrl.trim()
         : defaults.orderEmailPromoBannerUrl,
+    googleSheetsSync: {
+      enabled: true,
+      webhookUrl:
+        typeof stored.googleSheetsSync?.webhookUrl === 'string'
+          ? stored.googleSheetsSync.webhookUrl.trim()
+          : '',
+      syncSecret:
+        typeof stored.googleSheetsSync?.syncSecret === 'string'
+          ? stored.googleSheetsSync.syncSecret.trim()
+          : '',
+      lastSyncedAt:
+        typeof stored.googleSheetsSync?.lastSyncedAt === 'string'
+          ? stored.googleSheetsSync.lastSyncedAt
+          : defaults.googleSheetsSync?.lastSyncedAt || '',
+      lastSyncStatus:
+        typeof stored.googleSheetsSync?.lastSyncStatus === 'string'
+          ? stored.googleSheetsSync.lastSyncStatus
+          : defaults.googleSheetsSync?.lastSyncStatus || '',
+    },
     categoryBanners: mergedCategoryBanners,
   };
 }
@@ -3632,3 +3661,871 @@ export function orderHomeNewArrivalsProducts(
   }
   return rawNewArrivals;
 }
+
+/**
+ * Validates that a Google Apps Script Web App URL is a legitimate HTTPS Google Apps Script endpoint
+ * to prevent SSRF or accidental malformed webhook destinations.
+ */
+export function isValidGoogleAppsScriptWebhookUrl(url?: string | null): boolean {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host !== 'script.google.com' &&
+      host !== 'script.googleusercontent.com'
+    ) {
+      return false;
+    }
+    return parsed.pathname.startsWith('/macros/');
+  } catch {
+    return false;
+  }
+}
+
+function formatGoogleSheetSizeSystem(
+  sizeType: SizeType,
+  sizes: string[]
+): string {
+  const firstSize = (sizes[0] || '').trim().toUpperCase();
+  if (
+    firstSize === 'OS' ||
+    firstSize === 'ONE SIZE' ||
+    (sizes.length === 1 && (firstSize === 'OS' || firstSize === 'ONE SIZE'))
+  ) {
+    return 'One Size';
+  }
+  if (sizeType === 'numeric') return 'EU Numeric';
+  if (sizeType === 'years' || sizeType === 'cm') return 'Age-Years';
+  if (sizeType === 'months') return 'Age-Months';
+  return 'Alpha';
+}
+
+function normalizeSheetToken(val?: string | null): string {
+  if (typeof val !== 'string') return '';
+  return val.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function normalizeSheetColorOption(val?: string | null): string {
+  const token = normalizeSheetToken(val);
+  if (!token || token === 'NONE' || token === 'DEFAULT' || token === 'N/A' || token === '-') {
+    return 'NONE';
+  }
+  return token;
+}
+
+function normalizeSheetSizeToken(val?: string | null): string {
+  const token = normalizeSheetToken(val);
+  if (token === 'ONE SIZE') return 'OS';
+  return token;
+}
+
+export function parseGoogleSheetQuantity(
+  rawQty: number | string | undefined | null
+): number | null {
+  if (rawQty === undefined || rawQty === null) return null;
+  if (typeof rawQty === 'number') {
+    if (!Number.isFinite(rawQty) || rawQty < 0) return null;
+    return Math.floor(rawQty);
+  }
+  const str = String(rawQty).trim();
+  if (!str) return null;
+  if (!/^\d+(\.0+)?$/.test(str)) return null;
+  const parsed = Number(str);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+export function parseGoogleSheetSellingPrice(
+  rawPrice: number | string | undefined | null
+): number | null {
+  if (rawPrice === undefined || rawPrice === null) return null;
+  if (typeof rawPrice === 'number') {
+    if (!Number.isFinite(rawPrice) || rawPrice <= 0) return null;
+    return Math.round(rawPrice * 100) / 100;
+  }
+  const cleaned = String(rawPrice)
+    .trim()
+    .replace(/^\$/, '')
+    .replace(/,/g, '')
+    .replace(/\s*USD$/i, '')
+    .trim();
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
+/**
+ * Flattens the catalog into the exact 14-column SAMO_INVENTORY Google Sheet structure:
+ * Col A: Product ID / SKU
+ * Col B: Garment Code
+ * Col C: Section (Women | KIDS)
+ * Col D: Category
+ * Col E: New Arrivals (YES | NO)
+ * Col F: SAMO Product Name
+ * Col G: Color Option (NONE or uppercase color name)
+ * Col H: Size System (Alpha | EU Numeric | One Size | Age-Years | Age-Months)
+ * Col I: Size
+ * Col J: Quantity
+ * Col K: Selling Price (USD) (e.g. $95.00)
+ * Col L: Website Status (Live | Sold Out)
+ */
+export function buildGoogleSheetInventoryRows(
+  products: ProductItem[]
+): GoogleSheetInventoryRow[] {
+  const rows: GoogleSheetInventoryRow[] = [];
+
+  for (const prod of products) {
+    if (!prod || !prod.id) continue;
+    // Linked Full Sets derive their stock from their standalone pieces; keep standalone & unlinked items in sheet
+    const hasLinkedSetPieces =
+      Boolean(prod.isFullSet) &&
+      Array.isArray(prod.setItems) &&
+      prod.setItems.length > 0 &&
+      prod.setItems.some((si) =>
+        products.some((p) => p.id === si.productId && p.id !== prod.id)
+      );
+    if (hasLinkedSetPieces) continue;
+
+    const section = prod.department === 'kids' ? 'KIDS' : 'Women';
+    const newArrivals: 'YES' | 'NO' = prod.isNewArrival ? 'YES' : 'NO';
+    const baseSku = prod.id.toUpperCase();
+    const priceNum = Math.max(0, Number(prod.price) || 0);
+    const sellingPriceFormatted = `$${priceNum.toFixed(2)}`;
+
+    const hasColorVariants =
+      Boolean(prod.hasColors) &&
+      Array.isArray(prod.colorVariants) &&
+      prod.colorVariants.length > 0;
+
+    if (hasColorVariants) {
+      for (const variant of prod.colorVariants || []) {
+        const variantCode =
+          cleanGarmentCode(variant.garmentCode) ||
+          cleanGarmentCode(prod.garmentCode) ||
+          '';
+        const colorOption =
+          normalizeSheetColorOption(variant.colorName) || 'NONE';
+        const variantSizes =
+          Array.isArray(variant.sizes) && variant.sizes.length > 0
+            ? variant.sizes
+            : Array.isArray(prod.sizes) && prod.sizes.length > 0
+            ? prod.sizes
+            : ['OS'];
+        const sizeSystem = formatGoogleSheetSizeSystem(
+          variant.sizeType || prod.sizeType || 'letter',
+          variantSizes
+        );
+
+        for (const sz of variantSizes) {
+          const rawQty =
+            variant.sizeQuantities &&
+            typeof variant.sizeQuantities[sz] === 'number'
+              ? variant.sizeQuantities[sz]
+              : 0;
+          const qty = prod.inStock === false ? 0 : Math.max(0, Math.floor(rawQty));
+          const websiteStatus: 'Live' | 'Sold Out' =
+            qty > 0 ? 'Live' : 'Sold Out';
+
+          rows.push({
+            sku: baseSku,
+            garmentCode: variantCode,
+            section,
+            category: prod.category || '',
+            newArrivals,
+            productName: prod.name,
+            colorOption,
+            sizeSystem,
+            size: sz,
+            quantity: qty,
+            sellingPriceFormatted,
+            sellingPrice: priceNum,
+            websiteStatus,
+            productId: prod.id,
+          });
+        }
+      }
+    } else {
+      const prodCode = cleanGarmentCode(prod.garmentCode) || '';
+      const prodSizes =
+        Array.isArray(prod.sizes) && prod.sizes.length > 0
+          ? prod.sizes
+          : ['OS'];
+      const sizeSystem = formatGoogleSheetSizeSystem(
+        prod.sizeType || 'letter',
+        prodSizes
+      );
+
+      for (const sz of prodSizes) {
+        const rawQty =
+          prod.sizeQuantities && typeof prod.sizeQuantities[sz] === 'number'
+            ? prod.sizeQuantities[sz]
+            : prodSizes.length === 1
+            ? prod.quantity
+            : 0;
+        const qty = prod.inStock === false ? 0 : Math.max(0, Math.floor(rawQty));
+        const websiteStatus: 'Live' | 'Sold Out' =
+          qty > 0 ? 'Live' : 'Sold Out';
+
+        rows.push({
+          sku: baseSku,
+          garmentCode: prodCode,
+          section,
+          category: prod.category || '',
+          newArrivals,
+          productName: prod.name,
+          colorOption: 'NONE',
+          sizeSystem,
+          size: sz,
+          quantity: qty,
+          sellingPriceFormatted,
+          sellingPrice: priceNum,
+          websiteStatus,
+          productId: prod.id,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Applies single-row or multi-row updates from the 14-column SAMO_INVENTORY Google Sheet
+ * back into the website catalog using a 3-tier smart matcher:
+ *   Tier 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
+ *   Tier 2: (normalized Product Name + normalized Color Option + normalized Size)
+ *   Tier 3: (normalized Product ID / SKU + normalized Color Option + normalized Size)
+ *
+ * Includes strict anti-corruption safeguards:
+ * - Never deletes any product, photo, description, discount, or category.
+ * - Ignores blank, NaN, or negative numbers for Quantity or Price.
+ * - Recomputes product.quantity, product.inStock, and runs synchronizeFullSetsWithLinkedProducts.
+ */
+export function applyGoogleSheetUpdatesToCatalog(
+  products: ProductItem[],
+  incomingRows: GoogleSheetIncomingUpdateRow[]
+): {
+  products: ProductItem[];
+  updatedCount: number;
+  matchedProductIds: string[];
+} {
+  if (!Array.isArray(products) || products.length === 0) {
+    return { products: [], updatedCount: 0, matchedProductIds: [] };
+  }
+  if (!Array.isArray(incomingRows) || incomingRows.length === 0) {
+    return { products, updatedCount: 0, matchedProductIds: [] };
+  }
+
+  // Deep clone products so mutations are pure
+  const workingProducts: ProductItem[] = products.map((p) => ({
+    ...p,
+    sizes: Array.isArray(p.sizes) ? [...p.sizes] : [],
+    sizeQuantities: { ...(p.sizeQuantities || {}) },
+    colorVariants: Array.isArray(p.colorVariants)
+      ? p.colorVariants.map((cv) => ({
+          ...cv,
+          sizes: Array.isArray(cv.sizes) ? [...cv.sizes] : [],
+          sizeQuantities: { ...(cv.sizeQuantities || {}) },
+        }))
+      : [],
+  }));
+
+  let updatedCount = 0;
+  const matchedProductIdsSet = new Set<string>();
+
+  const doesProductHaveSizeAndColor = (
+    prod: ProductItem,
+    targetColorNorm: string,
+    targetSizeNorm: string
+  ): {
+    matches: boolean;
+    variantIndex: number;
+    matchedSizeKey: string;
+  } => {
+    const hasVariants =
+      Boolean(prod.hasColors) &&
+      Array.isArray(prod.colorVariants) &&
+      prod.colorVariants.length > 0;
+
+    if (hasVariants && targetColorNorm !== 'NONE') {
+      const vIdx = (prod.colorVariants || []).findIndex(
+        (cv) => normalizeSheetColorOption(cv.colorName) === targetColorNorm
+      );
+      if (vIdx === -1) {
+        return { matches: false, variantIndex: -1, matchedSizeKey: '' };
+      }
+      const variant = prod.colorVariants![vIdx];
+      const vSizes =
+        Array.isArray(variant.sizes) && variant.sizes.length > 0
+          ? variant.sizes
+          : prod.sizes;
+      const foundSize = vSizes.find(
+        (s) => normalizeSheetSizeToken(s) === targetSizeNorm
+      );
+      if (!foundSize && targetSizeNorm) {
+        return { matches: false, variantIndex: -1, matchedSizeKey: '' };
+      }
+      return {
+        matches: true,
+        variantIndex: vIdx,
+        matchedSizeKey: foundSize || vSizes[0] || 'OS',
+      };
+    }
+
+    if (hasVariants && targetColorNorm === 'NONE') {
+      return { matches: false, variantIndex: -1, matchedSizeKey: '' };
+    }
+
+    // Non-color product
+    if (targetColorNorm !== 'NONE') {
+      return { matches: false, variantIndex: -1, matchedSizeKey: '' };
+    }
+    const pSizes =
+      Array.isArray(prod.sizes) && prod.sizes.length > 0 ? prod.sizes : ['OS'];
+    const foundSize = pSizes.find(
+      (s) => normalizeSheetSizeToken(s) === targetSizeNorm
+    );
+    if (!foundSize && targetSizeNorm) {
+      return { matches: false, variantIndex: -1, matchedSizeKey: '' };
+    }
+    return {
+      matches: true,
+      variantIndex: -1,
+      matchedSizeKey: foundSize || pSizes[0] || 'OS',
+    };
+  };
+
+  for (const row of incomingRows) {
+    if (!row || typeof row !== 'object') continue;
+
+    const parsedQty = parseGoogleSheetQuantity(row.quantity);
+    const parsedPrice = parseGoogleSheetSellingPrice(row.sellingPrice);
+
+    // If neither a valid quantity nor a valid price is present, skip safely
+    if (parsedQty === null && parsedPrice === null) {
+      continue;
+    }
+
+    const rowCode = cleanGarmentCode(row.garmentCode);
+    const rowNameNorm = normalizeSheetToken(row.productName);
+    const rowColorNorm = normalizeSheetColorOption(row.colorOption);
+    const rowSizeNorm = normalizeSheetSizeToken(row.size);
+    const rowSkuNorm = normalizeSheetToken(row.productId || row.sku);
+
+    let matchedProdIndex = -1;
+    let matchedVariantIndex = -1;
+    let matchedSizeKey = '';
+
+    // Tier 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
+    if (rowCode && rowNameNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        const prodNameNorm = normalizeSheetToken(prod.name);
+        if (prodNameNorm !== rowNameNorm) continue;
+
+        const prodBaseCode = cleanGarmentCode(prod.garmentCode);
+        const variantHasCode = (prod.colorVariants || []).some(
+          (cv) => cleanGarmentCode(cv.garmentCode) === rowCode
+        );
+        if (prodBaseCode !== rowCode && !variantHasCode) continue;
+
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
+    // Tier 2: (normalized Product Name + normalized Color Option + normalized Size)
+    if (matchedProdIndex === -1 && rowNameNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        if (normalizeSheetToken(prod.name) !== rowNameNorm) continue;
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
+    // Tier 3: (normalized Product ID / SKU + normalized Color Option + normalized Size)
+    if (matchedProdIndex === -1 && rowSkuNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        if (normalizeSheetToken(prod.id) !== rowSkuNorm) continue;
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
+    // Fallback Tier 3B: If row only specified garmentCode + color + size (without product name)
+    if (matchedProdIndex === -1 && rowCode && !rowNameNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        const prodBaseCode = cleanGarmentCode(prod.garmentCode);
+        const variantHasCode = (prod.colorVariants || []).some(
+          (cv) => cleanGarmentCode(cv.garmentCode) === rowCode
+        );
+        if (prodBaseCode !== rowCode && !variantHasCode) continue;
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
+    if (matchedProdIndex === -1) continue;
+
+    const targetProd = workingProducts[matchedProdIndex];
+    let prodChanged = false;
+
+    if (parsedPrice !== null && targetProd.price !== parsedPrice) {
+      targetProd.price = parsedPrice;
+      prodChanged = true;
+    }
+
+    if (parsedQty !== null && matchedSizeKey) {
+      if (
+        matchedVariantIndex >= 0 &&
+        Array.isArray(targetProd.colorVariants) &&
+        targetProd.colorVariants[matchedVariantIndex]
+      ) {
+        const variant = targetProd.colorVariants[matchedVariantIndex];
+        const currentQty = variant.sizeQuantities?.[matchedSizeKey] ?? 0;
+        if (currentQty !== parsedQty || (parsedQty > 0 && !targetProd.inStock)) {
+          variant.sizeQuantities = {
+            ...(variant.sizeQuantities || {}),
+            [matchedSizeKey]: parsedQty,
+          };
+          prodChanged = true;
+        }
+
+        // Recompute aggregate sizeQuantities & total quantity across all colorVariants
+        const aggSizeMap: Record<string, number> = {};
+        let totalVariantQty = 0;
+        for (const cv of targetProd.colorVariants) {
+          for (const sz of cv.sizes || targetProd.sizes || []) {
+            const q = Math.max(0, Math.floor(Number(cv.sizeQuantities?.[sz]) || 0));
+            aggSizeMap[sz] = (aggSizeMap[sz] || 0) + q;
+            totalVariantQty += q;
+          }
+        }
+        targetProd.sizeQuantities = aggSizeMap;
+        targetProd.quantity = totalVariantQty;
+        targetProd.inStock = totalVariantQty > 0;
+      } else {
+        const currentQty = targetProd.sizeQuantities?.[matchedSizeKey] ?? 0;
+        if (currentQty !== parsedQty || (parsedQty > 0 && !targetProd.inStock)) {
+          targetProd.sizeQuantities = {
+            ...(targetProd.sizeQuantities || {}),
+            [matchedSizeKey]: parsedQty,
+          };
+          prodChanged = true;
+        }
+        let totalQty = 0;
+        for (const sz of targetProd.sizes || [matchedSizeKey]) {
+          totalQty += Math.max(
+            0,
+            Math.floor(Number(targetProd.sizeQuantities?.[sz]) || 0)
+          );
+        }
+        targetProd.quantity = totalQty;
+        targetProd.inStock = totalQty > 0;
+      }
+    }
+
+    if (prodChanged) {
+      targetProd.updatedAt = new Date().toISOString();
+      updatedCount += 1;
+      matchedProductIdsSet.add(targetProd.id);
+    }
+  }
+
+  const syncedProducts =
+    updatedCount > 0
+      ? syncFullSetsWithCatalog(workingProducts)
+      : workingProducts;
+
+  return {
+    products: syncedProducts,
+    updatedCount,
+    matchedProductIds: Array.from(matchedProductIdsSet),
+  };
+}
+
+/**
+ * Generates the ready-to-paste, security-hardened Google Apps Script for the 14-column
+ * SAMO_INVENTORY Google Sheet.
+ */
+export function buildGoogleAppsScriptForSamoSheet(options: {
+  siteOrigin: string;
+  syncSecret: string;
+}): string {
+  const cleanOrigin = (options.siteOrigin || 'https://samoweave.com')
+    .trim()
+    .replace(/\/+$/, '');
+  const cleanSecret = (options.syncSecret || 'samo_sheet_sync_v1_secret')
+    .trim()
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
+
+  return `/**
+ * ============================================================================
+ * SAMO — AUTOMATIC TWO-WAY GOOGLE SHEETS LIVE INVENTORY & PRICE SYNC
+ * Tailored 100% to your 14-column SAMO_INVENTORY Google Sheet (Private Sheet)
+ * ============================================================================
+ *
+ * HOW TO ACTIVATE (1-TIME SETUP — TAKES 60 SECONDS):
+ * 1. In your private SAMO_INVENTORY Google Sheet, click Extensions -> Apps Script.
+ * 2. Delete any placeholder code, paste this entire script, and click the Save icon.
+ * 3. In the top toolbar dropdown (next to "Run"), select "setupAutomaticSyncTrigger"
+ *    and click "Run" once (grant permission so edits in Quantity Col J or Price Col K
+ *    automatically push to your website).
+ * 4. Click "Deploy" (top right) -> "New deployment" -> Select type: "Web app":
+ *    - Execute as: "Me" (keeps your Google Sheet 100% PRIVATE / RESTRICTED to you)
+ *    - Who has access: "Anyone" (protected by your cryptographic SYNC_SECRET below)
+ * 5. Copy the Web App URL (https://script.google.com/macros/s/.../exec) and paste it
+ *    into your SAMO Admin Dashboard -> Google Sheets Live Sync card.
+ */
+
+const WEBSITE_SYNC_ENDPOINT = '${cleanOrigin}/api/sheets-sync';
+const SYNC_SECRET = '${cleanSecret}';
+
+function normToken_(val) {
+  return String(val == null ? '' : val).trim().replace(/\\s+/g, ' ').toUpperCase();
+}
+
+function normColor_(val) {
+  const t = normToken_(val);
+  if (!t || t === 'NONE' || t === 'DEFAULT' || t === 'N/A' || t === '-') return 'NONE';
+  return t;
+}
+
+function normSize_(val) {
+  const t = normToken_(val);
+  return t === 'ONE SIZE' ? 'OS' : t;
+}
+
+function normCode_(val) {
+  return normToken_(val).replace(/^REF\\.?\\s*:?\\s*/i, '');
+}
+
+/**
+ * 1-TIME TRIGGER INSTALLER: Run this function ONCE in Apps Script so that editing
+ * Quantity (Col J) or Selling Price (Col K) in your sheet automatically updates your website.
+ */
+function setupAutomaticSyncTrigger() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'onSamoSheetEdit') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('onSamoSheetEdit')
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+}
+
+/**
+ * AUTOMATIC SHEET -> WEBSITE SYNC:
+ * Fires automatically whenever you edit Quantity (Col J / Col 10) or Selling Price (Col K / Col 11).
+ */
+function onSamoSheetEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  const startRow = e.range.getRow();
+  const numRows = e.range.getNumRows();
+  const startCol = e.range.getColumn();
+  const numCols = e.range.getNumColumns();
+
+  // Watch Column J (10 = Quantity) and Column K (11 = Selling Price USD)
+  const touchesQtyOrPrice =
+    (startCol <= 11 && startCol + numCols - 1 >= 10);
+  if (!touchesQtyOrPrice) return;
+
+  const updates = [];
+  for (let r = startRow; r < startRow + numRows; r++) {
+    if (r <= 1) continue; // Skip header row 1
+    const rowVals = sheet.getRange(r, 1, 1, 12).getValues()[0];
+    const sku = String(rowVals[0] || '').trim();
+    const garmentCode = String(rowVals[1] || '').trim();
+    const productName = String(rowVals[5] || '').trim();
+    const colorOption = String(rowVals[6] || 'NONE').trim() || 'NONE';
+    const size = String(rowVals[8] || '').trim();
+    const rawQty = rowVals[9];
+    const rawPrice = rowVals[10];
+
+    if (!productName && !garmentCode && !sku) continue;
+
+    const qtyNum = Number(rawQty);
+    if (Number.isFinite(qtyNum) && qtyNum >= 0) {
+      const nextStatus = Math.floor(qtyNum) > 0 ? 'Live' : 'Sold Out';
+      if (String(rowVals[11] || '').trim() !== nextStatus) {
+        sheet.getRange(r, 12).setValue(nextStatus);
+      }
+    }
+
+    updates.push({
+      sku: sku,
+      garmentCode: garmentCode,
+      productName: productName,
+      colorOption: colorOption,
+      size: size,
+      quantity: rawQty,
+      sellingPrice: rawPrice
+    });
+  }
+
+  if (updates.length === 0) return;
+
+  UrlFetchApp.fetch(WEBSITE_SYNC_ENDPOINT, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-Samo-Sheet-Secret': SYNC_SECRET },
+    payload: JSON.stringify({
+      action: 'inbound_sheet_edit',
+      syncSecret: SYNC_SECRET,
+      rows: updates
+    }),
+    muteHttpExceptions: true
+  });
+}
+
+/**
+ * AUTOMATIC WEBSITE -> SHEET SYNC (doPost):
+ * Receives real-time stock deductions when a customer buys an item or when Admin edits
+ * Quantity or Price, and supports pulling all rows from the sheet on demand.
+ */
+function doPost(e) {
+  try {
+    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (body.syncSecret !== SYNC_SECRET) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: false, error: 'Unauthorized sync secret' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheets()[0];
+    const lastRow = sheet.getLastRow();
+
+    // Action 1: Website requests all current rows from Google Sheet
+    if (body.action === 'read_sheet_rows') {
+      const rows = [];
+      if (lastRow >= 2) {
+        const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+        for (let i = 0; i < data.length; i++) {
+          const r = data[i];
+          if (!r[0] && !r[1] && !r[5]) continue;
+          rows.push({
+            sku: String(r[0] || '').trim(),
+            garmentCode: String(r[1] || '').trim(),
+            productName: String(r[5] || '').trim(),
+            colorOption: String(r[6] || 'NONE').trim() || 'NONE',
+            size: String(r[8] || '').trim(),
+            quantity: r[9],
+            sellingPrice: r[10],
+            websiteStatus: String(r[11] || '').trim()
+          });
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, rows: rows })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Action 2: Website pushes updated catalog quantities & prices to Google Sheet
+    const incomingRows = Array.isArray(body.rows) ? body.rows : [];
+    if (incomingRows.length === 0) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, updatedRows: 0 })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (lastRow === 0) {
+      sheet.appendRow([
+        'Product ID / SKU',
+        'Garment Code',
+        'Section',
+        'Category',
+        'New Arrivals',
+        'SAMO Product Name',
+        'Color Option',
+        'Size System',
+        'Size',
+        'Quantity',
+        'Selling Price (USD)',
+        'Website Status',
+        'Editorial Model Reference',
+        'Notes / Description'
+      ]);
+    }
+
+    const currentLastRow = sheet.getLastRow();
+    const existingData =
+      currentLastRow >= 2
+        ? sheet.getRange(2, 1, currentLastRow - 1, 12).getValues()
+        : [];
+
+    let updatedCount = 0;
+    let appendedCount = 0;
+
+    for (let i = 0; i < incomingRows.length; i++) {
+      const item = incomingRows[i];
+      const itemCode = normCode_(item.garmentCode);
+      const itemName = normToken_(item.productName);
+      const itemColor = normColor_(item.colorOption);
+      const itemSize = normSize_(item.size);
+      const itemSku = normToken_(item.sku || item.productId);
+
+      let matchedRowIdx = -1;
+
+      // Tier 1: Garment Code + Product Name + Color Option + Size
+      for (let r = 0; r < existingData.length; r++) {
+        const row = existingData[r];
+        if (
+          itemCode &&
+          normCode_(row[1]) === itemCode &&
+          normToken_(row[5]) === itemName &&
+          normColor_(row[6]) === itemColor &&
+          normSize_(row[8]) === itemSize
+        ) {
+          matchedRowIdx = r;
+          break;
+        }
+      }
+
+      // Tier 2: Product Name + Color Option + Size
+      if (matchedRowIdx === -1) {
+        for (let r = 0; r < existingData.length; r++) {
+          const row = existingData[r];
+          if (
+            normToken_(row[5]) === itemName &&
+            normColor_(row[6]) === itemColor &&
+            normSize_(row[8]) === itemSize
+          ) {
+            matchedRowIdx = r;
+            break;
+          }
+        }
+      }
+
+      // Tier 3: SKU + Color Option + Size
+      if (matchedRowIdx === -1 && itemSku) {
+        for (let r = 0; r < existingData.length; r++) {
+          const row = existingData[r];
+          if (
+            normToken_(row[0]) === itemSku &&
+            normColor_(row[6]) === itemColor &&
+            normSize_(row[8]) === itemSize
+          ) {
+            matchedRowIdx = r;
+            break;
+          }
+        }
+      }
+
+      const nextQty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+      const nextPriceFormatted =
+        item.sellingPriceFormatted ||
+        ('$' + Number(item.sellingPrice || 0).toFixed(2));
+      const nextStatus = nextQty > 0 ? 'Live' : 'Sold Out';
+
+      if (matchedRowIdx !== -1) {
+        const sheetRowNumber = matchedRowIdx + 2;
+        const currQty = Number(existingData[matchedRowIdx][9]);
+        const currPriceStr = String(existingData[matchedRowIdx][10] || '').trim();
+        const currStatusStr = String(existingData[matchedRowIdx][11] || '').trim();
+        const currPriceNum = Number(currPriceStr.replace(/^\\$/, '').replace(/,/g, ''));
+
+        if (
+          currQty !== nextQty ||
+          currPriceNum !== Number(item.sellingPrice) ||
+          currStatusStr !== nextStatus
+        ) {
+          // Only update Col J (10), Col K (11), Col L (12) — preserves Col A SKU and Col M/N notes!
+          sheet
+            .getRange(sheetRowNumber, 10, 1, 3)
+            .setValues([[nextQty, nextPriceFormatted, nextStatus]]);
+          existingData[matchedRowIdx][9] = nextQty;
+          existingData[matchedRowIdx][10] = nextPriceFormatted;
+          existingData[matchedRowIdx][11] = nextStatus;
+          updatedCount++;
+        }
+      } else {
+        // Brand-new product/size added in Admin Dashboard -> append cleanly at bottom
+        const newRow = [
+          item.sku || item.productId || '',
+          item.garmentCode || '',
+          item.section || 'Women',
+          item.category || '',
+          item.newArrivals || 'NO',
+          item.productName || '',
+          item.colorOption || 'NONE',
+          item.sizeSystem || 'Alpha',
+          item.size || 'OS',
+          nextQty,
+          nextPriceFormatted,
+          nextStatus,
+          '',
+          ''
+        ];
+        sheet.appendRow(newRow);
+        existingData.push(newRow.slice(0, 12));
+        appendedCount++;
+      }
+    }
+
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        ok: true,
+        updatedRows: updatedCount,
+        appendedRows: appendedCount
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ ok: false, error: String(err) })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+`;
+}
+

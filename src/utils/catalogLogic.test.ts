@@ -2074,3 +2074,132 @@ test('orderHomeNewArrivalsProducts places SAHARA CROC CRESCENT first, moves old 
   );
 });
 
+import {
+  applyGoogleSheetUpdatesToCatalog,
+  buildGoogleAppsScriptForSamoSheet,
+  buildGoogleSheetInventoryRows,
+  isValidGoogleAppsScriptWebhookUrl,
+  parseGoogleSheetQuantity,
+  parseGoogleSheetSellingPrice,
+} from './catalogLogic';
+
+test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14-column SAMO_INVENTORY rows, multi-color variants, price parsing, and anti-corruption guards', () => {
+  // Verify webhook URL validator
+  assert.equal(
+    isValidGoogleAppsScriptWebhookUrl(
+      'https://script.google.com/macros/s/AKfycb123456789/exec'
+    ),
+    true
+  );
+  assert.equal(
+    isValidGoogleAppsScriptWebhookUrl('http://script.google.com/macros/s/123/exec'),
+    false
+  );
+  assert.equal(
+    isValidGoogleAppsScriptWebhookUrl('https://evil.example.com/macros/s/123'),
+    false
+  );
+
+  // Verify quantity and price parsers
+  assert.equal(parseGoogleSheetQuantity(5), 5);
+  assert.equal(parseGoogleSheetQuantity('0'), 0);
+  assert.equal(parseGoogleSheetQuantity('-3'), null);
+  assert.equal(parseGoogleSheetQuantity('abc'), null);
+  assert.equal(parseGoogleSheetSellingPrice('$95.00'), 95);
+  assert.equal(parseGoogleSheetSellingPrice('139'), 139);
+  assert.equal(parseGoogleSheetSellingPrice('0'), null);
+  assert.equal(parseGoogleSheetSellingPrice('-20'), null);
+
+  // Build rows from INITIAL_PRODUCTS
+  const rows = buildGoogleSheetInventoryRows(INITIAL_PRODUCTS);
+  assert.ok(rows.length > 50);
+
+  // Check single-color product row (NOIR FAUX FUR JACKET, SAMO-W-001, 6700066)
+  const noirRow = rows.find(
+    (r) =>
+      r.garmentCode === '6700066' &&
+      r.productName === 'NOIR FAUX FUR JACKET' &&
+      r.size === 'M/L'
+  );
+  assert.ok(noirRow);
+  assert.equal(noirRow.colorOption, 'NONE');
+  assert.equal(noirRow.sellingPriceFormatted, '$95.00');
+  assert.equal(noirRow.websiteStatus, 'Live');
+
+  // Check multi-color product row (HERRINGBONE TROUSERS, 2602, GREY, S/M)
+  const herringboneGreyRow = rows.find(
+    (r) =>
+      r.garmentCode === '2602' &&
+      r.productName === 'HERRINGBONE TROUSERS' &&
+      r.colorOption === 'GREY' &&
+      r.size === 'S/M'
+  );
+  assert.ok(herringboneGreyRow);
+  assert.equal(herringboneGreyRow.quantity, 2);
+  assert.equal(herringboneGreyRow.sellingPriceFormatted, '$48.00');
+
+  // Apply inbound update from Google Sheet (e.g. Row SAMO-W-056 updates GREY S/M quantity from 2 -> 7 and price from $48.00 -> $52.00)
+  // Plus a single-color update setting NOIR FAUX FUR JACKET M/L quantity to 0 (Sold Out)
+  // Plus an invalid/corrupt row that must be ignored safely
+  const result = applyGoogleSheetUpdatesToCatalog(INITIAL_PRODUCTS, [
+    {
+      sku: 'SAMO-W-056',
+      garmentCode: '2602',
+      productName: 'HERRINGBONE TROUSERS',
+      colorOption: 'GREY',
+      size: 'S/M',
+      quantity: 7,
+      sellingPrice: '$52.00',
+    },
+    {
+      sku: 'SAMO-W-001',
+      garmentCode: '6700066',
+      productName: 'NOIR FAUX FUR JACKET',
+      colorOption: 'NONE',
+      size: 'M/L',
+      quantity: '0',
+    },
+    {
+      sku: 'SAMO-W-001',
+      garmentCode: '6700066',
+      productName: 'NOIR FAUX FUR JACKET',
+      colorOption: 'NONE',
+      size: 'M/L',
+      quantity: '-99',
+      sellingPrice: 'invalid',
+    },
+  ]);
+
+  assert.equal(result.updatedCount, 2);
+
+  const updatedHerringbone = result.products.find(
+    (p) => p.name === 'HERRINGBONE TROUSERS'
+  )!;
+  assert.equal(updatedHerringbone.price, 52);
+  const greyVariant = updatedHerringbone.colorVariants!.find(
+    (cv) => cv.colorName.toUpperCase() === 'GREY'
+  )!;
+  assert.equal(greyVariant.sizeQuantities['S/M'], 7);
+  // Total quantity of Herringbone Trousers was 11, +5 on Grey S/M => 16
+  assert.equal(updatedHerringbone.quantity, 16);
+  assert.equal(updatedHerringbone.inStock, true);
+
+  const updatedNoir = result.products.find(
+    (p) => p.name === 'NOIR FAUX FUR JACKET'
+  )!;
+  assert.equal(updatedNoir.sizeQuantities['M/L'], 0);
+  assert.equal(updatedNoir.quantity, 0);
+  assert.equal(updatedNoir.inStock, false);
+  // Price remained untouched at 95 despite invalid price in 3rd row
+  assert.equal(updatedNoir.price, 95);
+
+  const script = buildGoogleAppsScriptForSamoSheet({
+    siteOrigin: 'https://samoweave.com',
+    syncSecret: 'samo_secret_123',
+  });
+  assert.ok(script.includes('https://samoweave.com/api/sheets-sync'));
+  assert.ok(script.includes('onSamoSheetEdit'));
+  assert.ok(script.includes('setupAutomaticSyncTrigger'));
+});
+
+

@@ -58,6 +58,7 @@ import {
   getCategoriesByDepartment,
   getCategoryBannerKey,
   getCategoryBannerSplitIndex,
+  getEffectiveProductPrice,
   getSizeQuantity,
   isAuthorizedAdminEmail,
   mergeNewsletterPopupConfig,
@@ -127,7 +128,6 @@ const STORAGE_KEYS = {
   preorders: 'samo_preorders_v2',
   admins: 'samo_admins_v2',
   cart: 'samo_cart_v1',
-  aiAdmin: 'samo_ai_admin_unlocked_v1',
   siteBanners: 'samo_site_banners_v2',
   autoAcceptOrders: 'samo_auto_accept_orders_v2',
   showLowStockCount: 'samo_show_low_stock_v1',
@@ -137,6 +137,24 @@ const STORAGE_KEYS = {
   sizeGuideConfig: 'samo_size_guide_cfg_v1',
   adminNotificationState: 'samo_admin_notif_state_v1',
 };
+
+function pushGtmEcommerceEvent(
+  eventName: 'view_item' | 'add_to_cart' | 'begin_checkout' | 'purchase',
+  ecommerce: Record<string, unknown>
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const win = window as unknown as {
+      dataLayer?: Array<Record<string, unknown>>;
+    };
+    win.dataLayer = win.dataLayer || [];
+    win.dataLayer.push({ ecommerce: null });
+    win.dataLayer.push({
+      event: eventName,
+      ecommerce,
+    });
+  } catch {}
+}
 
 function sanitizeAuthorizedAdmins(list: AdminRecord[]): AdminRecord[] {
   const byEmail = new Map<string, AdminRecord>();
@@ -179,7 +197,10 @@ export function deepCleanFirestorePayload<T>(value: T): T {
 let pendingLocalMutations = 0;
 let lastLocalMutationMs = 0;
 
-async function pushServerCatalogPatch(patch: Record<string, unknown>): Promise<void> {
+async function pushServerCatalogPatch(
+  patch: Record<string, unknown>,
+  options?: { skipSheetsPush?: boolean }
+): Promise<void> {
   pendingLocalMutations += 1;
   lastLocalMutationMs = Date.now();
   try {
@@ -188,6 +209,20 @@ async function pushServerCatalogPatch(patch: Record<string, unknown>): Promise<v
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
+    if (
+      !options?.skipSheetsPush &&
+      Array.isArray(patch.products) &&
+      patch.products.length > 0
+    ) {
+      fetch('/api/sheets-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'push_to_sheet',
+          products: patch.products,
+        }),
+      }).catch(() => {});
+    }
   } catch {
   } finally {
     pendingLocalMutations = Math.max(0, pendingLocalMutations - 1);
@@ -541,13 +576,6 @@ export default function App() {
 
   // Firebase Auth State (Used strictly for Google Admin Sign-in; Catalog data lives in Cloudflare R2)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [aiAdminUnlocked, setAiAdminUnlocked] = useState<boolean>(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.aiAdmin);
-    } catch {}
-    const params = new URLSearchParams(window.location.search);
-    return params.get('ai_admin') === '1';
-  });
 
   // Sync localStorage whenever state updates
   useEffect(() => {
@@ -1178,25 +1206,28 @@ export default function App() {
 
         // If catalog state has not been seeded yet, push current catalog state
         if (!data.updatedAt && (!Array.isArray(data.products) || data.products.length === 0)) {
-          pushServerCatalogPatch({
-            products,
-            categories,
-            deletedProductIds,
-            deletedCategoryIds,
-            siteBanners,
-            promoCodes,
-            customMaterials,
-            customColors,
-            orders,
-            preorders,
-            admins,
-            autoAcceptOrders,
-            showLowStockCount,
-            codEnabled,
-            shrinkUploadsEnabled,
-            newsletterPopupConfig,
-            seoConfig,
-          });
+          pushServerCatalogPatch(
+            {
+              products,
+              categories,
+              deletedProductIds,
+              deletedCategoryIds,
+              siteBanners,
+              promoCodes,
+              customMaterials,
+              customColors,
+              orders,
+              preorders,
+              admins,
+              autoAcceptOrders,
+              showLowStockCount,
+              codEnabled,
+              shrinkUploadsEnabled,
+              newsletterPopupConfig,
+              seoConfig,
+            },
+            { skipSheetsPush: true }
+          );
           return;
         }
 
@@ -1449,6 +1480,21 @@ export default function App() {
       productUrl
     );
     setActiveProductModal(richProd);
+    const effectivePrice = getEffectiveProductPrice(richProd).effectivePrice;
+    pushGtmEcommerceEvent('view_item', {
+      currency: 'USD',
+      value: effectivePrice,
+      items: [
+        {
+          item_id: richProd.garmentCode || richProd.id,
+          item_name: richProd.name,
+          item_category: richProd.category,
+          item_category2: richProd.department,
+          price: effectivePrice,
+          quantity: 1,
+        },
+      ],
+    });
   };
 
   // Product Pop-Up Modal close handler returning cleanly to the category URL
@@ -1485,6 +1531,27 @@ export default function App() {
     win.__samoBagStep = step;
     setCartDrawerInitialStep(step);
     setCartDrawerOpen(true);
+    if (step === 'checkout' && cartItems.length > 0) {
+      const subtotalValue = cartItems.reduce(
+        (sum, ci) =>
+          sum + getEffectiveProductPrice(ci.product).effectivePrice * ci.quantity,
+        0
+      );
+      pushGtmEcommerceEvent('begin_checkout', {
+        currency: 'USD',
+        value: subtotalValue,
+        items: cartItems.map((ci) => ({
+          item_id: ci.garmentCode || ci.product.garmentCode || ci.product.id,
+          item_name: ci.product.name,
+          item_category: ci.product.category,
+          item_variant: [ci.selectedColor, ci.selectedSize]
+            .filter(Boolean)
+            .join(' / '),
+          price: getEffectiveProductPrice(ci.product).effectivePrice,
+          quantity: ci.quantity,
+        })),
+      });
+    }
     const currentHistState = (window.history.state || {}) as {
       samoBagOpen?: boolean;
     };
@@ -1652,6 +1719,23 @@ export default function App() {
         },
       ];
     });
+
+    const effectivePrice = getEffectiveProductPrice(product).effectivePrice;
+    pushGtmEcommerceEvent('add_to_cart', {
+      currency: 'USD',
+      value: effectivePrice,
+      items: [
+        {
+          item_id: product.garmentCode || product.id,
+          item_name: product.name,
+          item_category: product.category,
+          item_category2: product.department,
+          item_variant: [selectedColor, selectedSize].filter(Boolean).join(' / '),
+          price: effectivePrice,
+          quantity: 1,
+        },
+      ],
+    });
   };
 
   const handleBuyNow = (
@@ -1772,6 +1856,23 @@ export default function App() {
     const nextOrders = [newOrder, ...orders];
     setOrders(nextOrders);
     setCartItems([]);
+
+    pushGtmEcommerceEvent('purchase', {
+      transaction_id: newOrder.orderNumber || newOrder.id,
+      value: newOrder.totalPrice,
+      shipping: newOrder.deliveryFee ?? 0,
+      currency: 'USD',
+      ...(newOrder.promoCode ? { coupon: newOrder.promoCode } : {}),
+      items: (newOrder.orderedItems || []).map((item) => ({
+        item_id: item.garmentCode || item.productId,
+        item_name: item.productName,
+        item_variant: [item.selectedColor, item.selectedSize]
+          .filter(Boolean)
+          .join(' / '),
+        price: item.unitPrice,
+        quantity: item.quantity,
+      })),
+    });
 
     const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
     setProducts(updatedCatalog);
@@ -3190,19 +3291,11 @@ export default function App() {
       <React.Suspense fallback={<div className="min-h-screen bg-[#0E0E10]" />}>
         <AdminDashboard
           currentUser={currentUser}
-          aiAdminUnlocked={aiAdminUnlocked}
-          onUnlockAiAdmin={() => {
-            setAiAdminUnlocked(true);
-          }}
           onGoogleSignIn={async () => {
             await signInWithPopup(auth, googleProvider);
           }}
           onSignOut={async () => {
             await firebaseSignOut(auth);
-            setAiAdminUnlocked(false);
-            try {
-              localStorage.removeItem(STORAGE_KEYS.aiAdmin);
-            } catch {}
           }}
           onNavigateHome={(route) => handleNavigate(route)}
           categories={categories}

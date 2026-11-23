@@ -34,6 +34,8 @@ export interface Env {
   DB?: D1DatabaseBinding;
   SAMO_D1?: D1DatabaseBinding;
   RESEND_API_KEY?: string;
+  GOOGLE_SHEETS_WEBHOOK_URL?: string;
+  GOOGLE_SHEETS_SYNC_SECRET?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -704,6 +706,38 @@ export const onRequestOptions = async (): Promise<Response> => {
   });
 };
 
+export function sanitizeCatalogStateForClient(
+  state: Record<string, unknown>
+): Record<string, unknown> {
+  if (!state || typeof state !== 'object') return state;
+  const rawBanners = state.siteBanners;
+  if (!rawBanners || typeof rawBanners !== 'object') return state;
+  const bannersObj = rawBanners as Record<string, unknown>;
+  const rawSheets = bannersObj.googleSheetsSync;
+  if (!rawSheets || typeof rawSheets !== 'object') return state;
+  const sheetsObj = rawSheets as Record<string, unknown>;
+  return {
+    ...state,
+    siteBanners: {
+      ...bannersObj,
+      googleSheetsSync: {
+        enabled: true,
+        webhookUrl: '',
+        syncSecret: '',
+        ...(typeof sheetsObj.lastSyncedAt === 'string'
+          ? { lastSyncedAt: sheetsObj.lastSyncedAt }
+          : {}),
+        ...(typeof sheetsObj.lastSyncStatus === 'string'
+          ? { lastSyncStatus: sheetsObj.lastSyncStatus }
+          : {}),
+        ...(typeof sheetsObj.lastSyncMessage === 'string'
+          ? { lastSyncMessage: sheetsObj.lastSyncMessage }
+          : {}),
+      },
+    },
+  };
+}
+
 export const onRequestGet = async (context: {
   env: Env;
 }): Promise<Response> => {
@@ -727,11 +761,13 @@ export const onRequestGet = async (context: {
         Array.isArray(d1State.products) &&
         d1State.products.length > 0
       ) {
-        const serialized = JSON.stringify(d1State);
         isolateCatalogCache = d1State;
-        isolateCatalogJson = serialized;
+        const sanitizedJson = JSON.stringify(
+          sanitizeCatalogStateForClient(d1State)
+        );
+        isolateCatalogJson = sanitizedJson;
         isolateCacheTimestamp = Date.now();
-        return new Response(serialized, {
+        return new Response(sanitizedJson, {
           status: 200,
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
@@ -749,8 +785,15 @@ export const onRequestGet = async (context: {
         );
         if (parsed && typeof parsed === 'object') {
           isolateCatalogCache = parsed;
-          isolateCatalogJson = text;
+          const sanitizedJson = JSON.stringify(
+            sanitizeCatalogStateForClient(parsed)
+          );
+          isolateCatalogJson = sanitizedJson;
           isolateCacheTimestamp = Date.now();
+          return new Response(sanitizedJson, {
+            status: 200,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          });
         }
         return new Response(text, {
           status: 200,
@@ -777,163 +820,241 @@ export const onRequestGet = async (context: {
   }
 };
 
+export async function readCatalogSnapshot(
+  env: Env
+): Promise<Record<string, unknown>> {
+  const d1Binding = env.DB || env.SAMO_D1;
+  if (
+    isolateCatalogCache &&
+    Array.isArray(isolateCatalogCache.products) &&
+    isolateCatalogCache.products.length > 0
+  ) {
+    return isolateCatalogCache;
+  }
+  if (d1Binding) {
+    const fromD1 = await readFromD1(d1Binding);
+    if (
+      fromD1 &&
+      Array.isArray(fromD1.products) &&
+      fromD1.products.length > 0
+    ) {
+      isolateCatalogCache = fromD1;
+      isolateCatalogJson = JSON.stringify(
+        sanitizeCatalogStateForClient(fromD1)
+      );
+      isolateCacheTimestamp = Date.now();
+      return fromD1;
+    }
+  }
+  if (env.SAMO_R2_BUCKET) {
+    try {
+      const existing = await env.SAMO_R2_BUCKET.get(STATE_OBJECT_KEY);
+      if (existing) {
+        const parsed = await existing.json<Record<string, unknown>>();
+        if (parsed && typeof parsed === 'object') {
+          isolateCatalogCache = parsed;
+          isolateCatalogJson = JSON.stringify(
+            sanitizeCatalogStateForClient(parsed)
+          );
+          isolateCacheTimestamp = Date.now();
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return { updatedAt: 0 };
+}
+
+export async function applyCatalogPatch(
+  env: Env,
+  patch: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const current = await readCatalogSnapshot(env);
+  const d1Binding = env.DB || env.SAMO_D1;
+
+  // Scrub any previously saved webhookUrl/syncSecret out of D1/R2 siteBanners.googleSheetsSync so secrets live strictly in Cloudflare Environment Variables
+  let effectivePatch = patch;
+  if (patch.siteBanners && typeof patch.siteBanners === 'object') {
+    const incomingBanners = patch.siteBanners as Record<string, unknown>;
+    const existingBanners =
+      current.siteBanners && typeof current.siteBanners === 'object'
+        ? (current.siteBanners as Record<string, unknown>)
+        : {};
+    const incomingSheets =
+      incomingBanners.googleSheetsSync &&
+      typeof incomingBanners.googleSheetsSync === 'object'
+        ? (incomingBanners.googleSheetsSync as Record<string, unknown>)
+        : {};
+    const existingSheets =
+      existingBanners.googleSheetsSync &&
+      typeof existingBanners.googleSheetsSync === 'object'
+        ? (existingBanners.googleSheetsSync as Record<string, unknown>)
+        : {};
+
+    effectivePatch = {
+      ...patch,
+      siteBanners: {
+        ...incomingBanners,
+        googleSheetsSync: {
+          ...existingSheets,
+          ...incomingSheets,
+          enabled: true,
+          webhookUrl: '',
+          syncSecret: '',
+        },
+      },
+    };
+  }
+
+  const mergedDeletedProducts = Array.from(
+    new Set([
+      ...((current.deletedProductIds as string[]) || []),
+      ...(Array.isArray(effectivePatch.deletedProductIds)
+        ? (effectivePatch.deletedProductIds as string[])
+        : []),
+    ])
+  );
+
+  const mergedDeletedCategories = Array.from(
+    new Set([
+      ...((current.deletedCategoryIds as string[]) || []),
+      ...(Array.isArray(effectivePatch.deletedCategoryIds)
+        ? (effectivePatch.deletedCategoryIds as string[])
+        : []),
+    ])
+  );
+
+  const mergedDeletedOrders = Array.from(
+    new Set([
+      ...((current.deletedOrderIds as string[]) || []),
+      ...(Array.isArray(effectivePatch.deletedOrderIds)
+        ? (effectivePatch.deletedOrderIds as string[])
+        : []),
+    ])
+  );
+  const deletedOrderSet = new Set(mergedDeletedOrders);
+
+  // 1. Write to Cloudflare D1 SQL if D1 binding is configured
+  if (d1Binding) {
+    try {
+      await writeToD1(
+        d1Binding,
+        effectivePatch,
+        mergedDeletedProducts,
+        mergedDeletedCategories,
+        mergedDeletedOrders
+      );
+    } catch (d1Err) {
+      console.error('Failed to write patch to D1 in Pages:', d1Err);
+    }
+  }
+
+  const nextOrdersList = Array.isArray(effectivePatch.orders)
+    ? (effectivePatch.orders as Array<{ id?: string }>).filter(
+        (o) => o && o.id && !deletedOrderSet.has(o.id)
+      )
+    : Array.isArray(current.orders)
+    ? (current.orders as Array<{ id?: string }>).filter(
+        (o) => o && o.id && !deletedOrderSet.has(o.id)
+      )
+    : undefined;
+
+  const nextState: Record<string, unknown> = {
+    ...current,
+    ...(Array.isArray(effectivePatch.products)
+      ? { products: effectivePatch.products }
+      : {}),
+    ...(Array.isArray(effectivePatch.categories)
+      ? { categories: effectivePatch.categories }
+      : {}),
+    ...(Array.isArray(effectivePatch.promoCodes)
+      ? { promoCodes: effectivePatch.promoCodes }
+      : {}),
+    ...(Array.isArray(effectivePatch.customMaterials)
+      ? { customMaterials: effectivePatch.customMaterials }
+      : {}),
+    ...(Array.isArray(effectivePatch.customColors)
+      ? { customColors: effectivePatch.customColors }
+      : {}),
+    ...(nextOrdersList !== undefined ? { orders: nextOrdersList } : {}),
+    ...(Array.isArray(effectivePatch.preorders)
+      ? { preorders: effectivePatch.preorders }
+      : {}),
+    ...(Array.isArray(effectivePatch.admins)
+      ? { admins: effectivePatch.admins }
+      : {}),
+    ...(effectivePatch.siteBanners &&
+    typeof effectivePatch.siteBanners === 'object'
+      ? { siteBanners: effectivePatch.siteBanners }
+      : {}),
+    ...(effectivePatch.sizeGuideConfig &&
+    typeof effectivePatch.sizeGuideConfig === 'object'
+      ? { sizeGuideConfig: effectivePatch.sizeGuideConfig }
+      : {}),
+    ...(effectivePatch.seoConfig && typeof effectivePatch.seoConfig === 'object'
+      ? { seoConfig: effectivePatch.seoConfig }
+      : {}),
+    ...(effectivePatch.newsletterPopupConfig &&
+    typeof effectivePatch.newsletterPopupConfig === 'object'
+      ? { newsletterPopupConfig: effectivePatch.newsletterPopupConfig }
+      : {}),
+    ...(typeof effectivePatch.autoAcceptOrders === 'boolean'
+      ? { autoAcceptOrders: effectivePatch.autoAcceptOrders }
+      : {}),
+    ...(typeof effectivePatch.showLowStockCount === 'boolean'
+      ? { showLowStockCount: effectivePatch.showLowStockCount }
+      : {}),
+    ...(typeof effectivePatch.shrinkUploadsEnabled === 'boolean'
+      ? { shrinkUploadsEnabled: effectivePatch.shrinkUploadsEnabled }
+      : {}),
+    ...(typeof effectivePatch.codEnabled === 'boolean'
+      ? { codEnabled: effectivePatch.codEnabled }
+      : {}),
+    ...(effectivePatch.adminNotificationState &&
+    typeof effectivePatch.adminNotificationState === 'object'
+      ? { adminNotificationState: effectivePatch.adminNotificationState }
+      : {}),
+    deletedProductIds: mergedDeletedProducts,
+    deletedCategoryIds: mergedDeletedCategories,
+    deletedOrderIds: mergedDeletedOrders,
+    updatedAt: Date.now(),
+  };
+
+  // 2. Dual-write backup to Cloudflare R2 if bound
+  if (env.SAMO_R2_BUCKET) {
+    await env.SAMO_R2_BUCKET.put(
+      STATE_OBJECT_KEY,
+      JSON.stringify(nextState, null, 2),
+      {
+        httpMetadata: {
+          contentType: 'application/json',
+          cacheControl: 'no-store, no-cache, must-revalidate',
+        },
+      }
+    );
+  }
+
+  isolateCatalogCache = nextState;
+  isolateCatalogJson = JSON.stringify(sanitizeCatalogStateForClient(nextState));
+  isolateCacheTimestamp = Date.now();
+
+  return nextState;
+}
+
 export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }): Promise<Response> => {
   try {
     const patch = (await context.request.json()) as Record<string, unknown>;
-    let current: Record<string, unknown> = { updatedAt: 0 };
-
-    const d1Binding = context.env.DB || context.env.SAMO_D1;
-    if (
-      isolateCatalogCache &&
-      Array.isArray(isolateCatalogCache.products) &&
-      isolateCatalogCache.products.length > 0
-    ) {
-      current = isolateCatalogCache;
-    } else if (d1Binding) {
-      const fromD1 = await readFromD1(d1Binding);
-      if (fromD1) current = fromD1;
-    } else if (context.env.SAMO_R2_BUCKET) {
-      try {
-        const existing = await context.env.SAMO_R2_BUCKET.get(STATE_OBJECT_KEY);
-        if (existing) {
-          const parsed = await existing.json<Record<string, unknown>>();
-          if (parsed && typeof parsed === 'object') current = parsed;
-        }
-      } catch {}
-    }
-
-    const mergedDeletedProducts = Array.from(
-      new Set([
-        ...((current.deletedProductIds as string[]) || []),
-        ...(Array.isArray(patch.deletedProductIds)
-          ? (patch.deletedProductIds as string[])
-          : []),
-      ])
-    );
-
-    const mergedDeletedCategories = Array.from(
-      new Set([
-        ...((current.deletedCategoryIds as string[]) || []),
-        ...(Array.isArray(patch.deletedCategoryIds)
-          ? (patch.deletedCategoryIds as string[])
-          : []),
-      ])
-    );
-
-    const mergedDeletedOrders = Array.from(
-      new Set([
-        ...((current.deletedOrderIds as string[]) || []),
-        ...(Array.isArray(patch.deletedOrderIds)
-          ? (patch.deletedOrderIds as string[])
-          : []),
-      ])
-    );
-    const deletedOrderSet = new Set(mergedDeletedOrders);
-
-    // 1. Write to Cloudflare D1 SQL if D1 binding is configured
-    if (d1Binding) {
-      try {
-        await writeToD1(
-          d1Binding,
-          patch,
-          mergedDeletedProducts,
-          mergedDeletedCategories,
-          mergedDeletedOrders
-        );
-      } catch (d1Err) {
-        console.error('Failed to write patch to D1 in Pages:', d1Err);
+    const nextState = await applyCatalogPatch(context.env, patch);
+    return new Response(
+      JSON.stringify(sanitizeCatalogStateForClient(nextState)),
+      {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       }
-    }
-
-    const nextOrdersList = Array.isArray(patch.orders)
-      ? (patch.orders as Array<{ id?: string }>).filter(
-          (o) => o && o.id && !deletedOrderSet.has(o.id)
-        )
-      : Array.isArray(current.orders)
-      ? (current.orders as Array<{ id?: string }>).filter(
-          (o) => o && o.id && !deletedOrderSet.has(o.id)
-        )
-      : undefined;
-
-    const nextState = {
-      ...current,
-      ...(Array.isArray(patch.products) ? { products: patch.products } : {}),
-      ...(Array.isArray(patch.categories)
-        ? { categories: patch.categories }
-        : {}),
-      ...(Array.isArray(patch.promoCodes)
-        ? { promoCodes: patch.promoCodes }
-        : {}),
-      ...(Array.isArray(patch.customMaterials)
-        ? { customMaterials: patch.customMaterials }
-        : {}),
-      ...(Array.isArray(patch.customColors)
-        ? { customColors: patch.customColors }
-        : {}),
-      ...(nextOrdersList !== undefined ? { orders: nextOrdersList } : {}),
-      ...(Array.isArray(patch.preorders) ? { preorders: patch.preorders } : {}),
-      ...(Array.isArray(patch.admins) ? { admins: patch.admins } : {}),
-      ...(patch.siteBanners && typeof patch.siteBanners === 'object'
-        ? { siteBanners: patch.siteBanners }
-        : {}),
-      ...(patch.sizeGuideConfig && typeof patch.sizeGuideConfig === 'object'
-        ? { sizeGuideConfig: patch.sizeGuideConfig }
-        : {}),
-      ...(patch.seoConfig && typeof patch.seoConfig === 'object'
-        ? { seoConfig: patch.seoConfig }
-        : {}),
-      ...(patch.newsletterPopupConfig &&
-      typeof patch.newsletterPopupConfig === 'object'
-        ? { newsletterPopupConfig: patch.newsletterPopupConfig }
-        : {}),
-      ...(typeof patch.autoAcceptOrders === 'boolean'
-        ? { autoAcceptOrders: patch.autoAcceptOrders }
-        : {}),
-      ...(typeof patch.showLowStockCount === 'boolean'
-        ? { showLowStockCount: patch.showLowStockCount }
-        : {}),
-      ...(typeof patch.shrinkUploadsEnabled === 'boolean'
-        ? { shrinkUploadsEnabled: patch.shrinkUploadsEnabled }
-        : {}),
-      ...(typeof patch.codEnabled === 'boolean'
-        ? { codEnabled: patch.codEnabled }
-        : {}),
-      ...(patch.adminNotificationState &&
-      typeof patch.adminNotificationState === 'object'
-        ? { adminNotificationState: patch.adminNotificationState }
-        : {}),
-      deletedProductIds: mergedDeletedProducts,
-      deletedCategoryIds: mergedDeletedCategories,
-      deletedOrderIds: mergedDeletedOrders,
-      updatedAt: Date.now(),
-    };
-
-    // 2. Dual-write backup to Cloudflare R2 if bound
-    if (context.env.SAMO_R2_BUCKET) {
-      await context.env.SAMO_R2_BUCKET.put(
-        STATE_OBJECT_KEY,
-        JSON.stringify(nextState, null, 2),
-        {
-          httpMetadata: {
-            contentType: 'application/json',
-            cacheControl: 'no-store, no-cache, must-revalidate',
-          },
-        }
-      );
-    }
-
-    const serializedNext = JSON.stringify(nextState);
-    isolateCatalogCache = nextState;
-    isolateCatalogJson = serializedNext;
-    isolateCacheTimestamp = Date.now();
-
-    return new Response(serializedNext, {
-      status: 200,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
+    );
   } catch (err) {
     return new Response(
       JSON.stringify({

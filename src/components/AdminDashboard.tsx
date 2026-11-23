@@ -421,8 +421,6 @@ type AdminSectionTab =
 
 interface AdminDashboardProps {
   currentUser: User | null;
-  aiAdminUnlocked: boolean;
-  onUnlockAiAdmin: () => void;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   onNavigateHome: (route: RoutePath) => void;
@@ -523,7 +521,6 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
-  aiAdminUnlocked,
   onGoogleSignIn,
   onSignOut,
   onNavigateHome,
@@ -947,7 +944,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const deptCategories = getCategoriesByDepartment(categories, itemDept);
 
   const isEmailAuthorized = isAuthorizedAdminEmail(currentUser?.email, admins);
-  const isAuthorized = isEmailAuthorized || aiAdminUnlocked;
+  const isAuthorized = isEmailAuthorized;
 
   const isFullSetCategorySelected =
     itemDept === 'women' &&
