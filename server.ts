@@ -26,6 +26,12 @@ import {
   executeGoogleSheetsSyncRequest,
   type GoogleSheetsSyncRequestPayload,
 } from './functions/api/sheets-sync.ts';
+import { buildSitemapXml } from './functions/sitemap.xml.ts';
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_PRODUCTS,
+} from './src/data/seedCatalog.ts';
+import type { CategoryItem, ProductItem } from './src/types/samo.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -249,6 +255,33 @@ async function startServer() {
         state as unknown as Record<string, unknown>
       )
     );
+  });
+
+  // Dynamic XML Sitemap Endpoint for Google Search Console
+  app.get('/sitemap.xml', async (_req, res) => {
+    try {
+      const state = await readCatalogState();
+      const categories =
+        Array.isArray(state.categories) && state.categories.length > 0
+          ? (state.categories as CategoryItem[])
+          : INITIAL_CATEGORIES;
+      const products =
+        Array.isArray(state.products) && state.products.length > 0
+          ? (state.products as ProductItem[])
+          : INITIAL_PRODUCTS;
+      const xml = buildSitemapXml(categories, products);
+      res
+        .status(200)
+        .set('Content-Type', 'application/xml; charset=utf-8')
+        .set('Cache-Control', 'public, max-age=300')
+        .send(xml);
+    } catch {
+      const xml = buildSitemapXml(INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+      res
+        .status(200)
+        .set('Content-Type', 'application/xml; charset=utf-8')
+        .send(xml);
+    }
   });
 
   app.post('/api/catalog', async (req, res) => {
