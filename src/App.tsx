@@ -146,8 +146,12 @@ function pushGtmEcommerceEvent(
   try {
     const win = window as unknown as {
       dataLayer?: Array<Record<string, unknown>>;
+      gtag?: (...args: unknown[]) => void;
     };
     win.dataLayer = win.dataLayer || [];
+    if (typeof win.gtag === 'function') {
+      win.gtag('event', eventName, ecommerce);
+    }
     win.dataLayer.push({ ecommerce: null });
     win.dataLayer.push({
       event: eventName,

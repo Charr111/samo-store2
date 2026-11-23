@@ -1192,28 +1192,33 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   try {
                     const win = window as unknown as {
                       dataLayer?: Array<Record<string, unknown>>;
+                      gtag?: (...args: unknown[]) => void;
+                    };
+                    const checkoutPayload = {
+                      currency: 'USD',
+                      value: bagTotalWithoutDelivery,
+                      items: cartItems.map((ci) => ({
+                        item_id:
+                          ci.garmentCode ||
+                          ci.product.garmentCode ||
+                          ci.product.id,
+                        item_name: ci.product.name,
+                        item_category: ci.product.category,
+                        item_variant: [ci.selectedColor, ci.selectedSize]
+                          .filter(Boolean)
+                          .join(' / '),
+                        price: getEffectiveProductPrice(ci.product).effectivePrice,
+                        quantity: ci.quantity,
+                      })),
                     };
                     win.dataLayer = win.dataLayer || [];
+                    if (typeof win.gtag === 'function') {
+                      win.gtag('event', 'begin_checkout', checkoutPayload);
+                    }
                     win.dataLayer.push({ ecommerce: null });
                     win.dataLayer.push({
                       event: 'begin_checkout',
-                      ecommerce: {
-                        currency: 'USD',
-                        value: bagTotalWithoutDelivery,
-                        items: cartItems.map((ci) => ({
-                          item_id:
-                            ci.garmentCode ||
-                            ci.product.garmentCode ||
-                            ci.product.id,
-                          item_name: ci.product.name,
-                          item_category: ci.product.category,
-                          item_variant: [ci.selectedColor, ci.selectedSize]
-                            .filter(Boolean)
-                            .join(' / '),
-                          price: getEffectiveProductPrice(ci.product).effectivePrice,
-                          quantity: ci.quantity,
-                        })),
-                      },
+                      ecommerce: checkoutPayload,
                     });
                   } catch {}
                   try {
