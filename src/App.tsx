@@ -147,6 +147,7 @@ function pushGtmEcommerceEvent(
     const win = window as unknown as {
       dataLayer?: Array<Record<string, unknown>>;
       gtag?: (...args: unknown[]) => void;
+      fbq?: (...args: unknown[]) => void;
     };
     win.dataLayer = win.dataLayer || [];
     if (typeof win.gtag === 'function') {
@@ -157,6 +158,55 @@ function pushGtmEcommerceEvent(
       event: eventName,
       ecommerce,
     });
+
+    if (typeof win.fbq === 'function') {
+      const items = Array.isArray(ecommerce.items)
+        ? (ecommerce.items as Array<Record<string, unknown>>)
+        : [];
+      const contentIds = items
+        .map((it) => String(it.item_id || ''))
+        .filter(Boolean);
+      const firstItem = items[0] || {};
+      const numItems = items.reduce(
+        (sum, it) => sum + (Number(it.quantity) || 1),
+        0
+      );
+      const val = Number(ecommerce.value) || 0;
+
+      if (eventName === 'view_item') {
+        win.fbq('track', 'ViewContent', {
+          content_ids: contentIds,
+          content_name: String(firstItem.item_name || ''),
+          content_category: String(firstItem.item_category || ''),
+          content_type: 'product',
+          value: val,
+          currency: 'USD',
+        });
+      } else if (eventName === 'add_to_cart') {
+        win.fbq('track', 'AddToCart', {
+          content_ids: contentIds,
+          content_name: String(firstItem.item_name || ''),
+          content_type: 'product',
+          value: val,
+          currency: 'USD',
+        });
+      } else if (eventName === 'begin_checkout') {
+        win.fbq('track', 'InitiateCheckout', {
+          content_ids: contentIds,
+          num_items: numItems || 1,
+          value: val,
+          currency: 'USD',
+        });
+      } else if (eventName === 'purchase') {
+        win.fbq('track', 'Purchase', {
+          content_ids: contentIds,
+          content_type: 'product',
+          num_items: numItems || 1,
+          value: val,
+          currency: 'USD',
+        });
+      }
+    }
   } catch {}
 }
 

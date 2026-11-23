@@ -13,6 +13,19 @@
       gtag('config', 'G-03GJ428KCQ');
       window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
     </script>
+    <!-- Meta Pixel Code -->
+    <script>
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '1139866515076615');
+      fbq('track', 'PageView');
+    </script>
     <script>
       window.addEventListener(
         'unhandledrejection',
@@ -50,6 +63,7 @@
   </head>
   <body class="bg-white text-zinc-950 antialiased selection:bg-zinc-950 selection:text-white">
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-MX2GX4J6" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1139866515076615&ev=PageView&noscript=1" alt="" /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

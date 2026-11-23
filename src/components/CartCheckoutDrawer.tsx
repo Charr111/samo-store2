@@ -1193,6 +1193,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     const win = window as unknown as {
                       dataLayer?: Array<Record<string, unknown>>;
                       gtag?: (...args: unknown[]) => void;
+                      fbq?: (...args: unknown[]) => void;
                     };
                     const checkoutPayload = {
                       currency: 'USD',
@@ -1220,6 +1221,22 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                       event: 'begin_checkout',
                       ecommerce: checkoutPayload,
                     });
+                    if (typeof win.fbq === 'function') {
+                      win.fbq('track', 'InitiateCheckout', {
+                        content_ids: cartItems.map(
+                          (ci) =>
+                            ci.garmentCode ||
+                            ci.product.garmentCode ||
+                            ci.product.id
+                        ),
+                        num_items: cartItems.reduce(
+                          (sum, ci) => sum + ci.quantity,
+                          0
+                        ),
+                        value: bagTotalWithoutDelivery,
+                        currency: 'USD',
+                      });
+                    }
                   } catch {}
                   try {
                     const currentHistState = (window.history.state || {}) as {
