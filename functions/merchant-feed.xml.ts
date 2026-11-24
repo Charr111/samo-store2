@@ -74,6 +74,24 @@ export function buildGoogleMerchantFeedXml(
   };
 
   const itemBlocks: string[] = [];
+  const seenItemIds = new Set<string>();
+
+  const allocateUniqueItemId = (rawCandidate: string): string => {
+    const base =
+      rawCandidate
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'samo-item';
+    let candidate = base.slice(0, 50);
+    let counter = 2;
+    while (seenItemIds.has(candidate.toLowerCase())) {
+      const suffix = `-${counter}`;
+      candidate = `${base.slice(0, 50 - suffix.length)}${suffix}`;
+      counter += 1;
+    }
+    seenItemIds.add(candidate.toLowerCase());
+    return candidate;
+  };
 
   for (const prod of activeProducts) {
     if (!prod || !prod.id || !prod.name) continue;
@@ -110,7 +128,7 @@ export function buildGoogleMerchantFeedXml(
         prod.category || 'collection'
       } crafted with enduring proportions.`;
 
-    const baseGroupId = (prod.garmentCode || prod.id).trim();
+    const baseGroupId = prod.id.trim();
 
     if (
       prod.hasColors &&
@@ -124,7 +142,9 @@ export function buildGoogleMerchantFeedXml(
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '');
-        const itemId = `${baseGroupId}-${colorSlug || 'variant'}`;
+        const itemId = allocateUniqueItemId(
+          `${prod.id}-${colorSlug || 'variant'}`
+        );
         const mpn = (variant.garmentCode || prod.garmentCode || prod.id).trim();
         const variantSizes =
           Array.isArray(variant.sizes) && variant.sizes.length > 0
@@ -139,7 +159,10 @@ export function buildGoogleMerchantFeedXml(
             ? 'in_stock'
             : 'out_of_stock';
         const mainImg = resolveAbsoluteMediaUrl(
-          variant.imageUrl || prod.imageUrl
+          variant.imageUrl ||
+            variant.galleryUrls?.[0] ||
+            prod.imageUrl ||
+            prod.galleryUrls?.[0]
         );
         const extraImgs = (
           Array.isArray(variant.galleryUrls) && variant.galleryUrls.length > 0
@@ -196,6 +219,7 @@ export function buildGoogleMerchantFeedXml(
     </item>`);
       }
     } else {
+      const itemId = allocateUniqueItemId(prod.id);
       const mpn = (prod.garmentCode || prod.id).trim();
       const prodSizes =
         Array.isArray(prod.sizes) && prod.sizes.length > 0
@@ -207,7 +231,11 @@ export function buildGoogleMerchantFeedXml(
           : sumSizeQuantities(prodSizes, prod.sizeQuantities);
       const availability =
         prod.inStock !== false && totalQty > 0 ? 'in_stock' : 'out_of_stock';
-      const mainImg = resolveAbsoluteMediaUrl(prod.imageUrl);
+      const mainImg = resolveAbsoluteMediaUrl(
+        prod.imageUrl ||
+          prod.galleryUrls?.[0] ||
+          prod.colorVariants?.[0]?.imageUrl
+      );
       const extraImgs = (prod.galleryUrls || [])
         .map((u) => resolveAbsoluteMediaUrl(u))
         .filter((u) => u && u !== mainImg)
@@ -215,7 +243,7 @@ export function buildGoogleMerchantFeedXml(
       const sizeStr = prodSizes.join(', ');
 
       itemBlocks.push(`    <item>
-      <g:id>${escapeXml(baseGroupId)}</g:id>
+      <g:id>${escapeXml(itemId)}</g:id>
       <g:item_group_id>${escapeXml(baseGroupId)}</g:item_group_id>
       <g:mpn>${escapeXml(mpn)}</g:mpn>
       <g:title>${escapeXml(prod.name)}</g:title>

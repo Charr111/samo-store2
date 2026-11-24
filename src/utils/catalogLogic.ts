@@ -1662,7 +1662,7 @@ export function isAuthorizedAdminEmail(
 }
 
 /**
- * Calculates delivery fee, promo code discount, and total order price.
+ * Calculates delivery fee (using live shippingConfig or defaults), promo code discount, and total order price.
  */
 export function calculateOrderTotals(
   items: { price: number; quantity: number }[],

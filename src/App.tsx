@@ -4201,7 +4201,7 @@ export default function App() {
         }}
         onSubmitOrder={handleSubmitOrder}
         codEnabled={codEnabled}
-        shippingFeeEnabled={siteBanners.shippingFeeEnabled ?? true}
+        shippingFeeEnabled={siteBanners.shippingFeeEnabled !== false}
         standardDeliveryFee={siteBanners.standardDeliveryFee ?? 6}
         freeShippingThreshold={siteBanners.freeShippingThreshold ?? 80}
       />

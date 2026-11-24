@@ -4447,7 +4447,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
 
-                {/* 7. Standard Delivery Shipping Fee & Free-Shipping Threshold (ON/OFF + Custom Rates) */}
+                {/* 7. Standard Delivery Shipping Fee & Free-Shipping Threshold (ON/OFF Toggle + Custom Rates) */}
                 <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:p-5 md:col-span-2 xl:col-span-3 flex flex-col gap-4">
                   <div className="flex items-center justify-between gap-3.5">
                     <div className="min-w-0">

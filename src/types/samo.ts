@@ -263,6 +263,7 @@ export interface SiteBannersConfig {
   orderEmailPromoCode?: string;
   orderEmailPromoDescription?: string;
   orderEmailPromoBannerUrl?: string;
+  /** Live Standard Delivery Shipping Fee & Free-Shipping Threshold controls */
   shippingFeeEnabled?: boolean;
   standardDeliveryFee?: number;
   freeShippingThreshold?: number;

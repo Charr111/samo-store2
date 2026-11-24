@@ -44,6 +44,7 @@ interface CartCheckoutDrawerProps {
   onSelectProduct?: (product: ProductItem) => void;
   onSubmitOrder: (orderPayload: Omit<OrderItem, 'id' | 'createdAt' | 'status'>) => Promise<OrderItem>;
   codEnabled?: boolean;
+  /** Live configurable Standard Delivery shipping fee & free threshold */
   shippingFeeEnabled?: boolean;
   standardDeliveryFee?: number;
   freeShippingThreshold?: number;
