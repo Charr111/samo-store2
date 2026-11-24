@@ -103,7 +103,6 @@ export async function initD1Schema(): Promise<void> {
       size_guides TEXT,
       created_at TEXT
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_categories_dept ON categories(department);`,
 
     `CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
@@ -135,9 +134,6 @@ export async function initD1Schema(): Promise<void> {
       created_at TEXT,
       updated_at TEXT
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_products_dept ON products(department);`,
-    `CREATE INDEX IF NOT EXISTS idx_products_cat ON products(category);`,
-    `CREATE INDEX IF NOT EXISTS idx_products_instock ON products(in_stock);`,
 
     `CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
@@ -158,8 +154,6 @@ export async function initD1Schema(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);`,
 
     `CREATE TABLE IF NOT EXISTS preorders (
       id TEXT PRIMARY KEY,
@@ -173,7 +167,6 @@ export async function initD1Schema(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_preorders_status ON preorders(status);`,
 
     `CREATE TABLE IF NOT EXISTS newsletter_subscribers (
       id TEXT PRIMARY KEY,
@@ -182,7 +175,6 @@ export async function initD1Schema(): Promise<void> {
       source TEXT DEFAULT 'footer',
       subscribed_at TEXT NOT NULL
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_newsletter_email ON newsletter_subscribers(email);`,
 
     `CREATE TABLE IF NOT EXISTS promo_codes (
       id TEXT PRIMARY KEY,
@@ -194,7 +186,6 @@ export async function initD1Schema(): Promise<void> {
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_promo_code ON promo_codes(code);`,
 
     `CREATE TABLE IF NOT EXISTS admins (
       email TEXT PRIMARY KEY,

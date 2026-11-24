@@ -652,6 +652,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [categoryPendingDelete, setCategoryPendingDelete] =
     useState<CategoryItem | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editingProductDraft, setEditingProductDraft] =
+    useState<ProductItem | null>(null);
   const [editProdCustomSizeInput, setEditProdCustomSizeInput] = useState('');
   const [editProdNewMaterialInput, setEditProdNewMaterialInput] = useState('');
   const [editProdPriceInputs, setEditProdPriceInputs] = useState<
@@ -1693,13 +1695,127 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsAddProductModalOpen(false);
   };
 
-  // Existing Catalog Product Color Variant Handlers
+  // Local Draft Updaters for Edit Product Modal (POP-UP MODAL 3 — Save-on-Click)
+  const applyUpdatesToDraftProduct = (
+    currentProd: ProductItem,
+    updates: Partial<ProductItem>
+  ): ProductItem => {
+    const nextIsNew =
+      updates.isNewArrival !== undefined
+        ? updates.isNewArrival
+        : currentProd.isNewArrival;
+    const merged: ProductItem = {
+      ...currentProd,
+      ...updates,
+      isNewArrival: nextIsNew,
+      featured: nextIsNew,
+    };
+
+    if (
+      updates.colorVariants &&
+      Array.isArray(merged.colorVariants) &&
+      merged.colorVariants.length > 0
+    ) {
+      const synced = syncProductFromColorVariants(
+        merged.colorVariants,
+        merged.sizeType
+      );
+      merged.hasColors = true;
+      merged.sizes = synced.sizes;
+      merged.sizeQuantities = synced.sizeQuantities;
+      merged.quantity = synced.quantity;
+      merged.inStock =
+        updates.inStock !== undefined ? updates.inStock : synced.inStock;
+    } else if (updates.sizes || updates.sizeQuantities) {
+      const nextSizes =
+        Array.isArray(merged.sizes) && merged.sizes.length > 0
+          ? merged.sizes
+          : ['M'];
+      const nextMap = buildSizeQuantitiesMap(nextSizes, merged.sizeQuantities);
+      const nextTotal = sumSizeQuantities(nextSizes, nextMap);
+      merged.sizes = nextSizes;
+      merged.sizeQuantities = nextMap;
+      merged.quantity = nextTotal;
+      merged.inStock =
+        updates.inStock !== undefined ? updates.inStock : nextTotal > 0;
+    }
+    return merged;
+  };
+
+  const handleUpdateDraftProductMeta = (
+    productId: string,
+    updates: Partial<ProductItem>
+  ) => {
+    setEditingProductDraft((prev) => {
+      if (!prev || prev.id !== productId) return prev;
+      return applyUpdatesToDraftProduct(prev, updates);
+    });
+  };
+
+  const handleUpdateDraftProductSizeQuantity = (
+    productId: string,
+    size: string,
+    nextQuantity: number
+  ) => {
+    const safeQty = Math.max(0, Math.floor(Number(nextQuantity) || 0));
+    setEditingProductDraft((prev) => {
+      if (!prev || prev.id !== productId) return prev;
+      const nextMap = {
+        ...buildSizeQuantitiesMap(prev.sizes, prev.sizeQuantities),
+        [size]: safeQty,
+      };
+      const nextTotal = sumSizeQuantities(prev.sizes, nextMap);
+      return {
+        ...prev,
+        sizeQuantities: nextMap,
+        quantity: nextTotal,
+        inStock: nextTotal > 0,
+      };
+    });
+  };
+
+  const handleUpdateDraftProductColorVariants = (
+    productId: string,
+    hasColors: boolean,
+    colorVariants: ProductColorVariant[]
+  ) => {
+    setEditingProductDraft((prev) => {
+      if (!prev || prev.id !== productId) return prev;
+      if (hasColors && colorVariants.length > 0) {
+        const synced = syncProductFromColorVariants(
+          colorVariants,
+          prev.sizeType
+        );
+        return {
+          ...prev,
+          hasColors: true,
+          colorVariants,
+          imageUrl: colorVariants[0]?.imageUrl || prev.imageUrl,
+          ...synced,
+        };
+      }
+      const fallbackTotal = sumSizeQuantities(prev.sizes, prev.sizeQuantities);
+      return {
+        ...prev,
+        hasColors: false,
+        colorVariants: [],
+        quantity: fallbackTotal,
+        inStock: fallbackTotal > 0,
+      };
+    });
+  };
+
+  // Existing Catalog Product Color Variant Handlers (Operates on Edit Product Draft when modal is open)
   const handleToggleCatalogProductColorMode = async (
     prod: ProductItem,
     enable: boolean
   ) => {
     if (!enable) {
-      await onUpdateProductColorVariants(prod.id, false, []);
+      if (editingProductDraft && editingProductDraft.id === prod.id) {
+        handleUpdateDraftProductColorVariants(prod.id, false, []);
+      } else {
+        await onUpdateProductColorVariants(prod.id, false, []);
+      }
       return;
     }
     const existing =
@@ -1710,12 +1826,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               colorName: 'Black',
               colorHex: getColorSwatchHex('Black'),
               imageUrl: prod.imageUrl,
+              galleryUrls: ['', '', ''],
               sizeType: prod.sizeType,
               sizes: [...prod.sizes],
               sizeQuantities: { ...prod.sizeQuantities },
             },
           ];
-    await onUpdateProductColorVariants(prod.id, true, existing);
+    if (editingProductDraft && editingProductDraft.id === prod.id) {
+      handleUpdateDraftProductColorVariants(prod.id, true, existing);
+    } else {
+      await onUpdateProductColorVariants(prod.id, true, existing);
+    }
   };
 
   const handleToggleCatalogProductColorItem = async (
@@ -1744,14 +1865,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           colorName,
           colorHex: resolvedHex,
           imageUrl: prod.imageUrl,
-          galleryUrls: [],
+          galleryUrls: ['', '', ''],
           sizeType: prod.sizeType,
           sizes: defaultSizes,
           sizeQuantities: buildSizeQuantitiesMap(defaultSizes, {}),
         },
       ];
     }
-    await onUpdateProductColorVariants(prod.id, next.length > 0, next);
+    if (editingProductDraft && editingProductDraft.id === prod.id) {
+      handleUpdateDraftProductColorVariants(prod.id, next.length > 0, next);
+    } else {
+      await onUpdateProductColorVariants(prod.id, next.length > 0, next);
+    }
   };
 
   const handleCatalogVariantChange = async (
@@ -1759,6 +1884,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     colorName: string,
     updater: (v: ProductColorVariant) => ProductColorVariant
   ) => {
+    if (editingProductDraft && editingProductDraft.id === prod.id) {
+      setEditingProductDraft((prev) => {
+        if (!prev || prev.id !== prod.id) return prev;
+        const current = prev.colorVariants || [];
+        const next = current.map((v) =>
+          v.colorName.toLowerCase() === colorName.toLowerCase() ? updater(v) : v
+        );
+        const synced = syncProductFromColorVariants(next, prev.sizeType);
+        return {
+          ...prev,
+          hasColors: true,
+          colorVariants: next,
+          imageUrl: next[0]?.imageUrl || prev.imageUrl,
+          ...synced,
+        };
+      });
+      return;
+    }
     const current = prod.colorVariants || [];
     const next = current.map((v) =>
       v.colorName.toLowerCase() === colorName.toLowerCase() ? updater(v) : v
@@ -3126,13 +3269,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     [products]
   );
 
-  const editingProduct = useMemo(
-    () =>
-      editingProductId
-        ? products.find((p) => p.id === editingProductId) || null
-        : null,
-    [products, editingProductId]
-  );
+  useEffect(() => {
+    if (!editingProductId) {
+      setEditingProductDraft(null);
+      return;
+    }
+    const target = products.find((p) => p.id === editingProductId);
+    if (!target) {
+      setEditingProductDraft(null);
+      return;
+    }
+    setEditingProductDraft((prev) => {
+      if (prev && prev.id === editingProductId) {
+        return prev;
+      }
+      const paddedGallery = [
+        target.galleryUrls?.[0] || '',
+        target.galleryUrls?.[1] || '',
+        target.galleryUrls?.[2] || '',
+      ];
+      return {
+        ...target,
+        materials: Array.isArray(target.materials) ? [...target.materials] : [],
+        sizes: Array.isArray(target.sizes) ? [...target.sizes] : [],
+        sizeQuantities: { ...(target.sizeQuantities || {}) },
+        galleryUrls: paddedGallery,
+        colorVariants: Array.isArray(target.colorVariants)
+          ? target.colorVariants.map((cv) => ({
+              ...cv,
+              sizes: Array.isArray(cv.sizes) ? [...cv.sizes] : [],
+              sizeQuantities: { ...(cv.sizeQuantities || {}) },
+              galleryUrls: [
+                cv.galleryUrls?.[0] || '',
+                cv.galleryUrls?.[1] || '',
+                cv.galleryUrls?.[2] || '',
+              ],
+            }))
+          : [],
+        setItems: Array.isArray(target.setItems)
+          ? target.setItems.map((si) => ({
+              ...si,
+              sizes: Array.isArray(si.sizes) ? [...si.sizes] : [],
+              sizeQuantities: { ...(si.sizeQuantities || {}) },
+              selectedColors: Array.isArray(si.selectedColors)
+                ? [...si.selectedColors]
+                : undefined,
+            }))
+          : undefined,
+      };
+    });
+  }, [editingProductId, products]);
+
+  const editingProduct = editingProductDraft;
 
   // LOCKED GATE IF NOT YET AUTHENTICATED
   if (!isAuthorized) {
@@ -11392,7 +11580,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           value={prod.name}
                           onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               name: e.target.value.toUpperCase(),
                             })
                           }
@@ -11419,7 +11607,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ...prev,
                               [prod.id]: rawVal,
                             }));
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               garmentCode: cleanGarmentCode(rawVal),
                             });
                           }}
@@ -11431,7 +11619,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 ...prev,
                                 [prod.id]: cleaned,
                               }));
-                              onUpdateProductMeta(prod.id, {
+                              handleUpdateDraftProductMeta(prod.id, {
                                 garmentCode: cleaned,
                               });
                             }
@@ -11466,7 +11654,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             if (rawVal.trim() !== '') {
                               const parsed = Number(rawVal);
                               if (!Number.isNaN(parsed) && parsed > 0) {
-                                onUpdateProductMeta(prod.id, {
+                                handleUpdateDraftProductMeta(prod.id, {
                                   price: parsed,
                                 });
                               }
@@ -11493,7 +11681,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             );
                             const nextCat =
                               nextDeptCats[0]?.name || prod.category;
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               department: nextDept,
                               category: nextCat,
                               ...(nextDept === 'kids'
@@ -11517,7 +11705,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           value={prod.category}
                           onChange={(e) => {
                             const nextCat = e.target.value;
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               category: nextCat,
                               isFullSet:
                                 prod.department === 'women' &&
@@ -11542,7 +11730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <select
                           value={prod.style}
                           onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               style: e.target.value as StyleType,
                             })
                           }
@@ -11566,7 +11754,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="checkbox"
                           checked={Boolean(prod.isNewArrival)}
                           onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               isNewArrival: e.target.checked,
                               featured: e.target.checked,
                             })
@@ -11626,7 +11814,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               },
                               nextVar - 1
                             );
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               description: drafted,
                             });
                           }}
@@ -11640,7 +11828,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         rows={2}
                         value={prod.description || ''}
                         onChange={(e) =>
-                          onUpdateProductMeta(prod.id, {
+                          handleUpdateDraftProductMeta(prod.id, {
                             description: e.target.value,
                           })
                         }
@@ -11663,11 +11851,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 if (checked) {
                                   const defaultMat =
                                     allMaterials[0] || 'Cow Leather';
-                                  onUpdateProductMeta(prod.id, {
+                                  handleUpdateDraftProductMeta(prod.id, {
                                     materials: [defaultMat],
                                   });
                                 } else {
-                                  onUpdateProductMeta(prod.id, {
+                                  handleUpdateDraftProductMeta(prod.id, {
                                     materials: [],
                                   });
                                 }
@@ -11699,7 +11887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       const nextMats = active
                                         ? currentMats.filter((m) => m !== mat)
                                         : [...currentMats, mat];
-                                      onUpdateProductMeta(prod.id, {
+                                      handleUpdateDraftProductMeta(prod.id, {
                                         materials: nextMats,
                                       });
                                     }}
@@ -11733,7 +11921,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   await onAddCustomMaterial(clean);
                                   const currentMats = prod.materials || [];
                                   if (!currentMats.includes(clean)) {
-                                    await onUpdateProductMeta(prod.id, {
+                                    await handleUpdateDraftProductMeta(prod.id, {
                                       materials: [...currentMats, clean],
                                     });
                                   }
@@ -11773,7 +11961,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="checkbox"
                           checked={Boolean(prod.isNewArrival)}
                           onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               isNewArrival: e.target.checked,
                               featured: e.target.checked,
                             })
@@ -11958,7 +12146,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               )
                               .filter(Boolean)
                               .join('+') || prod.garmentCode;
-                          onUpdateProductMeta(prod.id, {
+                          handleUpdateDraftProductMeta(prod.id, {
                             isFullSet: true,
                             garmentCode: combinedGarmentCode,
                             materials: [],
@@ -12002,7 +12190,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      onUpdateProductMeta(prod.id, {
+                                      handleUpdateDraftProductMeta(prod.id, {
                                         isFullSet: true,
                                         setItems: currentSetItems.slice(0, 2),
                                       });
@@ -12311,7 +12499,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       prod.setItems?.[0] || newThirdPiece,
                                       prod.setItems?.[1] || newThirdPiece,
                                     ];
-                              onUpdateProductMeta(prod.id, {
+                              handleUpdateDraftProductMeta(prod.id, {
                                 isFullSet: true,
                                 materials: [],
                                 hasColors: false,
@@ -13079,7 +13267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             onClick={() => {
                               const nextSizes = getPresetsForSizeType(st.id);
-                              onUpdateProductMeta(prod.id, {
+                              handleUpdateDraftProductMeta(prod.id, {
                                 sizeType: st.id,
                                 sizes: nextSizes,
                                 sizeQuantities: buildSizeQuantitiesMap(
@@ -13113,7 +13301,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     ? prod.sizes.filter((s) => s !== presetSz)
                                     : [...prod.sizes, presetSz];
                                   if (nextSizes.length === 0) return;
-                                  onUpdateProductMeta(prod.id, {
+                                  handleUpdateDraftProductMeta(prod.id, {
                                     sizes: nextSizes,
                                     sizeQuantities: buildSizeQuantitiesMap(
                                       nextSizes,
@@ -13153,7 +13341,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  onUpdateProductSizeQuantity(
+                                  handleUpdateDraftProductSizeQuantity(
                                     prod.id,
                                     sz,
                                     Math.max(0, szQty - 1)
@@ -13178,7 +13366,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           0,
                                           Math.floor(Number(rawVal) || 0)
                                         );
-                                  onUpdateProductSizeQuantity(
+                                  handleUpdateDraftProductSizeQuantity(
                                     prod.id,
                                     sz,
                                     parsed
@@ -13189,7 +13377,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  onUpdateProductSizeQuantity(
+                                  handleUpdateDraftProductSizeQuantity(
                                     prod.id,
                                     sz,
                                     szQty + 1
@@ -13239,7 +13427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               const nextSizes = prod.sizes.includes(normalized)
                                 ? prod.sizes
                                 : [...prod.sizes, normalized];
-                              onUpdateProductMeta(prod.id, {
+                              handleUpdateDraftProductMeta(prod.id, {
                                 sizes: nextSizes,
                                 sizeQuantities: {
                                   ...prod.sizeQuantities,
@@ -13278,7 +13466,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           [prod.id]:
                             nextType === 'none' ? '' : String(nextVal),
                         }));
-                        onUpdateProductMeta(prod.id, {
+                        handleUpdateDraftProductMeta(prod.id, {
                           discountType: nextType,
                           discountValue: nextVal,
                         });
@@ -13311,14 +13499,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             [prod.id]: rawVal,
                           }));
                           if (rawVal.trim() === '') {
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               discountValue: 0,
                             });
                             return;
                           }
                           const parsed = Number(rawVal);
                           if (!Number.isNaN(parsed) && parsed >= 0) {
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               discountValue: parsed,
                             });
                           }
@@ -13340,7 +13528,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           value={prod.imageUrl || ''}
                           onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
+                            handleUpdateDraftProductMeta(prod.id, {
                               imageUrl: e.target.value,
                             })
                           }
@@ -13357,7 +13545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             }
                             ariaLabel={`Upload Primary Photo for ${prod.name}`}
                             onUploaded={(url) =>
-                              onUpdateProductMeta(prod.id, { imageUrl: url })
+                              handleUpdateDraftProductMeta(prod.id, { imageUrl: url })
                             }
                           />
                           {Boolean(prod.imageUrl?.trim()) && (
@@ -13368,7 +13556,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   label: `${prod.name} (Primary Image #1)`,
                                   imageUrl: prod.imageUrl,
                                   onConfirm: () =>
-                                    onUpdateProductMeta(prod.id, {
+                                    handleUpdateDraftProductMeta(prod.id, {
                                       imageUrl: '',
                                     }),
                                 })
@@ -13401,10 +13589,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   prod.galleryUrls?.[2] || '',
                                 ];
                                 current[gIdx] = e.target.value;
-                                onUpdateProductMeta(prod.id, {
-                                  galleryUrls: current.filter((u) =>
-                                    Boolean(u.trim())
-                                  ),
+                                handleUpdateDraftProductMeta(prod.id, {
+                                  galleryUrls: current,
                                 });
                               }}
                               placeholder={`${gIdx + 2}. Image URL #${
@@ -13430,10 +13616,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     prod.galleryUrls?.[2] || '',
                                   ];
                                   current[gIdx] = url;
-                                  onUpdateProductMeta(prod.id, {
-                                    galleryUrls: current.filter((u) =>
-                                      Boolean(u.trim())
-                                    ),
+                                  handleUpdateDraftProductMeta(prod.id, {
+                                    galleryUrls: current,
                                   });
                                 }}
                               />
@@ -13451,10 +13635,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           prod.galleryUrls?.[2] || '',
                                         ];
                                         current[gIdx] = '';
-                                        onUpdateProductMeta(prod.id, {
-                                          galleryUrls: current.filter((u) =>
-                                            Boolean(u.trim())
-                                          ),
+                                        handleUpdateDraftProductMeta(prod.id, {
+                                          galleryUrls: current,
                                         });
                                       },
                                     })
@@ -13491,7 +13673,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
+                        const rawGarmentInput = editProdGarmentInputs[prod.id];
+                        const finalGarmentCode =
+                          rawGarmentInput !== undefined
+                            ? cleanGarmentCode(rawGarmentInput)
+                            : prod.garmentCode;
+                        const cleanedGallery = (prod.galleryUrls || [])
+                          .map((u) => (typeof u === 'string' ? u.trim() : ''))
+                          .filter((u) => Boolean(u));
+                        const cleanedColorVariants = Array.isArray(
+                          prod.colorVariants
+                        )
+                          ? prod.colorVariants.map((cv) => ({
+                              ...cv,
+                              galleryUrls: (cv.galleryUrls || [])
+                                .map((u) =>
+                                  typeof u === 'string' ? u.trim() : ''
+                                )
+                                .filter((u) => Boolean(u)),
+                            }))
+                          : [];
+
+                        await onUpdateProductMeta(prod.id, {
+                          ...prod,
+                          garmentCode: finalGarmentCode,
+                          galleryUrls: cleanedGallery,
+                          colorVariants: cleanedColorVariants,
+                          updatedAt: new Date().toISOString(),
+                        });
+
                         setItemFeedback(
                           `✓ Saved product "${prod.name}" (${prod.department.toUpperCase()} / ${prod.category}${
                             prod.isNewArrival ? ' · In New Arrivals' : ''

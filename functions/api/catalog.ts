@@ -56,6 +56,7 @@ let isolateCatalogJson: string | null = null;
 let isolateCacheTimestamp = 0;
 let garmentCodeColumnMigrated = false;
 let promoMaxUsesColumnMigrated = false;
+let unusedSecondaryIndexesDropped = false;
 
 function safeJsonParse<T = unknown>(str: unknown, fallback: T): T {
   if (typeof str !== 'string' || !str.trim()) return fallback;
@@ -317,14 +318,127 @@ async function readFromD1(
   }
 }
 
+function buildProductPersistSignature(p: any): string {
+  const setPiecesPayload = Array.isArray(p?.setItems)
+    ? p.setItems
+    : Array.isArray(p?.fullSetPieces)
+    ? p.fullSetPieces
+    : [];
+  return JSON.stringify([
+    p?.id || '',
+    p?.name || '',
+    p?.garmentCode ?? null,
+    p?.department || 'women',
+    p?.category || 'Tops',
+    p?.price ?? 0,
+    p?.originalPrice ?? null,
+    p?.discountPercent ?? null,
+    p?.discountBadge ?? null,
+    p?.style || 'Classic Luxury',
+    p?.customStyle ?? null,
+    Array.isArray(p?.materials) ? p.materials : [],
+    Array.isArray(p?.sizes) ? p.sizes : [],
+    p?.sizeQuantities || {},
+    p?.imageUrl || '',
+    Array.isArray(p?.galleryUrls) ? p.galleryUrls : [],
+    p?.hasColors ? 1 : 0,
+    Array.isArray(p?.colorVariants) ? p.colorVariants : [],
+    p?.isFullSet ? 1 : 0,
+    setPiecesPayload,
+    p?.inStock !== false ? 1 : 0,
+    p?.preorderEnabled ? 1 : 0,
+    p?.description || '',
+    Array.isArray(p?.details) ? p.details : [],
+    p?.featured ? 1 : 0,
+    p?.sizeType || 'letter',
+  ]);
+}
+
+function buildCategoryPersistSignature(c: any): string {
+  const isHidden = c?.active === false || Boolean(c?.hiddenFromNav);
+  const dispOrder =
+    typeof c?.sortOrder === 'number' && Number.isFinite(c.sortOrder)
+      ? c.sortOrder
+      : c?.displayOrder ?? 0;
+  return JSON.stringify([
+    c?.id || '',
+    c?.name || '',
+    c?.department || 'women',
+    dispOrder,
+    isHidden ? 1 : 0,
+    c?.sizeGuides ? c.sizeGuides : null,
+  ]);
+}
+
+function buildOrderPersistSignature(o: any): string {
+  const lineItems = Array.isArray(o?.orderedItems)
+    ? o.orderedItems
+    : Array.isArray(o?.items)
+    ? o.items
+    : [];
+  return JSON.stringify([
+    o?.id || '',
+    o?.customerName || '',
+    o?.customerEmail || '',
+    o?.customerPhone || '',
+    o?.shippingLocation || o?.customerAddress || '',
+    o?.customerCity || '',
+    o?.deliveryMethod || 'Standard Delivery',
+    o?.totalPrice ?? 0,
+    o?.subtotal ?? 0,
+    o?.discountAmount ?? 0,
+    o?.deliveryFee ?? 0,
+    o?.status || 'accepted',
+    o?.promoCode ?? null,
+    Boolean(o?.paymentVerified),
+    o?.paymentMethod || 'COD',
+    lineItems,
+  ]);
+}
+
 async function writeToD1(
   db: D1DatabaseBinding,
+  current: Record<string, unknown>,
   patch: Record<string, unknown>,
   mergedDeletedProducts: string[],
   mergedDeletedCategories: string[],
   mergedDeletedOrders: string[]
 ): Promise<void> {
+  if (!unusedSecondaryIndexesDropped) {
+    unusedSecondaryIndexesDropped = true;
+    try {
+      await db.batch([
+        db.prepare('DROP INDEX IF EXISTS idx_categories_dept;'),
+        db.prepare('DROP INDEX IF EXISTS idx_products_dept;'),
+        db.prepare('DROP INDEX IF EXISTS idx_products_cat;'),
+        db.prepare('DROP INDEX IF EXISTS idx_products_instock;'),
+        db.prepare('DROP INDEX IF EXISTS idx_orders_status;'),
+        db.prepare('DROP INDEX IF EXISTS idx_orders_created;'),
+        db.prepare('DROP INDEX IF EXISTS idx_preorders_status;'),
+        db.prepare('DROP INDEX IF EXISTS idx_newsletter_email;'),
+        db.prepare('DROP INDEX IF EXISTS idx_promo_code;'),
+      ]);
+    } catch {
+      // Ignore if indexes were already dropped
+    }
+  }
+
   const statements: D1PreparedStatement[] = [];
+  const currentProductsList = Array.isArray(current.products)
+    ? (current.products as any[])
+    : [];
+  const currentCategoriesList = Array.isArray(current.categories)
+    ? (current.categories as any[])
+    : [];
+  const currentOrdersList = Array.isArray(current.orders)
+    ? (current.orders as any[])
+    : [];
+  const currentPreordersList = Array.isArray(current.preorders)
+    ? (current.preorders as any[])
+    : [];
+  const currentPromoCodesList = Array.isArray(current.promoCodes)
+    ? (current.promoCodes as any[])
+    : [];
 
   if (Array.isArray(patch.products)) {
     if (!garmentCodeColumnMigrated) {
@@ -338,8 +452,22 @@ async function writeToD1(
         garmentCodeColumnMigrated = true;
       }
     }
+
+    const existingProdSigById = new Map<string, string>();
+    for (const ep of currentProductsList) {
+      if (ep && ep.id) {
+        existingProdSigById.set(ep.id, buildProductPersistSignature(ep));
+      }
+    }
+
     for (const p of patch.products as any[]) {
       if (!p || !p.id) continue;
+      const nextSig = buildProductPersistSignature(p);
+      if (existingProdSigById.get(p.id) === nextSig) {
+        // Unchanged product — skip SQL write completely!
+        continue;
+      }
+
       const setPiecesPayload = Array.isArray(p.setItems)
         ? p.setItems
         : Array.isArray(p.fullSetPieces)
@@ -420,17 +548,33 @@ async function writeToD1(
     }
   }
 
-  for (const delId of mergedDeletedProducts) {
-    if (delId) {
-      statements.push(
-        db.prepare('DELETE FROM products WHERE id = ?;').bind(delId)
-      );
-    }
+  const prevDeletedProductsSet = new Set(
+    Array.isArray(current.deletedProductIds)
+      ? (current.deletedProductIds as string[])
+      : []
+  );
+  const newlyDeletedProducts = mergedDeletedProducts.filter(
+    (id) => id && !prevDeletedProductsSet.has(id)
+  );
+  for (const delId of newlyDeletedProducts) {
+    statements.push(
+      db.prepare('DELETE FROM products WHERE id = ?;').bind(delId)
+    );
   }
 
   if (Array.isArray(patch.categories)) {
+    const existingCatSigById = new Map<string, string>();
+    for (const ec of currentCategoriesList) {
+      if (ec && ec.id) {
+        existingCatSigById.set(ec.id, buildCategoryPersistSignature(ec));
+      }
+    }
+
     for (const c of patch.categories as any[]) {
       if (!c || !c.id) continue;
+      if (existingCatSigById.get(c.id) === buildCategoryPersistSignature(c)) {
+        continue;
+      }
       const isHidden = c.active === false || Boolean(c.hiddenFromNav);
       const dispOrder =
         typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder)
@@ -462,20 +606,45 @@ async function writeToD1(
     }
   }
 
-  for (const delCatId of mergedDeletedCategories) {
-    if (delCatId) {
-      statements.push(
-        db.prepare('DELETE FROM categories WHERE id = ?;').bind(delCatId)
-      );
-    }
+  const prevDeletedCategoriesSet = new Set(
+    Array.isArray(current.deletedCategoryIds)
+      ? (current.deletedCategoryIds as string[])
+      : []
+  );
+  const newlyDeletedCategories = mergedDeletedCategories.filter(
+    (id) => id && !prevDeletedCategoriesSet.has(id)
+  );
+  for (const delCatId of newlyDeletedCategories) {
+    statements.push(
+      db.prepare('DELETE FROM categories WHERE id = ?;').bind(delCatId)
+    );
   }
+
+  const prevDeletedOrdersSet = new Set(
+    Array.isArray(current.deletedOrderIds)
+      ? (current.deletedOrderIds as string[])
+      : []
+  );
+  const newlyDeletedOrders = mergedDeletedOrders.filter(
+    (id) => id && !prevDeletedOrdersSet.has(id)
+  );
 
   if (Array.isArray(patch.orders)) {
     const deletedOrderSet = new Set(mergedDeletedOrders);
-    // Replace D1 orders table atomically inside db.batch so any order removed from patch.orders is permanently deleted
-    statements.push(db.prepare('DELETE FROM orders;'));
+    const existingOrderSigById = new Map<string, string>();
+    for (const eo of currentOrdersList) {
+      if (eo && eo.id) {
+        existingOrderSigById.set(eo.id, buildOrderPersistSignature(eo));
+      }
+    }
+
+    const incomingOrderIds = new Set<string>();
     for (const o of patch.orders as any[]) {
       if (!o || !o.id || deletedOrderSet.has(o.id)) continue;
+      incomingOrderIds.add(o.id);
+      if (existingOrderSigById.get(o.id) === buildOrderPersistSignature(o)) {
+        continue;
+      }
       const lineItems = Array.isArray(o.orderedItems)
         ? o.orderedItems
         : Array.isArray(o.items)
@@ -530,19 +699,41 @@ async function writeToD1(
           )
       );
     }
-  } else if (mergedDeletedOrders.length > 0) {
-    for (const delOrdId of mergedDeletedOrders) {
-      if (delOrdId) {
-        statements.push(
-          db.prepare('DELETE FROM orders WHERE id = ?;').bind(delOrdId)
-        );
+
+    // Delete only orders that were removed from patch.orders or newly added to deletedOrderIds
+    const ordersToDelete = new Set<string>(newlyDeletedOrders);
+    for (const eo of currentOrdersList) {
+      if (eo && eo.id && !incomingOrderIds.has(eo.id)) {
+        ordersToDelete.add(eo.id);
       }
+    }
+    for (const delOrdId of ordersToDelete) {
+      statements.push(
+        db.prepare('DELETE FROM orders WHERE id = ?;').bind(delOrdId)
+      );
+    }
+  } else if (newlyDeletedOrders.length > 0) {
+    for (const delOrdId of newlyDeletedOrders) {
+      statements.push(
+        db.prepare('DELETE FROM orders WHERE id = ?;').bind(delOrdId)
+      );
     }
   }
 
   if (Array.isArray(patch.preorders)) {
+    const existingPreorderSigById = new Map<string, string>();
+    for (const ep of currentPreordersList) {
+      if (ep && ep.id) {
+        existingPreorderSigById.set(
+          ep.id,
+          JSON.stringify([ep.id, ep.status || 'pending'])
+        );
+      }
+    }
     for (const pr of patch.preorders as any[]) {
       if (!pr || !pr.id) continue;
+      const sig = JSON.stringify([pr.id, pr.status || 'pending']);
+      if (existingPreorderSigById.get(pr.id) === sig) continue;
       statements.push(
         db
           .prepare(
@@ -582,10 +773,40 @@ async function writeToD1(
         promoMaxUsesColumnMigrated = true;
       }
     }
+    const existingPromoSigByCode = new Map<string, string>();
+    for (const epc of currentPromoCodesList) {
+      if (epc && epc.code) {
+        const isAct = epc.active !== undefined ? epc.active : epc.isActive;
+        const maxUses = Math.max(
+          0,
+          Math.floor(Number(epc.maxUsesPerEmail) || 0)
+        );
+        existingPromoSigByCode.set(
+          epc.code,
+          JSON.stringify([
+            epc.code,
+            epc.discountType || 'percent',
+            epc.discountValue ?? 0,
+            epc.minOrderAmount ?? 0,
+            maxUses,
+            isAct !== false ? 1 : 0,
+          ])
+        );
+      }
+    }
     for (const pc of patch.promoCodes as any[]) {
       if (!pc || !pc.code) continue;
       const isAct = pc.active !== undefined ? pc.active : pc.isActive;
       const maxUses = Math.max(0, Math.floor(Number(pc.maxUsesPerEmail) || 0));
+      const sig = JSON.stringify([
+        pc.code,
+        pc.discountType || 'percent',
+        pc.discountValue ?? 0,
+        pc.minOrderAmount ?? 0,
+        maxUses,
+        isAct !== false ? 1 : 0,
+      ]);
+      if (existingPromoSigByCode.get(pc.code) === sig) continue;
       statements.push(
         db
           .prepare(
@@ -634,6 +855,13 @@ async function writeToD1(
         typeof patch[key] === 'string'
           ? (patch[key] as string)
           : JSON.stringify(patch[key]);
+      const currentPayload =
+        current[key] !== undefined
+          ? typeof current[key] === 'string'
+            ? (current[key] as string)
+            : JSON.stringify(current[key])
+          : undefined;
+      if (payload === currentPayload) continue;
       statements.push(
         db
           .prepare(
@@ -648,7 +876,7 @@ async function writeToD1(
     }
   }
 
-  if (mergedDeletedProducts.length > 0) {
+  if (newlyDeletedProducts.length > 0) {
     statements.push(
       db
         .prepare(
@@ -662,7 +890,7 @@ async function writeToD1(
     );
   }
 
-  if (mergedDeletedCategories.length > 0) {
+  if (newlyDeletedCategories.length > 0) {
     statements.push(
       db
         .prepare(
@@ -680,7 +908,7 @@ async function writeToD1(
     );
   }
 
-  if (mergedDeletedOrders.length > 0) {
+  if (newlyDeletedOrders.length > 0) {
     statements.push(
       db
         .prepare(
@@ -934,11 +1162,12 @@ export async function applyCatalogPatch(
   );
   const deletedOrderSet = new Set(mergedDeletedOrders);
 
-  // 1. Write to Cloudflare D1 SQL if D1 binding is configured
+  // 1. Write to Cloudflare D1 SQL if D1 binding is configured (Strict Delta-Only)
   if (d1Binding) {
     try {
       await writeToD1(
         d1Binding,
+        current,
         effectivePatch,
         mergedDeletedProducts,
         mergedDeletedCategories,

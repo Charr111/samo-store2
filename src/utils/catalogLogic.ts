@@ -3991,16 +3991,19 @@ export function buildGoogleSheetInventoryRows(
 }
 
 /**
- * Applies single-row or multi-row updates from the 14-column SAMO_INVENTORY Google Sheet
- * back into the website catalog using a 3-tier smart matcher:
- *   Tier 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
- *   Tier 2: (normalized Product Name + normalized Color Option + normalized Size)
- *   Tier 3: (normalized Product ID / SKU + normalized Color Option + normalized Size)
+ * Applies single-row or multi-row QUANTITY-ONLY updates from the 14-column
+ * SAMO_INVENTORY Google Sheet ("Connected samo website catalog") back into the
+ * website catalog using a 4-tier smart matcher:
+ *   Priority 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
+ *   Priority 2: (cleanGarmentCode + normalized Color Option + normalized Size) — matches even after Product Name changes
+ *   Priority 3: (normalized Product Name + normalized Color Option + normalized Size)
+ *   Priority 4: (normalized Product ID / SKU + normalized Color Option + normalized Size)
  *
  * Includes strict anti-corruption safeguards:
+ * - Strictly updates QUANTITY ONLY (never overwrites Product Name or Selling Price).
  * - Never deletes any product, photo, description, discount, or category.
- * - Ignores blank, NaN, or negative numbers for Quantity or Price.
- * - Recomputes product.quantity, product.inStock, and runs synchronizeFullSetsWithLinkedProducts.
+ * - Ignores blank, NaN, or negative numbers for Quantity.
+ * - Recomputes product.quantity, product.inStock, and runs syncFullSetsWithCatalog.
  */
 export function applyGoogleSheetUpdatesToCatalog(
   products: ProductItem[],
@@ -4100,10 +4103,9 @@ export function applyGoogleSheetUpdatesToCatalog(
     if (!row || typeof row !== 'object') continue;
 
     const parsedQty = parseGoogleSheetQuantity(row.quantity);
-    const parsedPrice = parseGoogleSheetSellingPrice(row.sellingPrice);
 
-    // If neither a valid quantity nor a valid price is present, skip safely
-    if (parsedQty === null && parsedPrice === null) {
+    // Strictly Quantity-Only: if a valid quantity is not present, skip safely
+    if (parsedQty === null) {
       continue;
     }
 
@@ -4117,7 +4119,7 @@ export function applyGoogleSheetUpdatesToCatalog(
     let matchedVariantIndex = -1;
     let matchedSizeKey = '';
 
-    // Tier 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
+    // Priority 1: (cleanGarmentCode + normalized Product Name + normalized Color Option + normalized Size)
     if (rowCode && rowNameNorm) {
       for (let i = 0; i < workingProducts.length; i++) {
         const prod = workingProducts[i];
@@ -4144,46 +4146,9 @@ export function applyGoogleSheetUpdatesToCatalog(
       }
     }
 
-    // Tier 2: (normalized Product Name + normalized Color Option + normalized Size)
-    if (matchedProdIndex === -1 && rowNameNorm) {
-      for (let i = 0; i < workingProducts.length; i++) {
-        const prod = workingProducts[i];
-        if (normalizeSheetToken(prod.name) !== rowNameNorm) continue;
-        const check = doesProductHaveSizeAndColor(
-          prod,
-          rowColorNorm,
-          rowSizeNorm
-        );
-        if (check.matches) {
-          matchedProdIndex = i;
-          matchedVariantIndex = check.variantIndex;
-          matchedSizeKey = check.matchedSizeKey;
-          break;
-        }
-      }
-    }
-
-    // Tier 3: (normalized Product ID / SKU + normalized Color Option + normalized Size)
-    if (matchedProdIndex === -1 && rowSkuNorm) {
-      for (let i = 0; i < workingProducts.length; i++) {
-        const prod = workingProducts[i];
-        if (normalizeSheetToken(prod.id) !== rowSkuNorm) continue;
-        const check = doesProductHaveSizeAndColor(
-          prod,
-          rowColorNorm,
-          rowSizeNorm
-        );
-        if (check.matches) {
-          matchedProdIndex = i;
-          matchedVariantIndex = check.variantIndex;
-          matchedSizeKey = check.matchedSizeKey;
-          break;
-        }
-      }
-    }
-
-    // Fallback Tier 3B: If row only specified garmentCode + color + size (without product name)
-    if (matchedProdIndex === -1 && rowCode && !rowNameNorm) {
+    // Priority 2: (cleanGarmentCode + normalized Color Option + normalized Size)
+    // Matches the exact product even if the Product Name was changed on the website!
+    if (matchedProdIndex === -1 && rowCode) {
       for (let i = 0; i < workingProducts.length; i++) {
         const prod = workingProducts[i];
         const prodBaseCode = cleanGarmentCode(prod.garmentCode);
@@ -4205,17 +4170,50 @@ export function applyGoogleSheetUpdatesToCatalog(
       }
     }
 
+    // Priority 3: (normalized Product Name + normalized Color Option + normalized Size)
+    if (matchedProdIndex === -1 && rowNameNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        if (normalizeSheetToken(prod.name) !== rowNameNorm) continue;
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
+    // Priority 4: (normalized Product ID / SKU + normalized Color Option + normalized Size)
+    if (matchedProdIndex === -1 && rowSkuNorm) {
+      for (let i = 0; i < workingProducts.length; i++) {
+        const prod = workingProducts[i];
+        if (normalizeSheetToken(prod.id) !== rowSkuNorm) continue;
+        const check = doesProductHaveSizeAndColor(
+          prod,
+          rowColorNorm,
+          rowSizeNorm
+        );
+        if (check.matches) {
+          matchedProdIndex = i;
+          matchedVariantIndex = check.variantIndex;
+          matchedSizeKey = check.matchedSizeKey;
+          break;
+        }
+      }
+    }
+
     if (matchedProdIndex === -1) continue;
 
     const targetProd = workingProducts[matchedProdIndex];
     let prodChanged = false;
 
-    if (parsedPrice !== null && targetProd.price !== parsedPrice) {
-      targetProd.price = parsedPrice;
-      prodChanged = true;
-    }
-
-    if (parsedQty !== null && matchedSizeKey) {
+    if (matchedSizeKey) {
       if (
         matchedVariantIndex >= 0 &&
         Array.isArray(targetProd.colorVariants) &&
@@ -4286,7 +4284,8 @@ export function applyGoogleSheetUpdatesToCatalog(
 
 /**
  * Generates the ready-to-paste, security-hardened Google Apps Script for the 14-column
- * SAMO_INVENTORY Google Sheet.
+ * SAMO_INVENTORY Google Sheet, locked strictly to tab "Connected samo website catalog"
+ * in Quantity-Only, Never-Append mode.
  */
 export function buildGoogleAppsScriptForSamoSheet(options: {
   siteOrigin: string;
@@ -4302,25 +4301,19 @@ export function buildGoogleAppsScriptForSamoSheet(options: {
 
   return `/**
  * ============================================================================
- * SAMO — AUTOMATIC TWO-WAY GOOGLE SHEETS LIVE INVENTORY & PRICE SYNC
- * Tailored 100% to your 14-column SAMO_INVENTORY Google Sheet (Private Sheet)
+ * SAMO — STRICT QUANTITY-ONLY SYNC
+ * Locked strictly to tab: "Connected samo website catalog"
  * ============================================================================
- *
- * HOW TO ACTIVATE (1-TIME SETUP — TAKES 60 SECONDS):
- * 1. In your private SAMO_INVENTORY Google Sheet, click Extensions -> Apps Script.
- * 2. Delete any placeholder code, paste this entire script, and click the Save icon.
- * 3. In the top toolbar dropdown (next to "Run"), select "setupAutomaticSyncTrigger"
- *    and click "Run" once (grant permission so edits in Quantity Col J or Price Col K
- *    automatically push to your website).
- * 4. Click "Deploy" (top right) -> "New deployment" -> Select type: "Web app":
- *    - Execute as: "Me" (keeps your Google Sheet 100% PRIVATE / RESTRICTED to you)
- *    - Who has access: "Anyone" (protected by your cryptographic SYNC_SECRET below)
- * 5. Copy the Web App URL (https://script.google.com/macros/s/.../exec) and paste it
- *    into your SAMO Admin Dashboard -> Google Sheets Live Sync card.
+ * - Updates ONLY Quantity (Col J) and Live/Sold Out Status (Col L)
+ * - NEVER touches Product Names (Col F), Prices (Col K), or any other tab
+ * - NEVER appends, moves, or mixes rows
  */
 
 const WEBSITE_SYNC_ENDPOINT = '${cleanOrigin}/api/sheets-sync';
 const SYNC_SECRET = '${cleanSecret}';
+
+// Strictly locked to your exact mini-sheet / tab name:
+const TARGET_SHEET_NAME = 'Connected samo website catalog';
 
 function normToken_(val) {
   return String(val == null ? '' : val).trim().replace(/\\s+/g, ' ').toUpperCase();
@@ -4342,9 +4335,39 @@ function normCode_(val) {
 }
 
 /**
- * 1-TIME TRIGGER INSTALLER: Run this function ONCE in Apps Script so that editing
- * Quantity (Col J) or Selling Price (Col K) in your sheet automatically updates your website.
+ * Finds ONLY the "Connected samo website catalog" tab (case-insensitive trim match).
+ * Returns null if not found so it NEVER touches any other tab in your workbook.
  */
+function getSamoInventorySheet_(ss) {
+  const targetClean = normToken_(TARGET_SHEET_NAME);
+  const exact = ss.getSheetByName(TARGET_SHEET_NAME);
+  if (exact) return exact;
+
+  const sheets = ss.getSheets();
+  for (let s = 0; s < sheets.length; s++) {
+    if (normToken_(sheets[s].getName()) === targetClean) {
+      return sheets[s];
+    }
+  }
+  return null;
+}
+
+/**
+ * Ensures a row is an actual product row (skips blank rows and section headers).
+ */
+function isProductDataRow_(rowVals) {
+  const colB = normToken_(rowVals[1]);
+  const colF = normToken_(rowVals[5]);
+  const colI = normToken_(rowVals[8]);
+  const colJ = normToken_(rowVals[9]);
+
+  if (!colB && !colF && !colI) return false;
+  if (colB === 'GARMENT CODE' || colF === 'SAMO PRODUCT NAME' || colJ === 'QUANTITY') {
+    return false;
+  }
+  return true;
+}
+
 function setupAutomaticSyncTrigger() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const triggers = ScriptApp.getProjectTriggers();
@@ -4360,42 +4383,44 @@ function setupAutomaticSyncTrigger() {
 }
 
 /**
- * AUTOMATIC SHEET -> WEBSITE SYNC:
- * Fires automatically whenever you edit Quantity (Col J / Col 10) or Selling Price (Col K / Col 11).
+ * SHEET -> WEBSITE (QUANTITY ONLY):
+ * Fires ONLY if you edit Column J (Column 10 = Quantity) inside "Connected samo website catalog".
  */
 function onSamoSheetEdit(e) {
   if (!e || !e.range) return;
   const sheet = e.range.getSheet();
+  const targetSheet = getSamoInventorySheet_(SpreadsheetApp.getActiveSpreadsheet());
+  if (!targetSheet || sheet.getSheetId() !== targetSheet.getSheetId()) return;
+
   const startRow = e.range.getRow();
   const numRows = e.range.getNumRows();
   const startCol = e.range.getColumn();
   const numCols = e.range.getNumColumns();
 
-  // Watch Column J (10 = Quantity) and Column K (11 = Selling Price USD)
-  const touchesQtyOrPrice =
-    (startCol <= 11 && startCol + numCols - 1 >= 10);
-  if (!touchesQtyOrPrice) return;
+  // Watch ONLY Column J (Column 10 = Quantity)
+  const touchesQuantityOnly = (startCol <= 10 && startCol + numCols - 1 >= 10);
+  if (!touchesQuantityOnly) return;
 
   const updates = [];
   for (let r = startRow; r < startRow + numRows; r++) {
-    if (r <= 1) continue; // Skip header row 1
+    if (r <= 1) continue;
     const rowVals = sheet.getRange(r, 1, 1, 12).getValues()[0];
+    if (!isProductDataRow_(rowVals)) continue;
+
     const sku = String(rowVals[0] || '').trim();
     const garmentCode = String(rowVals[1] || '').trim();
     const productName = String(rowVals[5] || '').trim();
     const colorOption = String(rowVals[6] || 'NONE').trim() || 'NONE';
     const size = String(rowVals[8] || '').trim();
     const rawQty = rowVals[9];
-    const rawPrice = rowVals[10];
-
-    if (!productName && !garmentCode && !sku) continue;
 
     const qtyNum = Number(rawQty);
-    if (Number.isFinite(qtyNum) && qtyNum >= 0) {
-      const nextStatus = Math.floor(qtyNum) > 0 ? 'Live' : 'Sold Out';
-      if (String(rowVals[11] || '').trim() !== nextStatus) {
-        sheet.getRange(r, 12).setValue(nextStatus);
-      }
+    if (!Number.isFinite(qtyNum) || qtyNum < 0) continue;
+
+    const nextStatus = Math.floor(qtyNum) > 0 ? 'Live' : 'Sold Out';
+    const currStatus = String(rowVals[11] || '').trim();
+    if ((currStatus === 'Live' || currStatus === 'Sold Out') && currStatus !== nextStatus) {
+      sheet.getRange(r, 12).setValue(nextStatus);
     }
 
     updates.push({
@@ -4404,8 +4429,7 @@ function onSamoSheetEdit(e) {
       productName: productName,
       colorOption: colorOption,
       size: size,
-      quantity: rawQty,
-      sellingPrice: rawPrice
+      quantity: Math.floor(qtyNum)
     });
   }
 
@@ -4425,9 +4449,7 @@ function onSamoSheetEdit(e) {
 }
 
 /**
- * AUTOMATIC WEBSITE -> SHEET SYNC (doPost):
- * Receives real-time stock deductions when a customer buys an item or when Admin edits
- * Quantity or Price, and supports pulling all rows from the sheet on demand.
+ * WEBSITE -> SHEET (QUANTITY ONLY, NEVER APPENDS ROWS, NEVER TOUCHES NAME OR PRICE)
  */
 function doPost(e) {
   try {
@@ -4439,69 +4461,49 @@ function doPost(e) {
     }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheets()[0];
-    const lastRow = sheet.getLastRow();
+    const sheet = getSamoInventorySheet_(ss);
+    if (!sheet) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: false, error: 'Tab "' + TARGET_SHEET_NAME + '" not found' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
 
-    // Action 1: Website requests all current rows from Google Sheet
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, updatedRows: 0, appendedRows: 0 })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (body.action === 'read_sheet_rows') {
       const rows = [];
-      if (lastRow >= 2) {
-        const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
-        for (let i = 0; i < data.length; i++) {
-          const r = data[i];
-          if (!r[0] && !r[1] && !r[5]) continue;
-          rows.push({
-            sku: String(r[0] || '').trim(),
-            garmentCode: String(r[1] || '').trim(),
-            productName: String(r[5] || '').trim(),
-            colorOption: String(r[6] || 'NONE').trim() || 'NONE',
-            size: String(r[8] || '').trim(),
-            quantity: r[9],
-            sellingPrice: r[10],
-            websiteStatus: String(r[11] || '').trim()
-          });
-        }
+      const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      for (let i = 0; i < data.length; i++) {
+        const r = data[i];
+        if (!isProductDataRow_(r)) continue;
+        rows.push({
+          sku: String(r[0] || '').trim(),
+          garmentCode: String(r[1] || '').trim(),
+          productName: String(r[5] || '').trim(),
+          colorOption: String(r[6] || 'NONE').trim() || 'NONE',
+          size: String(r[8] || '').trim(),
+          quantity: r[9]
+        });
       }
       return ContentService.createTextOutput(
         JSON.stringify({ ok: true, rows: rows })
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Action 2: Website pushes updated catalog quantities & prices to Google Sheet
     const incomingRows = Array.isArray(body.rows) ? body.rows : [];
     if (incomingRows.length === 0) {
       return ContentService.createTextOutput(
-        JSON.stringify({ ok: true, updatedRows: 0 })
+        JSON.stringify({ ok: true, updatedRows: 0, appendedRows: 0 })
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (lastRow === 0) {
-      sheet.appendRow([
-        'Product ID / SKU',
-        'Garment Code',
-        'Section',
-        'Category',
-        'New Arrivals',
-        'SAMO Product Name',
-        'Color Option',
-        'Size System',
-        'Size',
-        'Quantity',
-        'Selling Price (USD)',
-        'Website Status',
-        'Editorial Model Reference',
-        'Notes / Description'
-      ]);
-    }
-
-    const currentLastRow = sheet.getLastRow();
-    const existingData =
-      currentLastRow >= 2
-        ? sheet.getRange(2, 1, currentLastRow - 1, 12).getValues()
-        : [];
-
+    const existingData = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
     let updatedCount = 0;
-    let appendedCount = 0;
 
     for (let i = 0; i < incomingRows.length; i++) {
       const item = incomingRows[i];
@@ -4513,25 +4515,44 @@ function doPost(e) {
 
       let matchedRowIdx = -1;
 
-      // Tier 1: Garment Code + Product Name + Color Option + Size
-      for (let r = 0; r < existingData.length; r++) {
-        const row = existingData[r];
-        if (
-          itemCode &&
-          normCode_(row[1]) === itemCode &&
-          normToken_(row[5]) === itemName &&
-          normColor_(row[6]) === itemColor &&
-          normSize_(row[8]) === itemSize
-        ) {
-          matchedRowIdx = r;
-          break;
+      // Priority 1: Garment Code (Col B) + Product Name (Col F) + Color (Col G) + Size (Col I)
+      if (itemCode && itemName) {
+        for (let r = 0; r < existingData.length; r++) {
+          const row = existingData[r];
+          if (!isProductDataRow_(row)) continue;
+          if (
+            normCode_(row[1]) === itemCode &&
+            normToken_(row[5]) === itemName &&
+            normColor_(row[6]) === itemColor &&
+            normSize_(row[8]) === itemSize
+          ) {
+            matchedRowIdx = r;
+            break;
+          }
         }
       }
 
-      // Tier 2: Product Name + Color Option + Size
-      if (matchedRowIdx === -1) {
+      // Priority 2: Garment Code (Col B) + Color (Col G) + Size (Col I)
+      if (matchedRowIdx === -1 && itemCode) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
+          if (!isProductDataRow_(row)) continue;
+          if (
+            normCode_(row[1]) === itemCode &&
+            normColor_(row[6]) === itemColor &&
+            normSize_(row[8]) === itemSize
+          ) {
+            matchedRowIdx = r;
+            break;
+          }
+        }
+      }
+
+      // Priority 3: Product Name (Col F) + Color (Col G) + Size (Col I)
+      if (matchedRowIdx === -1 && itemName) {
+        for (let r = 0; r < existingData.length; r++) {
+          const row = existingData[r];
+          if (!isProductDataRow_(row)) continue;
           if (
             normToken_(row[5]) === itemName &&
             normColor_(row[6]) === itemColor &&
@@ -4543,10 +4564,11 @@ function doPost(e) {
         }
       }
 
-      // Tier 3: SKU + Color Option + Size
+      // Priority 4: SKU (Col A) + Color (Col G) + Size (Col I)
       if (matchedRowIdx === -1 && itemSku) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
+          if (!isProductDataRow_(row)) continue;
           if (
             normToken_(row[0]) === itemSku &&
             normColor_(row[6]) === itemColor &&
@@ -4558,54 +4580,29 @@ function doPost(e) {
         }
       }
 
+      // If not found in the sheet, DO NOTHING (never append rows!)
+      if (matchedRowIdx === -1) continue;
+
       const nextQty = Math.max(0, Math.floor(Number(item.quantity) || 0));
-      const nextPriceFormatted =
-        item.sellingPriceFormatted ||
-        ('$' + Number(item.sellingPrice || 0).toFixed(2));
       const nextStatus = nextQty > 0 ? 'Live' : 'Sold Out';
+      const sheetRowNumber = matchedRowIdx + 2;
 
-      if (matchedRowIdx !== -1) {
-        const sheetRowNumber = matchedRowIdx + 2;
-        const currQty = Number(existingData[matchedRowIdx][9]);
-        const currPriceStr = String(existingData[matchedRowIdx][10] || '').trim();
-        const currStatusStr = String(existingData[matchedRowIdx][11] || '').trim();
-        const currPriceNum = Number(currPriceStr.replace(/^\\$/, '').replace(/,/g, ''));
+      const currQtyRaw = existingData[matchedRowIdx][9];
+      const currQty = (currQtyRaw === '' || currQtyRaw == null) ? -1 : Number(currQtyRaw);
+      const currStatusStr = String(existingData[matchedRowIdx][11] || '').trim();
 
-        if (
-          currQty !== nextQty ||
-          currPriceNum !== Number(item.sellingPrice) ||
-          currStatusStr !== nextStatus
-        ) {
-          // Only update Col J (10), Col K (11), Col L (12) — preserves Col A SKU and Col M/N notes!
-          sheet
-            .getRange(sheetRowNumber, 10, 1, 3)
-            .setValues([[nextQty, nextPriceFormatted, nextStatus]]);
-          existingData[matchedRowIdx][9] = nextQty;
-          existingData[matchedRowIdx][10] = nextPriceFormatted;
-          existingData[matchedRowIdx][11] = nextStatus;
-          updatedCount++;
-        }
-      } else {
-        // Brand-new product/size added in Admin Dashboard -> append cleanly at bottom
-        const newRow = [
-          item.sku || item.productId || '',
-          item.garmentCode || '',
-          item.section || 'Women',
-          item.category || '',
-          item.newArrivals || 'NO',
-          item.productName || '',
-          item.colorOption || 'NONE',
-          item.sizeSystem || 'Alpha',
-          item.size || 'OS',
-          nextQty,
-          nextPriceFormatted,
-          nextStatus,
-          '',
-          ''
-        ];
-        sheet.appendRow(newRow);
-        existingData.push(newRow.slice(0, 12));
-        appendedCount++;
+      if (currQty !== nextQty) {
+        sheet.getRange(sheetRowNumber, 10).setValue(nextQty);
+        existingData[matchedRowIdx][9] = nextQty;
+        updatedCount++;
+      }
+
+      if (
+        (currStatusStr === 'Live' || currStatusStr === 'Sold Out' || currStatusStr === '') &&
+        currStatusStr !== nextStatus
+      ) {
+        sheet.getRange(sheetRowNumber, 12).setValue(nextStatus);
+        existingData[matchedRowIdx][11] = nextStatus;
       }
     }
 
@@ -4613,7 +4610,7 @@ function doPost(e) {
       JSON.stringify({
         ok: true,
         updatedRows: updatedCount,
-        appendedRows: appendedCount
+        appendedRows: 0
       })
     ).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {

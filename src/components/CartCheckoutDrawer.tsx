@@ -1068,7 +1068,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                       <span className="text-[10px] text-zinc-200 tracking-wide truncate">
                         Processed once payment is received on:{' '}
                         <strong className="text-xs font-mono-tabular font-bold text-white underline tracking-wider">
-                          705056450
+                          70505645
                         </strong>
                       </span>
                     </div>

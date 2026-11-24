@@ -2138,8 +2138,8 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
   assert.equal(herringboneGreyRow.quantity, 2);
   assert.equal(herringboneGreyRow.sellingPriceFormatted, '$48.00');
 
-  // Apply inbound update from Google Sheet (e.g. Row SAMO-W-056 updates GREY S/M quantity from 2 -> 7 and price from $48.00 -> $52.00)
-  // Plus a single-color update setting NOIR FAUX FUR JACKET M/L quantity to 0 (Sold Out)
+  // Apply inbound update from Google Sheet (strictly Quantity-Only — updates quantity from 2 -> 7 and never overwrites price)
+  // Plus a single-color update setting NOIR FAUX FUR JACKET M/L quantity to 0 (Sold Out) even when matched by garmentCode after a product rename
   // Plus an invalid/corrupt row that must be ignored safely
   const result = applyGoogleSheetUpdatesToCatalog(INITIAL_PRODUCTS, [
     {
@@ -2154,7 +2154,7 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
     {
       sku: 'SAMO-W-001',
       garmentCode: '6700066',
-      productName: 'NOIR FAUX FUR JACKET',
+      productName: 'OLD SHEET PRODUCT NAME BEFORE RENAME',
       colorOption: 'NONE',
       size: 'M/L',
       quantity: '0',
@@ -2175,7 +2175,8 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
   const updatedHerringbone = result.products.find(
     (p) => p.name === 'HERRINGBONE TROUSERS'
   )!;
-  assert.equal(updatedHerringbone.price, 52);
+  // Price remains strictly untouched at $48 (Quantity-Only mode)
+  assert.equal(updatedHerringbone.price, 48);
   const greyVariant = updatedHerringbone.colorVariants!.find(
     (cv) => cv.colorName.toUpperCase() === 'GREY'
   )!;
@@ -2190,7 +2191,7 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
   assert.equal(updatedNoir.sizeQuantities['M/L'], 0);
   assert.equal(updatedNoir.quantity, 0);
   assert.equal(updatedNoir.inStock, false);
-  // Price remained untouched at 95 despite invalid price in 3rd row
+  // Price remained untouched at 95
   assert.equal(updatedNoir.price, 95);
 
   const script = buildGoogleAppsScriptForSamoSheet({
@@ -2198,6 +2199,8 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
     syncSecret: 'samo_secret_123',
   });
   assert.ok(script.includes('https://samoweave.com/api/sheets-sync'));
+  assert.ok(script.includes('Connected samo website catalog'));
+  assert.ok(!script.includes('appendRow'));
   assert.ok(script.includes('onSamoSheetEdit'));
   assert.ok(script.includes('setupAutomaticSyncTrigger'));
 });

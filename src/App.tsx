@@ -250,10 +250,33 @@ export function deepCleanFirestorePayload<T>(value: T): T {
 
 let pendingLocalMutations = 0;
 let lastLocalMutationMs = 0;
+let lastPushedSheetsQuantitySignature = '';
+
+function buildProductsQuantitySignature(prods: ProductItem[]): string {
+  if (!Array.isArray(prods) || prods.length === 0) return '';
+  return prods
+    .map((p) => {
+      if (!p || !p.id) return '';
+      const hasVars =
+        Boolean(p.hasColors) &&
+        Array.isArray(p.colorVariants) &&
+        p.colorVariants.length > 0;
+      const varSig = hasVars
+        ? (p.colorVariants || [])
+            .map(
+              (cv) =>
+                `${cv.colorName}:${JSON.stringify(cv.sizeQuantities || {})}`
+            )
+            .join('|')
+        : JSON.stringify(p.sizeQuantities || {});
+      return `${p.id}:${p.inStock !== false ? 1 : 0}:${p.quantity ?? 0}:${varSig}`;
+    })
+    .join(';');
+}
 
 async function pushServerCatalogPatch(
   patch: Record<string, unknown>,
-  options?: { skipSheetsPush?: boolean }
+  options?: { skipSheetsPush?: boolean; forceSheetsPush?: boolean }
 ): Promise<void> {
   pendingLocalMutations += 1;
   lastLocalMutationMs = Date.now();
@@ -268,14 +291,25 @@ async function pushServerCatalogPatch(
       Array.isArray(patch.products) &&
       patch.products.length > 0
     ) {
-      fetch('/api/sheets-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'push_to_sheet',
-          products: patch.products,
-        }),
-      }).catch(() => {});
+      const nextQtySig = buildProductsQuantitySignature(
+        patch.products as ProductItem[]
+      );
+      const quantityActuallyChanged =
+        options?.forceSheetsPush ||
+        (lastPushedSheetsQuantitySignature !== '' &&
+          nextQtySig !== lastPushedSheetsQuantitySignature);
+      lastPushedSheetsQuantitySignature = nextQtySig;
+
+      if (quantityActuallyChanged) {
+        fetch('/api/sheets-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'push_to_sheet',
+            products: patch.products,
+          }),
+        }).catch(() => {});
+      }
     }
   } catch {
   } finally {
@@ -1316,12 +1350,15 @@ export default function App() {
         }
 
         if (Array.isArray(data.products) && data.products.length > 0) {
-          setProducts(
-            normalizeStoredProducts(
-              data.products as ProductItem[],
-              remoteDeletedIds
-            )
+          const normalizedRemoteProducts = normalizeStoredProducts(
+            data.products as ProductItem[],
+            remoteDeletedIds
           );
+          if (!lastPushedSheetsQuantitySignature) {
+            lastPushedSheetsQuantitySignature =
+              buildProductsQuantitySignature(normalizedRemoteProducts);
+          }
+          setProducts(normalizedRemoteProducts);
         }
 
         if (Array.isArray(data.categories) && data.categories.length > 0) {

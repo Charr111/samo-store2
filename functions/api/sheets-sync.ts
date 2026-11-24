@@ -183,13 +183,15 @@ export async function executeGoogleSheetsSyncRequest(
           : 'Google Sheet edit received (values already matched live catalog).',
     };
 
-    await adapter.writeState({
-      ...(updatedCount > 0 ? { products: updatedProducts } : {}),
-      siteBanners: {
-        ...currentSiteBanners,
-        googleSheetsSync: persistedSheetsConfig,
-      },
-    });
+    if (updatedCount > 0) {
+      await adapter.writeState({
+        products: updatedProducts,
+        siteBanners: {
+          ...currentSiteBanners,
+          googleSheetsSync: persistedSheetsConfig,
+        },
+      });
+    }
 
     return {
       status: 200,
@@ -205,6 +207,7 @@ export async function executeGoogleSheetsSyncRequest(
   }
 
   // 2. OUTBOUND PUSH TO GOOGLE SHEETS (Website -> Google Sheet)
+  // Strictly 0 Cloudflare D1 rows_written on push_to_sheet!
   if (action === 'push_to_sheet') {
     const isManual = Boolean(payload.manual);
     if (!isManual && !sheetsConfig.enabled) {
@@ -272,21 +275,6 @@ export async function executeGoogleSheetsSyncRequest(
           typeof parsedResp.error === 'string'
             ? parsedResp.error
             : `Google Sheet webhook returned HTTP ${resp.status}.`;
-        const nowIso = new Date().toISOString();
-        const persistedConfig: GoogleSheetsSyncConfig = {
-          enabled: true,
-          webhookUrl: '',
-          syncSecret: '',
-          lastSyncedAt: nowIso,
-          lastSyncStatus: 'error',
-          lastSyncMessage: errMsg,
-        };
-        await adapter.writeState({
-          siteBanners: {
-            ...currentSiteBanners,
-            googleSheetsSync: persistedConfig,
-          },
-        });
         return {
           status: 502,
           body: {
@@ -300,25 +288,9 @@ export async function executeGoogleSheetsSyncRequest(
       const updatedRows = Number(parsedResp.updatedRows) || 0;
       const appendedRows = Number(parsedResp.appendedRows) || 0;
       const nowIso = new Date().toISOString();
-      const statusMsg = `Synced ${sheetRows.length} rows to Google Sheet (${updatedRows} updated${
-        appendedRows > 0 ? `, ${appendedRows} new rows added` : ''
-      }).`;
-
-      const persistedConfig: GoogleSheetsSyncConfig = {
-        enabled: true,
-        webhookUrl: '',
-        syncSecret: '',
-        lastSyncedAt: nowIso,
-        lastSyncStatus: 'ok',
-        lastSyncMessage: statusMsg,
-      };
-
-      await adapter.writeState({
-        siteBanners: {
-          ...currentSiteBanners,
-          googleSheetsSync: persistedConfig,
-        },
-      });
+      const statusMsg = `Synced ${sheetRows.length} rows to Google Sheet (${updatedRows} quantity row${
+        updatedRows === 1 ? '' : 's'
+      } updated).`;
 
       return {
         status: 200,
@@ -430,24 +402,26 @@ export async function executeGoogleSheetsSyncRequest(
           ? `Pulled ${sheetRows.length} rows from Google Sheet (${updatedCount} product${
               updatedCount === 1 ? '' : 's'
             } updated).`
-          : `Checked ${sheetRows.length} rows from Google Sheet (all quantities & prices already up to date).`;
+          : `Checked ${sheetRows.length} rows from Google Sheet (all quantities already up to date).`;
 
-      const persistedConfig: GoogleSheetsSyncConfig = {
-        enabled: true,
-        webhookUrl: '',
-        syncSecret: '',
-        lastSyncedAt: nowIso,
-        lastSyncStatus: 'ok',
-        lastSyncMessage: statusMsg,
-      };
+      if (updatedCount > 0) {
+        const persistedConfig: GoogleSheetsSyncConfig = {
+          enabled: true,
+          webhookUrl: '',
+          syncSecret: '',
+          lastSyncedAt: nowIso,
+          lastSyncStatus: 'ok',
+          lastSyncMessage: statusMsg,
+        };
 
-      await adapter.writeState({
-        ...(updatedCount > 0 ? { products: updatedProducts } : {}),
-        siteBanners: {
-          ...currentSiteBanners,
-          googleSheetsSync: persistedConfig,
-        },
-      });
+        await adapter.writeState({
+          products: updatedProducts,
+          siteBanners: {
+            ...currentSiteBanners,
+            googleSheetsSync: persistedConfig,
+          },
+        });
+      }
 
       return {
         status: 200,
