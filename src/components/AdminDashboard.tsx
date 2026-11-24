@@ -127,6 +127,7 @@ interface R2ImageUploadButtonProps {
   compact?: boolean;
   label?: string;
   compressionOptions?: ImageCompressionOptions;
+  previousUrlToCleanup?: string;
 }
 
 export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
@@ -135,6 +136,7 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
   compact = false,
   label = 'Upload Photo',
   compressionOptions,
+  previousUrlToCleanup,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -150,8 +152,15 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
     setErrorMessage(null);
 
     try {
+      const prevClean =
+        typeof previousUrlToCleanup === 'string'
+          ? previousUrlToCleanup.trim()
+          : '';
       const result = await uploadCompressedImageToR2(file, compressionOptions);
       onUploaded(result.url);
+      if (prevClean && prevClean !== result.url) {
+        deleteMediaFromR2(prevClean).catch(() => {});
+      }
       if (result.wasShrunk) {
         setStatusMessage(
           `✓ Shrunk ${result.reductionPercent}% (${result.originalSizeKB} KB → ${result.compressedSizeKB} KB)`
@@ -670,11 +679,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   >({});
   const [productPendingDelete, setProductPendingDelete] =
     useState<ProductItem | null>(null);
+  const [productPendingSave, setProductPendingSave] =
+    useState<ProductItem | null>(null);
+  const [discardDraftConfirmOpen, setDiscardDraftConfirmOpen] =
+    useState<boolean>(false);
+  const [draftUploadedR2Urls, setDraftUploadedR2Urls] = useState<string[]>([]);
   const [orderPendingDelete, setOrderPendingDelete] =
     useState<OrderItem | null>(null);
   const [imagePendingDelete, setImagePendingDelete] = useState<{
     label: string;
     imageUrl: string;
+    skipImmediateR2Delete?: boolean;
     onConfirm: () => Promise<void> | void;
   } | null>(null);
 
@@ -2102,6 +2117,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ...updater(existing),
       updatedAt: new Date().toISOString(),
     };
+    if (feedbackLabel) {
+      const oldUrls = [existing.imageUrl, existing.desktopImageUrl]
+        .map((u) => (typeof u === 'string' ? u.trim() : ''))
+        .filter(Boolean);
+      const newUrls = new Set(
+        [updatedItem.imageUrl, updatedItem.desktopImageUrl]
+          .map((u) => (typeof u === 'string' ? u.trim() : ''))
+          .filter(Boolean)
+      );
+      const removedBannerUrls = oldUrls.filter((u) => !newUrls.has(u));
+      if (removedBannerUrls.length > 0) {
+        deleteMediaFromR2(removedBannerUrls).catch(() => {});
+      }
+    }
     const next: SiteBannersConfig = {
       ...siteBanners,
       categoryBanners: {
@@ -2114,6 +2143,208 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setBannerFeedback(`✓ ${feedbackLabel}`);
       setTimeout(() => setBannerFeedback(''), 3500);
     }
+  };
+
+  // ============================================================================
+  // EDIT PRODUCT MODAL R2 CLEANUP, UNSAVED CHANGES GUARD & SAVE CONFIRMATION
+  // ============================================================================
+  const collectProductR2ImageUrls = React.useCallback(
+    (prod: ProductItem | null | undefined): string[] => {
+      if (!prod) return [];
+      const urls: string[] = [
+        prod.imageUrl,
+        ...(prod.galleryUrls || []),
+        ...(prod.colorVariants || []).flatMap((cv) => [
+          cv.imageUrl,
+          ...(cv.galleryUrls || []),
+        ]),
+      ]
+        .map((u) => (typeof u === 'string' ? u.trim() : ''))
+        .filter(Boolean);
+      return Array.from(new Set(urls));
+    },
+    []
+  );
+
+  const buildFinalSavedProductFromDraft = React.useCallback(
+    (draft: ProductItem): ProductItem => {
+      const rawGarmentInput = editProdGarmentInputs[draft.id];
+      const finalGarmentCode =
+        rawGarmentInput !== undefined
+          ? cleanGarmentCode(rawGarmentInput)
+          : draft.garmentCode;
+      const cleanedGallery = (draft.galleryUrls || [])
+        .map((u) => (typeof u === 'string' ? u.trim() : ''))
+        .filter(Boolean);
+      const cleanedColorVariants = Array.isArray(draft.colorVariants)
+        ? draft.colorVariants.map((cv) => ({
+            ...cv,
+            imageUrl: typeof cv.imageUrl === 'string' ? cv.imageUrl.trim() : '',
+            galleryUrls: (cv.galleryUrls || [])
+              .map((u) => (typeof u === 'string' ? u.trim() : ''))
+              .filter(Boolean),
+          }))
+        : [];
+      return {
+        ...draft,
+        imageUrl:
+          typeof draft.imageUrl === 'string' ? draft.imageUrl.trim() : '',
+        garmentCode: finalGarmentCode,
+        galleryUrls: cleanedGallery,
+        colorVariants: cleanedColorVariants,
+      };
+    },
+    [editProdGarmentInputs]
+  );
+
+  const normalizeProductForDirtyCheck = React.useCallback(
+    (prod: ProductItem) => {
+      const cleaned = buildFinalSavedProductFromDraft(prod);
+      return JSON.stringify({
+        name: cleaned.name || '',
+        garmentCode: cleaned.garmentCode || '',
+        department: cleaned.department,
+        category: cleaned.category || '',
+        style: cleaned.style,
+        price: Number(cleaned.price || 0),
+        discountType: cleaned.discountType || 'none',
+        discountValue: Number(cleaned.discountValue || 0),
+        isNewArrival: Boolean(cleaned.isNewArrival),
+        isFullSet: Boolean(cleaned.isFullSet),
+        inStock: Boolean(cleaned.inStock),
+        quantity: Number(cleaned.quantity || 0),
+        sizeType: cleaned.sizeType,
+        imageUrl: cleaned.imageUrl || '',
+        galleryUrls: cleaned.galleryUrls || [],
+        description: cleaned.description || '',
+        materials: Array.isArray(cleaned.materials) ? cleaned.materials : [],
+        sizes: Array.isArray(cleaned.sizes) ? cleaned.sizes : [],
+        sizeQuantities: cleaned.sizeQuantities || {},
+        hasColors: Boolean(cleaned.hasColors),
+        colorVariants: Array.isArray(cleaned.colorVariants)
+          ? cleaned.colorVariants.map((cv) => ({
+              colorName: cv.colorName || '',
+              colorHex: cv.colorHex || '',
+              garmentCode: cv.garmentCode || '',
+              imageUrl: cv.imageUrl || '',
+              galleryUrls: cv.galleryUrls || [],
+              sizeType: cv.sizeType,
+              sizes: Array.isArray(cv.sizes) ? cv.sizes : [],
+              sizeQuantities: cv.sizeQuantities || {},
+            }))
+          : [],
+        setItems: Array.isArray(cleaned.setItems) ? cleaned.setItems : [],
+      });
+    },
+    [buildFinalSavedProductFromDraft]
+  );
+
+  const hasUnsavedDraftProductChanges = React.useCallback(
+    (
+      original: ProductItem | undefined,
+      draft: ProductItem | null
+    ): boolean => {
+      if (!original || !draft) return false;
+      if (draftUploadedR2Urls.length > 0) return true;
+      return (
+        normalizeProductForDirtyCheck(original) !==
+        normalizeProductForDirtyCheck(draft)
+      );
+    },
+    [draftUploadedR2Urls, normalizeProductForDirtyCheck]
+  );
+
+  const handleAttemptCloseEditProductModal = () => {
+    if (!editingProductDraft) {
+      setEditingProductId(null);
+      return;
+    }
+    const original = products.find((p) => p.id === editingProductDraft.id);
+    if (hasUnsavedDraftProductChanges(original, editingProductDraft)) {
+      setDiscardDraftConfirmOpen(true);
+    } else {
+      setDraftUploadedR2Urls([]);
+      setProductPendingSave(null);
+      setDiscardDraftConfirmOpen(false);
+      setEditingProductId(null);
+    }
+  };
+
+  const handleConfirmDiscardDraftChanges = async () => {
+    const draftId = editingProductDraft?.id;
+    const original = draftId
+      ? products.find((p) => p.id === draftId)
+      : undefined;
+    const originalUrls = new Set(collectProductR2ImageUrls(original));
+    const orphanDraftUploads = draftUploadedR2Urls.filter(
+      (u) => u && !originalUrls.has(u)
+    );
+    setDiscardDraftConfirmOpen(false);
+    setProductPendingSave(null);
+    setDraftUploadedR2Urls([]);
+    if (draftId) {
+      setEditProdGarmentInputs((prev) => {
+        const next = { ...prev };
+        delete next[draftId];
+        return next;
+      });
+      setEditProdPriceInputs((prev) => {
+        const next = { ...prev };
+        delete next[draftId];
+        return next;
+      });
+      setEditProdDiscountInputs((prev) => {
+        const next = { ...prev };
+        delete next[draftId];
+        return next;
+      });
+    }
+    setEditingProductId(null);
+    if (orphanDraftUploads.length > 0) {
+      await deleteMediaFromR2(orphanDraftUploads);
+    }
+  };
+
+  const handleConfirmSaveProduct = async (draftToSave: ProductItem) => {
+    const finalProduct = buildFinalSavedProductFromDraft(draftToSave);
+    const original = products.find((p) => p.id === draftToSave.id);
+    const candidateOldUrls = Array.from(
+      new Set([
+        ...collectProductR2ImageUrls(original),
+        ...draftUploadedR2Urls,
+      ])
+    );
+    const keptUrlsOnThisProduct = new Set(
+      collectProductR2ImageUrls(finalProduct)
+    );
+    const otherProductsUrls = new Set(
+      products
+        .filter((p) => p.id !== draftToSave.id)
+        .flatMap((p) => collectProductR2ImageUrls(p))
+    );
+    const removedOrReplacedUrls = candidateOldUrls.filter(
+      (u) => u && !keptUrlsOnThisProduct.has(u) && !otherProductsUrls.has(u)
+    );
+
+    setProductPendingSave(null);
+    setDiscardDraftConfirmOpen(false);
+    setDraftUploadedR2Urls([]);
+
+    await onUpdateProductMeta(finalProduct.id, {
+      ...finalProduct,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (removedOrReplacedUrls.length > 0) {
+      await deleteMediaFromR2(removedOrReplacedUrls);
+    }
+
+    setItemFeedback(
+      `✓ Saved product "${finalProduct.name}" (${finalProduct.department.toUpperCase()} / ${finalProduct.category}${
+        finalProduct.isNewArrival ? ' · In New Arrivals' : ''
+      }).`
+    );
+    setEditingProductId(null);
   };
 
   const filteredOrders = filterOrdersByQuery(orders, orderSearchQuery);
@@ -3272,17 +3503,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (!editingProductId) {
       setEditingProductDraft(null);
+      setDraftUploadedR2Urls([]);
+      setProductPendingSave(null);
+      setDiscardDraftConfirmOpen(false);
       return;
     }
     const target = products.find((p) => p.id === editingProductId);
     if (!target) {
       setEditingProductDraft(null);
+      setDraftUploadedR2Urls([]);
+      setProductPendingSave(null);
+      setDiscardDraftConfirmOpen(false);
       return;
     }
     setEditingProductDraft((prev) => {
       if (prev && prev.id === editingProductId) {
         return prev;
       }
+      setDraftUploadedR2Urls([]);
+      setProductPendingSave(null);
+      setDiscardDraftConfirmOpen(false);
       const paddedGallery = [
         target.galleryUrls?.[0] || '',
         target.galleryUrls?.[1] || '',
@@ -5676,6 +5916,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <R2ImageUploadButton
                           ariaLabel="Upload Homepage Hero Image Banner"
                           label="Upload & Shrink Banner"
+                          previousUrlToCleanup={siteBanners.homeHeroImageUrl}
                           onUploaded={(url) => {
                             onUpdateSiteBanners({
                               ...siteBanners,
@@ -5732,6 +5973,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ariaLabel="Upload Homepage Desktop Hero Image Banner"
                             label="Upload Desktop Version (Optional)"
                             compressionOptions={DESKTOP_BANNER_COMPRESSION_OPTIONS}
+                            previousUrlToCleanup={siteBanners.homeHeroDesktopImageUrl}
                             onUploaded={(url) => {
                               onUpdateSiteBanners({
                                 ...siteBanners,
@@ -5918,6 +6160,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <R2ImageUploadButton
                             ariaLabel="Upload Homepage Middle Banner Photo"
                             label="Upload & Shrink Photo"
+                            previousUrlToCleanup={siteBanners.homeMiddleBannerUrl}
                             onUploaded={(url) =>
                               updateSiteBannerField(
                                 'homeMiddleBannerUrl',
@@ -5972,6 +6215,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ariaLabel="Upload Homepage Desktop Middle Banner Photo"
                             label="Upload Desktop Version (Optional)"
                             compressionOptions={DESKTOP_BANNER_COMPRESSION_OPTIONS}
+                            previousUrlToCleanup={siteBanners.homeMiddleDesktopBannerUrl}
                             onUploaded={(url) =>
                               updateSiteBannerField(
                                 'homeMiddleDesktopBannerUrl',
@@ -11020,7 +11264,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-confirm-title"
-          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
         >
           <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
             <div className="flex items-start gap-3.5">
@@ -11041,7 +11285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </strong>{' '}
                   ({productPendingDelete.department} ·{' '}
                   {productPendingDelete.category}) from the SAMO storefront and
-                  permanently delete its uploaded images.
+                  permanently delete its uploaded images from storage.
                 </p>
               </div>
             </div>
@@ -11060,6 +11304,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   const target = productPendingDelete;
                   setProductPendingDelete(null);
                   if (editingProductId === target.id) {
+                    if (draftUploadedR2Urls.length > 0) {
+                      deleteMediaFromR2(draftUploadedR2Urls).catch(() => {});
+                      setDraftUploadedR2Urls([]);
+                    }
                     setEditingProductId(null);
                   }
                   await onDeleteProduct(target.id);
@@ -11096,11 +11344,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   Are you sure you want to delete this image?
                 </h3>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  You are about to remove{' '}
-                  <strong className="text-white">
-                    {imagePendingDelete.label}
-                  </strong>{' '}
-                  from this item and permanently delete the image file.
+                  {imagePendingDelete.skipImmediateR2Delete ? (
+                    <>
+                      You are about to remove{' '}
+                      <strong className="text-white">
+                        {imagePendingDelete.label}
+                      </strong>{' '}
+                      from this item. The image file will be permanently deleted
+                      from storage when you confirm{' '}
+                      <strong className="text-white">Save Product</strong>.
+                    </>
+                  ) : (
+                    <>
+                      You are about to remove{' '}
+                      <strong className="text-white">
+                        {imagePendingDelete.label}
+                      </strong>{' '}
+                      from this item and permanently delete the image file.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -11118,12 +11380,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onClick={async () => {
                   const target = imagePendingDelete;
                   setImagePendingDelete(null);
-                  await deleteMediaFromR2(target.imageUrl);
+                  if (!target.skipImmediateR2Delete) {
+                    await deleteMediaFromR2(target.imageUrl);
+                  }
                   await target.onConfirm();
                 }}
                 className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
               >
                 Yes, Delete Image
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POP-UP MODAL 1D: SAVE PRODUCT CONFIRMATION ("Are you sure you want to save?")
+         ========================================================================= */}
+      {productPendingSave && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="save-product-confirm-title"
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-emerald-950/80 border border-emerald-800 text-emerald-400 flex items-center justify-center shrink-0">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3
+                  id="save-product-confirm-title"
+                  className="text-base font-bold text-white"
+                >
+                  Are you sure you want to save these changes?
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  You are about to publish your updates to{' '}
+                  <strong className="text-white">
+                    {productPendingSave.name}
+                  </strong>{' '}
+                  ({productPendingSave.department.toUpperCase()} ·{' '}
+                  {productPendingSave.category}) on the live SAMO storefront and
+                  clean up any deleted or replaced photos from storage.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setProductPendingSave(null)}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = productPendingSave;
+                  await handleConfirmSaveProduct(target);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Yes, Save Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POP-UP MODAL 1E: DISCARD UNSAVED CHANGES CONFIRMATION ("Are you sure?")
+         ========================================================================= */}
+      {discardDraftConfirmOpen && editingProduct && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-draft-confirm-title"
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-amber-950/80 border border-amber-800 text-amber-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3
+                  id="discard-draft-confirm-title"
+                  className="text-base font-bold text-white"
+                >
+                  Discard unsaved changes?
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  You have unsaved changes on{' '}
+                  <strong className="text-white">{editingProduct.name}</strong>.
+                  If you close now, your edits will not be saved to the live
+                  website.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDiscardDraftConfirmOpen(false)}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleConfirmDiscardDraftChanges();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Yes, Discard Changes
               </button>
             </div>
           </div>
@@ -11540,7 +11914,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setEditingProductId(null)}
+                onClick={handleAttemptCloseEditProductModal}
                 aria-label="Close Edit Product Modal"
                 className="p-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 cursor-pointer shrink-0"
               >
@@ -12812,7 +13186,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             : 'Upload Photo'
                                         }
                                         ariaLabel={`Upload Photo 1 for ${prod.name} color ${variant.colorName}`}
-                                        onUploaded={(url) =>
+                                        onUploaded={(url) => {
+                                          setDraftUploadedR2Urls((prev) =>
+                                            prev.includes(url)
+                                              ? prev
+                                              : [...prev, url]
+                                          );
                                           handleCatalogVariantChange(
                                             prod,
                                             variant.colorName,
@@ -12820,8 +13199,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                               ...v,
                                               imageUrl: url,
                                             })
-                                          )
-                                        }
+                                          );
+                                        }}
                                       />
                                       {Boolean(variant.imageUrl?.trim()) && (
                                         <button
@@ -12830,6 +13209,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             setImagePendingDelete({
                                               label: `${prod.name} (${variant.colorName} · Photo #1)`,
                                               imageUrl: variant.imageUrl,
+                                              skipImmediateR2Delete: true,
                                               onConfirm: () =>
                                                 handleCatalogVariantChange(
                                                   prod,
@@ -12899,7 +13279,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                               : 'Upload Photo'
                                           }
                                           ariaLabel={`Upload Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
-                                          onUploaded={(url) =>
+                                          onUploaded={(url) => {
+                                            setDraftUploadedR2Urls((prev) =>
+                                              prev.includes(url)
+                                                ? prev
+                                                : [...prev, url]
+                                            );
                                             handleCatalogVariantChange(
                                               prod,
                                               variant.colorName,
@@ -12920,8 +13305,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                   galleryUrls: nextGallery,
                                                 };
                                               }
-                                            )
-                                          }
+                                            );
+                                          }}
                                         />
                                         {Boolean(gUrls[gIdx]?.trim()) && (
                                           <button
@@ -12930,6 +13315,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                               setImagePendingDelete({
                                                 label: `${prod.name} (${variant.colorName} · Photo #${gIdx + 2})`,
                                                 imageUrl: gUrls[gIdx],
+                                                skipImmediateR2Delete: true,
                                                 onConfirm: () =>
                                                   handleCatalogVariantChange(
                                                     prod,
@@ -13544,9 +13930,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 : 'Upload Photo'
                             }
                             ariaLabel={`Upload Primary Photo for ${prod.name}`}
-                            onUploaded={(url) =>
-                              handleUpdateDraftProductMeta(prod.id, { imageUrl: url })
-                            }
+                            onUploaded={(url) => {
+                              setDraftUploadedR2Urls((prev) =>
+                                prev.includes(url) ? prev : [...prev, url]
+                              );
+                              handleUpdateDraftProductMeta(prod.id, {
+                                imageUrl: url,
+                              });
+                            }}
                           />
                           {Boolean(prod.imageUrl?.trim()) && (
                             <button
@@ -13555,6 +13946,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 setImagePendingDelete({
                                   label: `${prod.name} (Primary Image #1)`,
                                   imageUrl: prod.imageUrl,
+                                  skipImmediateR2Delete: true,
                                   onConfirm: () =>
                                     handleUpdateDraftProductMeta(prod.id, {
                                       imageUrl: '',
@@ -13610,6 +14002,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   prod.name
                                 }`}
                                 onUploaded={(url) => {
+                                  setDraftUploadedR2Urls((prev) =>
+                                    prev.includes(url) ? prev : [...prev, url]
+                                  );
                                   const current = [
                                     prod.galleryUrls?.[0] || '',
                                     prod.galleryUrls?.[1] || '',
@@ -13628,6 +14023,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     setImagePendingDelete({
                                       label: `${prod.name} (Image #${gIdx + 2})`,
                                       imageUrl: currentGalleryUrl,
+                                      skipImmediateR2Delete: true,
                                       onConfirm: () => {
                                         const current = [
                                           prod.galleryUrls?.[0] || '',
@@ -13662,7 +14058,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingProductId(null);
                         setProductPendingDelete(prod);
                       }}
                       className="px-3.5 py-2 rounded-xl border border-red-300 text-red-700 hover:bg-red-50 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
@@ -13673,42 +14068,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <button
                       type="button"
-                      onClick={async () => {
-                        const rawGarmentInput = editProdGarmentInputs[prod.id];
-                        const finalGarmentCode =
-                          rawGarmentInput !== undefined
-                            ? cleanGarmentCode(rawGarmentInput)
-                            : prod.garmentCode;
-                        const cleanedGallery = (prod.galleryUrls || [])
-                          .map((u) => (typeof u === 'string' ? u.trim() : ''))
-                          .filter((u) => Boolean(u));
-                        const cleanedColorVariants = Array.isArray(
-                          prod.colorVariants
-                        )
-                          ? prod.colorVariants.map((cv) => ({
-                              ...cv,
-                              galleryUrls: (cv.galleryUrls || [])
-                                .map((u) =>
-                                  typeof u === 'string' ? u.trim() : ''
-                                )
-                                .filter((u) => Boolean(u)),
-                            }))
-                          : [];
-
-                        await onUpdateProductMeta(prod.id, {
-                          ...prod,
-                          garmentCode: finalGarmentCode,
-                          galleryUrls: cleanedGallery,
-                          colorVariants: cleanedColorVariants,
-                          updatedAt: new Date().toISOString(),
-                        });
-
-                        setItemFeedback(
-                          `✓ Saved product "${prod.name}" (${prod.department.toUpperCase()} / ${prod.category}${
-                            prod.isNewArrival ? ' · In New Arrivals' : ''
-                          }).`
-                        );
-                        setEditingProductId(null);
+                      onClick={() => {
+                        setProductPendingSave(prod);
                       }}
                       className="px-5 sm:px-6 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer flex items-center gap-1.5"
                     >
@@ -14000,6 +14361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             itemUrl.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
                           ariaLabel="Upload Photo for Primary Image URL 1"
+                          previousUrlToCleanup={itemUrl}
                           onUploaded={(url) => setItemUrl(url)}
                         />
                         {Boolean(itemUrl.trim()) && (
@@ -14042,6 +14404,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             itemUrl2.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
                           ariaLabel="Upload Photo for Image URL 2"
+                          previousUrlToCleanup={itemUrl2}
                           onUploaded={(url) => setItemUrl2(url)}
                         />
                         {Boolean(itemUrl2.trim()) && (
@@ -14084,6 +14447,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             itemUrl3.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
                           ariaLabel="Upload Photo for Image URL 3"
+                          previousUrlToCleanup={itemUrl3}
                           onUploaded={(url) => setItemUrl3(url)}
                         />
                         {Boolean(itemUrl3.trim()) && (
@@ -14126,6 +14490,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             itemUrl4.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
                           ariaLabel="Upload Photo for Image URL 4"
+                          previousUrlToCleanup={itemUrl4}
                           onUploaded={(url) => setItemUrl4(url)}
                         />
                         {Boolean(itemUrl4.trim()) && (
@@ -15113,6 +15478,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           : 'Upload Photo'
                                       }
                                       ariaLabel={`Upload Photo 1 for color ${dc.colorName}`}
+                                      previousUrlToCleanup={dc.imageUrl}
                                       onUploaded={(url) =>
                                         updateDraftColorField(
                                           dc.colorName,
@@ -15197,6 +15563,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             : 'Upload Photo'
                                         }
                                         ariaLabel={`Upload Photo ${gIdx + 2} for color ${dc.colorName}`}
+                                        previousUrlToCleanup={gUrls[gIdx]}
                                         onUploaded={(url) =>
                                           updateDraftColorField(
                                             dc.colorName,
