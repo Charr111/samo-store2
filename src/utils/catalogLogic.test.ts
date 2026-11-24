@@ -2079,6 +2079,7 @@ import {
   buildGoogleAppsScriptForSamoSheet,
   buildGoogleSheetInventoryRows,
   isValidGoogleAppsScriptWebhookUrl,
+  mergeConcurrentOrdersById,
   parseGoogleSheetQuantity,
   parseGoogleSheetSellingPrice,
 } from './catalogLogic';
@@ -2200,9 +2201,66 @@ test('buildGoogleSheetInventoryRows & applyGoogleSheetUpdatesToCatalog handle 14
   });
   assert.ok(script.includes('https://samoweave.com/api/sheets-sync'));
   assert.ok(script.includes('Connected samo website catalog'));
+  assert.ok(script.includes('getColumnMap_'));
+  assert.ok(script.includes('qtyIdx: 8'));
+  assert.ok(script.includes('qtyColNum: 9'));
   assert.ok(!script.includes('appendRow'));
   assert.ok(script.includes('onSamoSheetEdit'));
   assert.ok(script.includes('setupAutomaticSyncTrigger'));
 });
+
+test('mergeConcurrentOrdersById preserves orders from two customers shopping concurrently while honoring admin status updates and deletions', () => {
+  const existingOnServer = [
+    {
+      id: 'ord-customer-a',
+      createdAt: '2026-11-24T14:00:05.000Z',
+      status: 'accepted',
+      totalPrice: 95,
+    },
+    {
+      id: 'ord-older-1',
+      createdAt: '2026-11-24T12:00:00.000Z',
+      status: 'pending',
+      totalPrice: 120,
+    },
+  ];
+
+  // Customer B submits their order before their browser pulled Customer A's order
+  const incomingFromCustomerB = [
+    {
+      id: 'ord-customer-b',
+      createdAt: '2026-11-24T14:00:08.000Z',
+      status: 'accepted',
+      totalPrice: 140,
+    },
+    {
+      id: 'ord-older-1',
+      createdAt: '2026-11-24T12:00:00.000Z',
+      status: 'accepted', // updated status wins
+      totalPrice: 120,
+    },
+  ];
+
+  const merged = mergeConcurrentOrdersById(
+    existingOnServer,
+    incomingFromCustomerB,
+    []
+  );
+  assert.equal(merged.length, 3);
+  assert.equal(merged[0].id, 'ord-customer-b');
+  assert.equal(merged[1].id, 'ord-customer-a');
+  assert.equal(merged[2].id, 'ord-older-1');
+  assert.equal(merged[2].status, 'accepted');
+
+  // Explicit deletion removes only the deleted order
+  const afterDelete = mergeConcurrentOrdersById(
+    merged,
+    incomingFromCustomerB,
+    ['ord-older-1']
+  );
+  assert.equal(afterDelete.length, 2);
+  assert.ok(afterDelete.every((o) => o.id !== 'ord-older-1'));
+});
+
 
 

@@ -821,25 +821,23 @@ export async function writeD1CatalogPatch(
     await upsertD1Setting('deletedCategoryIds', patch.deletedCategoryIds);
   }
 
-  // 5. Orders & Deleted Orders
+  // 5. Orders & Deleted Orders (Non-destructive upsert + targeted delete of deletedOrderIds only)
   const deletedOrdIds: string[] = Array.isArray((patch as any).deletedOrderIds)
     ? (patch as any).deletedOrderIds
     : [];
   const deletedOrdSet = new Set(deletedOrdIds);
+  if (deletedOrdIds.length > 0) {
+    for (const id of deletedOrdIds) {
+      await d1Query('DELETE FROM orders WHERE id = ?;', [id]);
+    }
+    await upsertD1Setting('deletedOrderIds', deletedOrdIds);
+  }
   if (Array.isArray(patch.orders)) {
-    await d1Query('DELETE FROM orders;');
     for (const ord of patch.orders as any[]) {
       if (ord && ord.id && !deletedOrdSet.has(ord.id)) {
         await upsertD1Order(ord);
       }
     }
-  } else if (deletedOrdIds.length > 0) {
-    for (const id of deletedOrdIds) {
-      await d1Query('DELETE FROM orders WHERE id = ?;', [id]);
-    }
-  }
-  if (deletedOrdIds.length > 0) {
-    await upsertD1Setting('deletedOrderIds', deletedOrdIds);
   }
 
   // 6. Preorders

@@ -4301,18 +4301,18 @@ export function buildGoogleAppsScriptForSamoSheet(options: {
 
   return `/**
  * ============================================================================
- * SAMO — STRICT QUANTITY-ONLY SYNC
+ * SAMO — STRICT QUANTITY-ONLY SYNC (11-COLUMN LAYOUT: A TO K)
  * Locked strictly to tab: "Connected samo website catalog"
  * ============================================================================
- * - Updates ONLY Quantity (Col J) and Live/Sold Out Status (Col L)
- * - NEVER touches Product Names (Col F), Prices (Col K), or any other tab
+ * - Updates ONLY Quantity (Col I) and Live/Sold Out Status (Col K)
+ * - NEVER touches Product Names (Col E), Prices (Col J), or any other tab
  * - NEVER appends, moves, or mixes rows
  */
 
 const WEBSITE_SYNC_ENDPOINT = '${cleanOrigin}/api/sheets-sync';
 const SYNC_SECRET = '${cleanSecret}';
 
-// Strictly locked to your exact mini-sheet / tab name:
+// Strictly locked to your exact mini-sheet / tab name (case-insensitive match):
 const TARGET_SHEET_NAME = 'Connected samo website catalog';
 
 function normToken_(val) {
@@ -4353,16 +4353,53 @@ function getSamoInventorySheet_(ss) {
 }
 
 /**
+ * Auto-detects column positions from Row 1 headers (defaults to the 11-column A-K layout:
+ * SKU=Col A, Garment Code=Col B, Name=Col E, Color=Col F, Size=Col H, Quantity=Col I, Status=Col K,
+ * with automatic fallback if a 12-column header with "New Arrivals" in Col E is present).
+ */
+function getColumnMap_(sheet) {
+  const lastCol = Math.max(11, Math.min(14, sheet.getLastColumn() || 11));
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const hasNewArrivalsColE = normToken_(headers[4]) === 'NEW ARRIVALS';
+  if (hasNewArrivalsColE) {
+    return {
+      skuIdx: 0,
+      codeIdx: 1,
+      nameIdx: 5,
+      colorIdx: 6,
+      sizeIdx: 8,
+      qtyIdx: 9,
+      qtyColNum: 10,
+      statusIdx: 11,
+      statusColNum: 12,
+      totalCols: 12
+    };
+  }
+  return {
+    skuIdx: 0,
+    codeIdx: 1,
+    nameIdx: 4,      // Col E: SAMO Product Name
+    colorIdx: 5,     // Col F: Color Option
+    sizeIdx: 7,      // Col H: Size
+    qtyIdx: 8,       // Col I: Quantity (0-based index 8)
+    qtyColNum: 9,    // Col I: Quantity (1-based column 9)
+    statusIdx: 10,   // Col K: Website Status (0-based index 10)
+    statusColNum: 11,// Col K: Website Status (1-based column 11)
+    totalCols: 11
+  };
+}
+
+/**
  * Ensures a row is an actual product row (skips blank rows and section headers).
  */
-function isProductDataRow_(rowVals) {
-  const colB = normToken_(rowVals[1]);
-  const colF = normToken_(rowVals[5]);
-  const colI = normToken_(rowVals[8]);
-  const colJ = normToken_(rowVals[9]);
+function isProductDataRow_(rowVals, colMap) {
+  const colB = normToken_(rowVals[colMap.codeIdx]);
+  const colName = normToken_(rowVals[colMap.nameIdx]);
+  const colSize = normToken_(rowVals[colMap.sizeIdx]);
+  const colQty = normToken_(rowVals[colMap.qtyIdx]);
 
-  if (!colB && !colF && !colI) return false;
-  if (colB === 'GARMENT CODE' || colF === 'SAMO PRODUCT NAME' || colJ === 'QUANTITY') {
+  if (!colB && !colName && !colSize) return false;
+  if (colB === 'GARMENT CODE' || colName === 'SAMO PRODUCT NAME' || colQty === 'QUANTITY') {
     return false;
   }
   return true;
@@ -4384,7 +4421,7 @@ function setupAutomaticSyncTrigger() {
 
 /**
  * SHEET -> WEBSITE (QUANTITY ONLY):
- * Fires ONLY if you edit Column J (Column 10 = Quantity) inside "Connected samo website catalog".
+ * Fires ONLY if you edit the Quantity column (Column I = Column 9) inside "Connected samo website catalog".
  */
 function onSamoSheetEdit(e) {
   if (!e || !e.range) return;
@@ -4392,35 +4429,36 @@ function onSamoSheetEdit(e) {
   const targetSheet = getSamoInventorySheet_(SpreadsheetApp.getActiveSpreadsheet());
   if (!targetSheet || sheet.getSheetId() !== targetSheet.getSheetId()) return;
 
+  const colMap = getColumnMap_(sheet);
   const startRow = e.range.getRow();
   const numRows = e.range.getNumRows();
   const startCol = e.range.getColumn();
   const numCols = e.range.getNumColumns();
 
-  // Watch ONLY Column J (Column 10 = Quantity)
-  const touchesQuantityOnly = (startCol <= 10 && startCol + numCols - 1 >= 10);
+  // Watch ONLY the Quantity column (Column I = Column 9)
+  const touchesQuantityOnly = (startCol <= colMap.qtyColNum && startCol + numCols - 1 >= colMap.qtyColNum);
   if (!touchesQuantityOnly) return;
 
   const updates = [];
   for (let r = startRow; r < startRow + numRows; r++) {
     if (r <= 1) continue;
-    const rowVals = sheet.getRange(r, 1, 1, 12).getValues()[0];
-    if (!isProductDataRow_(rowVals)) continue;
+    const rowVals = sheet.getRange(r, 1, 1, colMap.totalCols).getValues()[0];
+    if (!isProductDataRow_(rowVals, colMap)) continue;
 
-    const sku = String(rowVals[0] || '').trim();
-    const garmentCode = String(rowVals[1] || '').trim();
-    const productName = String(rowVals[5] || '').trim();
-    const colorOption = String(rowVals[6] || 'NONE').trim() || 'NONE';
-    const size = String(rowVals[8] || '').trim();
-    const rawQty = rowVals[9];
+    const sku = String(rowVals[colMap.skuIdx] || '').trim();
+    const garmentCode = String(rowVals[colMap.codeIdx] || '').trim();
+    const productName = String(rowVals[colMap.nameIdx] || '').trim();
+    const colorOption = String(rowVals[colMap.colorIdx] || 'NONE').trim() || 'NONE';
+    const size = String(rowVals[colMap.sizeIdx] || '').trim();
+    const rawQty = rowVals[colMap.qtyIdx];
 
     const qtyNum = Number(rawQty);
     if (!Number.isFinite(qtyNum) || qtyNum < 0) continue;
 
     const nextStatus = Math.floor(qtyNum) > 0 ? 'Live' : 'Sold Out';
-    const currStatus = String(rowVals[11] || '').trim();
+    const currStatus = String(rowVals[colMap.statusIdx] || '').trim();
     if ((currStatus === 'Live' || currStatus === 'Sold Out') && currStatus !== nextStatus) {
-      sheet.getRange(r, 12).setValue(nextStatus);
+      sheet.getRange(r, colMap.statusColNum).setValue(nextStatus);
     }
 
     updates.push({
@@ -4468,6 +4506,7 @@ function doPost(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
+    const colMap = getColumnMap_(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) {
       return ContentService.createTextOutput(
@@ -4477,17 +4516,17 @@ function doPost(e) {
 
     if (body.action === 'read_sheet_rows') {
       const rows = [];
-      const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const data = sheet.getRange(2, 1, lastRow - 1, colMap.totalCols).getValues();
       for (let i = 0; i < data.length; i++) {
         const r = data[i];
-        if (!isProductDataRow_(r)) continue;
+        if (!isProductDataRow_(r, colMap)) continue;
         rows.push({
-          sku: String(r[0] || '').trim(),
-          garmentCode: String(r[1] || '').trim(),
-          productName: String(r[5] || '').trim(),
-          colorOption: String(r[6] || 'NONE').trim() || 'NONE',
-          size: String(r[8] || '').trim(),
-          quantity: r[9]
+          sku: String(r[colMap.skuIdx] || '').trim(),
+          garmentCode: String(r[colMap.codeIdx] || '').trim(),
+          productName: String(r[colMap.nameIdx] || '').trim(),
+          colorOption: String(r[colMap.colorIdx] || 'NONE').trim() || 'NONE',
+          size: String(r[colMap.sizeIdx] || '').trim(),
+          quantity: r[colMap.qtyIdx]
         });
       }
       return ContentService.createTextOutput(
@@ -4502,7 +4541,7 @@ function doPost(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
-    const existingData = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    const existingData = sheet.getRange(2, 1, lastRow - 1, colMap.totalCols).getValues();
     let updatedCount = 0;
 
     for (let i = 0; i < incomingRows.length; i++) {
@@ -4515,16 +4554,16 @@ function doPost(e) {
 
       let matchedRowIdx = -1;
 
-      // Priority 1: Garment Code (Col B) + Product Name (Col F) + Color (Col G) + Size (Col I)
+      // Priority 1: Garment Code (Col B) + Product Name (Col E) + Color (Col F) + Size (Col H)
       if (itemCode && itemName) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
-          if (!isProductDataRow_(row)) continue;
+          if (!isProductDataRow_(row, colMap)) continue;
           if (
-            normCode_(row[1]) === itemCode &&
-            normToken_(row[5]) === itemName &&
-            normColor_(row[6]) === itemColor &&
-            normSize_(row[8]) === itemSize
+            normCode_(row[colMap.codeIdx]) === itemCode &&
+            normToken_(row[colMap.nameIdx]) === itemName &&
+            normColor_(row[colMap.colorIdx]) === itemColor &&
+            normSize_(row[colMap.sizeIdx]) === itemSize
           ) {
             matchedRowIdx = r;
             break;
@@ -4532,15 +4571,15 @@ function doPost(e) {
         }
       }
 
-      // Priority 2: Garment Code (Col B) + Color (Col G) + Size (Col I)
+      // Priority 2: Garment Code (Col B) + Color (Col F) + Size (Col H)
       if (matchedRowIdx === -1 && itemCode) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
-          if (!isProductDataRow_(row)) continue;
+          if (!isProductDataRow_(row, colMap)) continue;
           if (
-            normCode_(row[1]) === itemCode &&
-            normColor_(row[6]) === itemColor &&
-            normSize_(row[8]) === itemSize
+            normCode_(row[colMap.codeIdx]) === itemCode &&
+            normColor_(row[colMap.colorIdx]) === itemColor &&
+            normSize_(row[colMap.sizeIdx]) === itemSize
           ) {
             matchedRowIdx = r;
             break;
@@ -4548,15 +4587,15 @@ function doPost(e) {
         }
       }
 
-      // Priority 3: Product Name (Col F) + Color (Col G) + Size (Col I)
+      // Priority 3: Product Name (Col E) + Color (Col F) + Size (Col H)
       if (matchedRowIdx === -1 && itemName) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
-          if (!isProductDataRow_(row)) continue;
+          if (!isProductDataRow_(row, colMap)) continue;
           if (
-            normToken_(row[5]) === itemName &&
-            normColor_(row[6]) === itemColor &&
-            normSize_(row[8]) === itemSize
+            normToken_(row[colMap.nameIdx]) === itemName &&
+            normColor_(row[colMap.colorIdx]) === itemColor &&
+            normSize_(row[colMap.sizeIdx]) === itemSize
           ) {
             matchedRowIdx = r;
             break;
@@ -4564,15 +4603,15 @@ function doPost(e) {
         }
       }
 
-      // Priority 4: SKU (Col A) + Color (Col G) + Size (Col I)
+      // Priority 4: SKU (Col A) + Color (Col F) + Size (Col H)
       if (matchedRowIdx === -1 && itemSku) {
         for (let r = 0; r < existingData.length; r++) {
           const row = existingData[r];
-          if (!isProductDataRow_(row)) continue;
+          if (!isProductDataRow_(row, colMap)) continue;
           if (
-            normToken_(row[0]) === itemSku &&
-            normColor_(row[6]) === itemColor &&
-            normSize_(row[8]) === itemSize
+            normToken_(row[colMap.skuIdx]) === itemSku &&
+            normColor_(row[colMap.colorIdx]) === itemColor &&
+            normSize_(row[colMap.sizeIdx]) === itemSize
           ) {
             matchedRowIdx = r;
             break;
@@ -4587,13 +4626,13 @@ function doPost(e) {
       const nextStatus = nextQty > 0 ? 'Live' : 'Sold Out';
       const sheetRowNumber = matchedRowIdx + 2;
 
-      const currQtyRaw = existingData[matchedRowIdx][9];
+      const currQtyRaw = existingData[matchedRowIdx][colMap.qtyIdx];
       const currQty = (currQtyRaw === '' || currQtyRaw == null) ? -1 : Number(currQtyRaw);
-      const currStatusStr = String(existingData[matchedRowIdx][11] || '').trim();
+      const currStatusStr = String(existingData[matchedRowIdx][colMap.statusIdx] || '').trim();
 
       if (currQty !== nextQty) {
-        sheet.getRange(sheetRowNumber, 10).setValue(nextQty);
-        existingData[matchedRowIdx][9] = nextQty;
+        sheet.getRange(sheetRowNumber, colMap.qtyColNum).setValue(nextQty);
+        existingData[matchedRowIdx][colMap.qtyIdx] = nextQty;
         updatedCount++;
       }
 
@@ -4601,8 +4640,8 @@ function doPost(e) {
         (currStatusStr === 'Live' || currStatusStr === 'Sold Out' || currStatusStr === '') &&
         currStatusStr !== nextStatus
       ) {
-        sheet.getRange(sheetRowNumber, 12).setValue(nextStatus);
-        existingData[matchedRowIdx][11] = nextStatus;
+        sheet.getRange(sheetRowNumber, colMap.statusColNum).setValue(nextStatus);
+        existingData[matchedRowIdx][colMap.statusIdx] = nextStatus;
       }
     }
 
@@ -4621,4 +4660,58 @@ function doPost(e) {
 }
 `;
 }
+
+/**
+ * Merges incoming orders with existing stored orders by `id`, ensuring that if two customers
+ * place orders concurrently before their browsers poll the latest catalog, neither order is
+ * ever lost, while incoming edits (such as admin status updates) win for matching order IDs
+ * and explicitly deleted order IDs are excluded.
+ */
+export function mergeConcurrentOrdersById<
+  T extends { id?: string; createdAt?: string }
+>(
+  existingOrders: T[] | undefined | null,
+  incomingOrders: T[] | undefined | null,
+  deletedOrderIds: string[] = []
+): T[] {
+  const deletedSet = new Set(deletedOrderIds);
+  const incomingList = Array.isArray(incomingOrders) ? incomingOrders : [];
+  const existingList = Array.isArray(existingOrders) ? existingOrders : [];
+
+  const mergedMap = new Map<string, T>();
+  const orderedIds: string[] = [];
+
+  for (const ord of incomingList) {
+    if (!ord || !ord.id || deletedSet.has(ord.id)) continue;
+    if (!mergedMap.has(ord.id)) {
+      orderedIds.push(ord.id);
+    }
+    mergedMap.set(ord.id, ord);
+  }
+
+  for (const ord of existingList) {
+    if (!ord || !ord.id || deletedSet.has(ord.id)) continue;
+    if (!mergedMap.has(ord.id)) {
+      orderedIds.push(ord.id);
+      mergedMap.set(ord.id, ord);
+    }
+  }
+
+  const merged = orderedIds
+    .map((id) => mergedMap.get(id))
+    .filter((o): o is T => Boolean(o));
+
+  // Keep newest orders first if createdAt ISO timestamps are present
+  merged.sort((a, b) => {
+    const aMs = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const bMs = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) {
+      return bMs - aMs;
+    }
+    return 0;
+  });
+
+  return merged;
+}
+
 

@@ -533,12 +533,17 @@ export default function App() {
       )
     );
   });
-  const [products, setProducts] = useState<ProductItem[]>(() =>
-    normalizeStoredProducts(
+  const [products, setProducts] = useState<ProductItem[]>(() => {
+    const initialNormalized = normalizeStoredProducts(
       loadStored(STORAGE_KEYS.products, INITIAL_PRODUCTS),
       loadStored(STORAGE_KEYS.deletedProducts, [...LEGACY_REMOVED_PRODUCT_IDS])
-    )
-  );
+    );
+    if (!lastPushedSheetsQuantitySignature) {
+      lastPushedSheetsQuantitySignature =
+        buildProductsQuantitySignature(initialNormalized);
+    }
+    return initialNormalized;
+  });
   const [promoCodes, setPromoCodes] = useState<PromoCodeItem[]>(() =>
     loadStored(STORAGE_KEYS.promos, INITIAL_PROMO_CODES)
   );
@@ -1354,10 +1359,8 @@ export default function App() {
             data.products as ProductItem[],
             remoteDeletedIds
           );
-          if (!lastPushedSheetsQuantitySignature) {
-            lastPushedSheetsQuantitySignature =
-              buildProductsQuantitySignature(normalizedRemoteProducts);
-          }
+          lastPushedSheetsQuantitySignature =
+            buildProductsQuantitySignature(normalizedRemoteProducts);
           setProducts(normalizedRemoteProducts);
         }
 

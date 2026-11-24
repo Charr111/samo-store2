@@ -191,8 +191,61 @@ async function readCatalogState(): Promise<PersistedCatalogState> {
 async function writeCatalogState(
   patch: Partial<PersistedCatalogState>
 ): Promise<PersistedCatalogState> {
+  const current = await readCatalogState();
+  const mergedDeletedOrders = Array.from(
+    new Set([
+      ...(Array.isArray(current.deletedOrderIds) ? current.deletedOrderIds : []),
+      ...(Array.isArray(patch.deletedOrderIds) ? patch.deletedOrderIds : []),
+    ])
+  );
+  const deletedOrderSet = new Set(mergedDeletedOrders);
+
+  let effectivePatch: Partial<PersistedCatalogState> = patch;
+  if (Array.isArray(patch.orders)) {
+    const incomingOrders = patch.orders as Array<{ id?: string; createdAt?: string }>;
+    const existingOrders = Array.isArray(current.orders)
+      ? (current.orders as Array<{ id?: string; createdAt?: string }>)
+      : [];
+    const mergedMap = new Map<string, { id?: string; createdAt?: string }>();
+    const orderedIds: string[] = [];
+
+    for (const ord of incomingOrders) {
+      if (!ord || !ord.id || deletedOrderSet.has(ord.id)) continue;
+      if (!mergedMap.has(ord.id)) orderedIds.push(ord.id);
+      mergedMap.set(ord.id, ord);
+    }
+    for (const ord of existingOrders) {
+      if (!ord || !ord.id || deletedOrderSet.has(ord.id)) continue;
+      if (!mergedMap.has(ord.id)) {
+        orderedIds.push(ord.id);
+        mergedMap.set(ord.id, ord);
+      }
+    }
+
+    const mergedOrders = orderedIds
+      .map((id) => mergedMap.get(id))
+      .filter((o): o is { id?: string; createdAt?: string } => Boolean(o));
+
+    mergedOrders.sort((a, b) => {
+      const aMs = a.createdAt ? Date.parse(a.createdAt) : 0;
+      const bMs = b.createdAt ? Date.parse(b.createdAt) : 0;
+      if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) {
+        return bMs - aMs;
+      }
+      return 0;
+    });
+
+    effectivePatch = {
+      ...patch,
+      orders: mergedOrders,
+      ...(mergedDeletedOrders.length > 0
+        ? { deletedOrderIds: mergedDeletedOrders }
+        : {}),
+    };
+  }
+
   try {
-    await writeD1CatalogPatch(patch);
+    await writeD1CatalogPatch(effectivePatch);
     const refreshed = await readD1CatalogState();
     if (refreshed) {
       cachedD1Catalog = refreshed;
@@ -205,10 +258,9 @@ async function writeCatalogState(
   } catch (err) {
     console.warn('[SAMO Weave] D1 write notice, falling back to local state:', err);
   }
-  const current = await readCatalogState();
   const next: PersistedCatalogState = {
     ...current,
-    ...patch,
+    ...effectivePatch,
     updatedAt: Date.now(),
   };
   cachedD1Catalog = next;

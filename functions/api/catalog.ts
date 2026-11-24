@@ -1162,6 +1162,57 @@ export async function applyCatalogPatch(
   );
   const deletedOrderSet = new Set(mergedDeletedOrders);
 
+  // Merge incoming orders with existing orders by id so concurrent customer checkouts never drop each other's orders
+  let nextOrdersList: Array<{ id?: string; createdAt?: string }> | undefined;
+  if (Array.isArray(effectivePatch.orders)) {
+    const incomingOrders = effectivePatch.orders as Array<{
+      id?: string;
+      createdAt?: string;
+    }>;
+    const existingOrders = Array.isArray(current.orders)
+      ? (current.orders as Array<{ id?: string; createdAt?: string }>)
+      : [];
+    const mergedOrderMap = new Map<string, { id?: string; createdAt?: string }>();
+    const orderedIds: string[] = [];
+
+    for (const ord of incomingOrders) {
+      if (!ord || !ord.id || deletedOrderSet.has(ord.id)) continue;
+      if (!mergedOrderMap.has(ord.id)) {
+        orderedIds.push(ord.id);
+      }
+      mergedOrderMap.set(ord.id, ord);
+    }
+    for (const ord of existingOrders) {
+      if (!ord || !ord.id || deletedOrderSet.has(ord.id)) continue;
+      if (!mergedOrderMap.has(ord.id)) {
+        orderedIds.push(ord.id);
+        mergedOrderMap.set(ord.id, ord);
+      }
+    }
+
+    nextOrdersList = orderedIds
+      .map((id) => mergedOrderMap.get(id))
+      .filter((o): o is { id?: string; createdAt?: string } => Boolean(o));
+
+    nextOrdersList.sort((a, b) => {
+      const aMs = a.createdAt ? Date.parse(a.createdAt) : 0;
+      const bMs = b.createdAt ? Date.parse(b.createdAt) : 0;
+      if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) {
+        return bMs - aMs;
+      }
+      return 0;
+    });
+
+    effectivePatch = {
+      ...effectivePatch,
+      orders: nextOrdersList,
+    };
+  } else if (Array.isArray(current.orders)) {
+    nextOrdersList = (current.orders as Array<{ id?: string; createdAt?: string }>).filter(
+      (o) => o && o.id && !deletedOrderSet.has(o.id)
+    );
+  }
+
   // 1. Write to Cloudflare D1 SQL if D1 binding is configured (Strict Delta-Only)
   if (d1Binding) {
     try {
@@ -1177,16 +1228,6 @@ export async function applyCatalogPatch(
       console.error('Failed to write patch to D1 in Pages:', d1Err);
     }
   }
-
-  const nextOrdersList = Array.isArray(effectivePatch.orders)
-    ? (effectivePatch.orders as Array<{ id?: string }>).filter(
-        (o) => o && o.id && !deletedOrderSet.has(o.id)
-      )
-    : Array.isArray(current.orders)
-    ? (current.orders as Array<{ id?: string }>).filter(
-        (o) => o && o.id && !deletedOrderSet.has(o.id)
-      )
-    : undefined;
 
   const nextState: Record<string, unknown> = {
     ...current,
