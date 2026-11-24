@@ -1333,9 +1333,30 @@ export default function App() {
           );
         }
         if (data.siteBanners && typeof data.siteBanners === 'object') {
+          const remoteBanners = data.siteBanners as Partial<SiteBannersConfig>;
           setSiteBanners((prev) =>
             mergeSiteBannersConfig(
-              { ...prev, ...(data.siteBanners as Partial<SiteBannersConfig>) },
+              {
+                ...prev,
+                ...remoteBanners,
+                ...(typeof remoteBanners.shippingFeeEnabled === 'boolean'
+                  ? { shippingFeeEnabled: remoteBanners.shippingFeeEnabled }
+                  : {}),
+                ...(typeof remoteBanners.standardDeliveryFee === 'number' &&
+                Number.isFinite(remoteBanners.standardDeliveryFee)
+                  ? { standardDeliveryFee: remoteBanners.standardDeliveryFee }
+                  : {}),
+                ...(typeof remoteBanners.freeShippingThreshold === 'number' &&
+                Number.isFinite(remoteBanners.freeShippingThreshold)
+                  ? { freeShippingThreshold: remoteBanners.freeShippingThreshold }
+                  : {}),
+                ...(typeof remoteBanners.standardDeliveryCheckoutLabel === 'string'
+                  ? {
+                      standardDeliveryCheckoutLabel:
+                        remoteBanners.standardDeliveryCheckoutLabel,
+                    }
+                  : {}),
+              },
               Array.isArray(data.categories) && data.categories.length > 0
                 ? mergeStoredCategories(
                     data.categories as CategoryItem[],
@@ -3515,6 +3536,226 @@ export default function App() {
               </div>
             </div>
           </section>
+        ) : (currentRoute === '/refund-policy' ||
+            currentRoute === '/exchange-policy' ||
+            currentRoute === '/shipping-policy') &&
+          !searchQuery ? (
+          <section
+            data-testid={`policy-page-${currentRoute.replace('/', '')}`}
+            className="max-w-[1040px] mx-auto px-3.5 sm:px-6 md:px-8 py-7 sm:py-11 md:py-14 space-y-6 sm:space-y-9"
+          >
+            {/* Top Architectural Policy Header & 3-Policy Switcher Bar */}
+            <div className="border border-zinc-950 bg-white overflow-hidden">
+              <div className="p-5 sm:p-8 md:p-10 border-b border-zinc-950 space-y-2.5">
+                <h1 className="font-display text-xl sm:text-3xl md:text-4xl font-extrabold tracking-[0.08em] uppercase text-zinc-950 leading-tight">
+                  {currentRoute === '/refund-policy'
+                    ? 'REFUND POLICY'
+                    : currentRoute === '/exchange-policy'
+                    ? 'EXCHANGE POLICY'
+                    : 'SHIPPING POLICY'}
+                </h1>
+                <p className="text-[12.5px] sm:text-sm text-zinc-700 max-w-2xl leading-relaxed">
+                  {currentRoute === '/refund-policy'
+                    ? 'Official House of SAMO quality inspection standards, lost-in-transit shipment refund eligibility, and 14-day settlement protocol.'
+                    : currentRoute === '/exchange-policy'
+                    ? 'Official House of SAMO 7-day garment exchange terms, attached original price tag requirements, showroom or courier exchange options, and single-exchange limit.'
+                    : 'Official House of SAMO order processing timeframes, Standard Delivery rates across Lebanon, and 24-hour complimentary Showroom Pickup reservations.'}
+                </p>
+              </div>
+
+              {/* 3-Tab Policy Switcher — Mobile & Desktop Fitted */}
+              <div
+                role="tablist"
+                aria-label="SAMO House Policies"
+                className="grid grid-cols-3 divide-x divide-zinc-950 bg-zinc-50"
+              >
+                {(
+                  [
+                    { route: '/refund-policy' as RoutePath, label: 'Refund Policy' },
+                    { route: '/exchange-policy' as RoutePath, label: 'Exchange Policy' },
+                    { route: '/shipping-policy' as RoutePath, label: 'Shipping Policy' },
+                  ]
+                ).map((tab) => {
+                  const isActive = currentRoute === tab.route;
+                  return (
+                    <button
+                      key={tab.route}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => handleNavigate(tab.route)}
+                      className={`py-3 sm:py-3.5 px-1.5 sm:px-3 text-[10px] sm:text-xs font-display font-bold uppercase tracking-[0.06em] sm:tracking-[0.14em] leading-tight transition-colors cursor-pointer text-center ${
+                        isActive
+                          ? 'bg-zinc-950 text-white'
+                          : 'bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Policy Sections Grid (Single Concise Bold Black Headings Optimized for iOS & Android Mobile) */}
+            {currentRoute === '/refund-policy' && (
+              <div className="border border-zinc-950 bg-white divide-y divide-zinc-200">
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    01. Quality &amp; Delivered Orders
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    Every SAMO garment, leather piece, and accessory undergoes strict individual quality inspection prior to dispatch from our studio. Because our collections are produced in limited architectural editions, SAMO operates an exchange-first policy on delivered orders and does not issue monetary refunds for change of mind, size selection, or style preference once an order has been delivered.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2 bg-[#F8F8F8]">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    02. Lost-Shipment Refund Eligibility
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-800 leading-relaxed font-medium">
+                    A refund is issued only if the package was lost during shipment and/or was never received (claimed) within 3 days past the shipping time policy (3 to 5 days), in which case the refund will be settled after 14 days from the time of purchase.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    03. 14-Day Refund Settlement
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    When an order qualifies for a lost-shipment refund under Section 02, our logistics team completes a formal carrier trace with the courier partner. Once non-delivery is confirmed 3 days past the 3 to 5 day delivery window, the full order amount is settled after 14 calendar days from the original date of purchase via the client’s original payment method (Whish / OMT transfer or cash settlement).
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    04. Arrival Inspection
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    Clients are advised to inspect their parcel upon arrival. In the rare event that an item arrives with verified transit damage or a dispatch discrepancy, please contact us on WhatsApp or via email at info@samoweave.com within 24 hours of receipt with your Order Number and photos so our team can arrange an immediate replacement.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {currentRoute === '/exchange-policy' && (
+              <div className="border border-zinc-950 bg-white divide-y divide-zinc-200">
+                <div className="p-5 sm:p-8 space-y-2 bg-[#F8F8F8]">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    01. 7-Day Exchange Window
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-800 leading-relaxed font-medium">
+                    Items can be exchanged within 7 days after receiving your order. The original price tag must stay attached on the item throughout these 7 days.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    02. Original Price Tag &amp; Condition
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    To qualify for an exchange, the garment must be returned in its original, unworn, unwashed, and unaltered showroom condition, free of perfumes, cosmetics, or leather creasing. The original SAMO price tag and cord must remain intact and continuously attached to the garment. Any item with a removed, cut, or re-attached price tag cannot be exchanged.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    03. Showroom vs. Delivery Exchange
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    When you request an exchange for another size or another item (of equal or higher value, with any price difference settled upon exchange), completing the exchange by courier delivery requires paying the delivery fee, whereas exchanging in person at the SAMO Showroom is completely free ($0). We always recommend visiting the SAMO Showroom to complete your exchange in person so you can try on the pieces directly and find your perfect size or ideal item.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    04. One Exchange Per Purchase
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    Each purchase is eligible for one (1) exchange only. Once an item from your order has been exchanged for a replacement size or item, that exchanged piece is final and cannot be exchanged a second time.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {currentRoute === '/shipping-policy' && (
+              <div className="border border-zinc-950 bg-white divide-y divide-zinc-200">
+                <div className="p-5 sm:p-8 space-y-2 bg-[#F8F8F8]">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    01. 3 to 5 Days Delivery
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-800 leading-relaxed font-medium">
+                    All orders are processed and delivered within 3 to 5 days after ordering.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    02. Standard Delivery Rates
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    {siteBanners.shippingFeeEnabled === false ||
+                    (siteBanners.standardDeliveryFee ?? 6) <= 0
+                      ? 'Standard Delivery across Lebanon is currently Complimentary ($0.00 USD Free Shipping) on all online orders.'
+                      : (siteBanners.freeShippingThreshold ?? 100) > 0
+                      ? `Standard Courier Delivery across Lebanon is $${
+                          siteBanners.standardDeliveryFee ?? 6
+                        } USD, and Complimentary ($0 USD Free Shipping) on all orders of $${
+                          siteBanners.freeShippingThreshold ?? 100
+                        } USD and above.${
+                          siteBanners.standardDeliveryCheckoutLabel?.trim()
+                            ? ` (${siteBanners.standardDeliveryCheckoutLabel.trim()})`
+                            : ''
+                        }`
+                      : `Standard Courier Delivery across Lebanon is a flat rate of $${
+                          siteBanners.standardDeliveryFee ?? 6
+                        } USD.`}
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    03. Showroom Pickup (24-Hour Hold)
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    When you reserve an item on the website using SAMO Showroom Pickup ($0 — Free), your garment is held exclusively for 24 hours (1 day) after reserving online. Within this 24-hour window, you may visit our flagship showroom (Monday – Saturday, 10:00 AM – 7:00 PM), try the item in store, and complete your checkout. Unclaimed reservations automatically return to live availability after 24 hours.
+                  </p>
+                </div>
+
+                <div className="p-5 sm:p-8 space-y-2">
+                  <h2 className="font-display text-[13px] sm:text-base font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.08em] text-zinc-950 leading-snug">
+                    04. Payment &amp; Courier Coordination
+                  </h2>
+                  <p className="text-[12.5px] sm:text-sm text-zinc-700 leading-relaxed">
+                    Orders placed with Whish / OMT Payment are scheduled for dispatch as soon as the transfer is received and verified. Prior to doorstep arrival, our courier partner contacts the client directly on the telephone number provided at checkout to ensure seamless delivery.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Direct Client Care & Showroom Assistance Bar */}
+            <div className="border border-zinc-950 bg-zinc-950 text-white p-5 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="font-display text-[13px] sm:text-base font-bold uppercase tracking-[0.06em] sm:tracking-[0.08em] text-white leading-snug">
+                Need Assistance With an Order or Exchange?
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+                <a
+                  href="https://wa.me/96170224767"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-initial text-center px-4 py-2.5 bg-white text-zinc-950 text-[11px] font-display font-bold uppercase tracking-[0.14em] hover:bg-zinc-200 transition-colors cursor-pointer"
+                >
+                  WhatsApp
+                </a>
+                <a
+                  href="mailto:info@samoweave.com"
+                  className="flex-1 sm:flex-initial text-center px-4 py-2.5 border border-white/40 text-white text-[11px] font-display font-bold uppercase tracking-[0.12em] hover:border-white transition-colors cursor-pointer"
+                >
+                  info@samoweave.com
+                </a>
+              </div>
+            </div>
+          </section>
         ) : (
           <>
             {/* ROUTE: /home (Campaign Hero + Editorial 2-Col + Full-Bleed Kids Hero Image + 4-Item New Arrivals + Discover the House) */}
@@ -4203,7 +4444,10 @@ export default function App() {
         codEnabled={codEnabled}
         shippingFeeEnabled={siteBanners.shippingFeeEnabled !== false}
         standardDeliveryFee={siteBanners.standardDeliveryFee ?? 6}
-        freeShippingThreshold={siteBanners.freeShippingThreshold ?? 80}
+        freeShippingThreshold={siteBanners.freeShippingThreshold ?? 100}
+        standardDeliveryCheckoutLabel={
+          siteBanners.standardDeliveryCheckoutLabel || ''
+        }
       />
 
       {/* HOMEPAGE 10% OFF NEWSLETTER POP-UP MODAL */}
@@ -4296,40 +4540,77 @@ export default function App() {
             </ul>
           </div>
 
-          {/* Col 4: Discover the House */}
-          <div className="p-6 space-y-2">
-            <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
-              Discover the House
+          {/* Col 4: Discover the House & Dedicated Our Policies Section */}
+          <div className="p-6 space-y-5">
+            <div className="space-y-2">
+              <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
+                Discover the House
+              </div>
+              <ul className="space-y-1.5 text-[11px]">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/new-arrivals', 'women')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    New Arrivals
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/gifts')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Gifts (Bags &amp; Belts)
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/showroom')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Showroom
+                  </button>
+                </li>
+              </ul>
             </div>
-            <ul className="space-y-1.5 text-[11px]">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/new-arrivals', 'women')}
-                  className="hover:underline cursor-pointer"
-                >
-                  New Arrivals
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/gifts')}
-                  className="hover:underline cursor-pointer"
-                >
-                  Gifts (Bags &amp; Belts)
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/showroom')}
-                  className="hover:underline cursor-pointer"
-                >
-                  Showroom
-                </button>
-              </li>
-            </ul>
+
+            <div className="pt-4 border-t border-zinc-400/80 space-y-2">
+              <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
+                Our Policies
+              </div>
+              <ul className="space-y-1.5 text-[11px]">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/refund-policy')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Refund Policy
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/exchange-policy')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Exchange Policy
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/shipping-policy')}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Shipping Policy
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
 

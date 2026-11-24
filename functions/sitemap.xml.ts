@@ -70,6 +70,9 @@ export function buildSitemapXml(
   pushEntry('/new-arrivals/kids', '0.9', 'daily');
   pushEntry('/gifts', '0.8', 'weekly');
   pushEntry('/showroom', '0.8', 'monthly');
+  pushEntry('/refund-policy', '0.7', 'monthly');
+  pushEntry('/exchange-policy', '0.7', 'monthly');
+  pushEntry('/shipping-policy', '0.7', 'monthly');
   pushEntry('/faq', '0.7', 'monthly');
 
   // 2. Active Women & Kids Category Pages

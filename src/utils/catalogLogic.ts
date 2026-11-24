@@ -211,6 +211,20 @@ export function parsePathnameToRoute(pathname: string): RoutePath {
   if (clean === '/showroom' || clean.startsWith('/showroom/')) {
     return '/showroom';
   }
+  if (clean === '/refund-policy' || clean.startsWith('/refund-policy/')) {
+    return '/refund-policy';
+  }
+  if (
+    clean === '/exchange-policy' ||
+    clean.startsWith('/exchange-policy/') ||
+    clean === '/return-policy' ||
+    clean.startsWith('/return-policy/')
+  ) {
+    return '/exchange-policy';
+  }
+  if (clean === '/shipping-policy' || clean.startsWith('/shipping-policy/')) {
+    return '/shipping-policy';
+  }
   return '/home';
 }
 
@@ -251,7 +265,13 @@ export function buildCategoryUrl(
   const rawClean = (routeOrDept || '').trim().toLowerCase();
   const withLeadingSlash = rawClean.startsWith('/') ? rawClean : `/${rawClean}`;
   const cleanRoute = parsePathnameToRoute(withLeadingSlash);
-  if (cleanRoute === '/admin' || cleanRoute === '/showroom') {
+  if (
+    cleanRoute === '/admin' ||
+    cleanRoute === '/showroom' ||
+    cleanRoute === '/refund-policy' ||
+    cleanRoute === '/exchange-policy' ||
+    cleanRoute === '/shipping-policy'
+  ) {
     return cleanRoute;
   }
   if (cleanRoute === '/new-arrivals') {
@@ -435,6 +455,27 @@ export function parseCatalogUrlState(
   }
   if (firstSeg === 'showroom') {
     return { route: '/showroom', selectedCategory: 'all', matchedProduct: null };
+  }
+  if (firstSeg === 'refund-policy') {
+    return {
+      route: '/refund-policy',
+      selectedCategory: 'all',
+      matchedProduct: null,
+    };
+  }
+  if (firstSeg === 'exchange-policy' || firstSeg === 'return-policy') {
+    return {
+      route: '/exchange-policy',
+      selectedCategory: 'all',
+      matchedProduct: null,
+    };
+  }
+  if (firstSeg === 'shipping-policy') {
+    return {
+      route: '/shipping-policy',
+      selectedCategory: 'all',
+      matchedProduct: null,
+    };
   }
   if (firstSeg === 'home') {
     const prodSlug = segments[1];
@@ -2310,7 +2351,8 @@ export function buildDefaultSiteBanners(
     orderEmailPromoBannerUrl: '',
     shippingFeeEnabled: true,
     standardDeliveryFee: 6,
-    freeShippingThreshold: 80,
+    freeShippingThreshold: 100,
+    standardDeliveryCheckoutLabel: '',
     googleSheetsSync: {
       enabled: true,
       webhookUrl: '',
@@ -2545,7 +2587,11 @@ export function mergeSiteBannersConfig(
       Number.isFinite(stored.freeShippingThreshold) &&
       stored.freeShippingThreshold >= 0
         ? Math.round(stored.freeShippingThreshold * 100) / 100
-        : defaults.freeShippingThreshold ?? 80,
+        : defaults.freeShippingThreshold ?? 100,
+    standardDeliveryCheckoutLabel:
+      typeof stored.standardDeliveryCheckoutLabel === 'string'
+        ? stored.standardDeliveryCheckoutLabel.trim()
+        : defaults.standardDeliveryCheckoutLabel || '',
     googleSheetsSync: {
       enabled: true,
       webhookUrl:

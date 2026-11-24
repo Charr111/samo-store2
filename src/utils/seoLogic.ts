@@ -549,6 +549,24 @@ export function buildDynamicPageSeo(params: {
         'Visit the SAMO flagship showroom for private fittings, bespoke leather and fur consultations, and same-day showroom pickup reservations.',
       path: '/showroom',
     },
+    '/refund-policy': {
+      title: 'Refund Policy — Official Website | SAMO',
+      description:
+        'Official SAMO Refund Policy: quality inspection standards, lost-in-transit shipment refund eligibility, and 14-day refund settlement protocol.',
+      path: '/refund-policy',
+    },
+    '/exchange-policy': {
+      title: 'Exchange Policy — Official Website | SAMO',
+      description:
+        'Official SAMO Exchange Policy: 7-day exchange window from order receipt, mandatory attached original price tag requirement, and showroom or courier exchange process.',
+      path: '/exchange-policy',
+    },
+    '/shipping-policy': {
+      title: 'Shipping Policy — Official Website | SAMO',
+      description:
+        'Official SAMO Shipping & Delivery Policy: 3 to 5 days order processing and delivery across Lebanon, Standard Delivery rates, and 24-hour complimentary SAMO Showroom Pickup reservations.',
+      path: '/shipping-policy',
+    },
     '/admin': {
       title: 'SAMO Admin Portal | Catalog, Inventory & SEO Management',
       description: 'SAMO internal management portal.',

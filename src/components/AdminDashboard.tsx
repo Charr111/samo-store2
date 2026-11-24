@@ -953,9 +953,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       typeof siteBanners.freeShippingThreshold === 'number' &&
         Number.isFinite(siteBanners.freeShippingThreshold)
         ? siteBanners.freeShippingThreshold
-        : 80
+        : 100
     )
   );
+  const [checkoutDeliveryLabelDraft, setCheckoutDeliveryLabelDraft] =
+    useState<string>(() =>
+      typeof siteBanners.standardDeliveryCheckoutLabel === 'string'
+        ? siteBanners.standardDeliveryCheckoutLabel
+        : ''
+    );
   const [shippingSaveFeedback, setShippingSaveFeedback] = useState<string>('');
 
   useEffect(() => {
@@ -968,10 +974,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       typeof siteBanners.freeShippingThreshold === 'number' &&
       Number.isFinite(siteBanners.freeShippingThreshold)
         ? siteBanners.freeShippingThreshold
-        : 80;
+        : 100;
+    const nextLabel =
+      typeof siteBanners.standardDeliveryCheckoutLabel === 'string'
+        ? siteBanners.standardDeliveryCheckoutLabel
+        : '';
     setShippingFeeDraft(String(nextFee));
     setFreeThresholdDraft(String(nextThresh));
-  }, [siteBanners.standardDeliveryFee, siteBanners.freeShippingThreshold]);
+    setCheckoutDeliveryLabelDraft(nextLabel);
+  }, [
+    siteBanners.standardDeliveryFee,
+    siteBanners.freeShippingThreshold,
+    siteBanners.standardDeliveryCheckoutLabel,
+  ]);
 
   const allMaterials = mergeMaterialsList(customMaterials);
   const allColors = mergeColorsList(customColors);
@@ -4455,7 +4470,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span className="text-xs sm:text-sm font-bold text-white">
                           Standard Delivery Shipping Fee &amp; Free Threshold
                         </span>
-                        <span
+                         <span
                           className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                             siteBanners.shippingFeeEnabled !== false
                               ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
@@ -4463,13 +4478,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }`}
                         >
                           {siteBanners.shippingFeeEnabled !== false
-                            ? `ON · $${siteBanners.standardDeliveryFee ?? 6} / FREE OVER $${siteBanners.freeShippingThreshold ?? 80}`
+                            ? `ON · $${siteBanners.standardDeliveryFee ?? 6} / FREE OVER $${siteBanners.freeShippingThreshold ?? 100}`
                             : 'OFF · FREE SHIPPING ON ALL ORDERS'}
                         </span>
                       </div>
                       <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
                         {siteBanners.shippingFeeEnabled !== false
-                          ? `Charging $${siteBanners.standardDeliveryFee ?? 6} USD for Standard Delivery, and $0 (Complimentary Free) for orders $${siteBanners.freeShippingThreshold ?? 80} USD and above.`
+                          ? `Charging $${siteBanners.standardDeliveryFee ?? 6} USD for Standard Delivery, and $0 (Complimentary Free) for orders $${siteBanners.freeShippingThreshold ?? 100} USD and above.`
                           : 'Shipping fee is turned OFF — all Standard Delivery orders receive complimentary $0 free delivery.'}
                       </p>
                     </div>
@@ -4496,7 +4511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         );
                         setShippingSaveFeedback(
                           nextEnabled
-                            ? `✓ Shipping fee turned ON ($${siteBanners.standardDeliveryFee ?? 6} / Free over $${siteBanners.freeShippingThreshold ?? 80})`
+                            ? `✓ Shipping fee turned ON ($${siteBanners.standardDeliveryFee ?? 6} / Free over $${siteBanners.freeShippingThreshold ?? 100})`
                             : '✓ Shipping fee turned OFF (Free Shipping on all orders)'
                         );
                         setTimeout(() => setShippingSaveFeedback(''), 3500);
@@ -4517,50 +4532,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
                   </div>
 
-                  <div className="pt-3 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                        Shipping Fee ($ USD)
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
-                          $
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={shippingFeeDraft}
-                          onChange={(e) => setShippingFeeDraft(e.target.value)}
-                          placeholder="6"
-                          className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
-                        />
+                  <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                          Shipping Fee ($ USD)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
+                            $
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={shippingFeeDraft}
+                            onChange={(e) => setShippingFeeDraft(e.target.value)}
+                            placeholder="6"
+                            className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                          Free Shipping After ($ USD)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
+                            $
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={freeThresholdDraft}
+                            onChange={(e) =>
+                              setFreeThresholdDraft(e.target.value)
+                            }
+                            placeholder="100"
+                            className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                        Free Shipping After ($ USD)
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
-                          $
+                    {/* Editable Checkout Delivery Text Box */}
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                          Checkout Delivery Text (Shown on Checkout Delivery Option)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutDeliveryLabelDraft('')}
+                          className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white underline cursor-pointer"
+                        >
+                          Reset to Auto Text
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={checkoutDeliveryLabelDraft}
+                        onChange={(e) =>
+                          setCheckoutDeliveryLabelDraft(e.target.value)
+                        }
+                        placeholder={`Standard Delivery (Complimentary over $${
+                          Number(freeThresholdDraft) >= 0
+                            ? Number(freeThresholdDraft) || 0
+                            : 100
+                        }, otherwise $${
+                          Number(shippingFeeDraft) >= 0
+                            ? Number(shippingFeeDraft) || 0
+                            : 6
+                        })`}
+                        className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-white"
+                      />
+                      <div className="text-[10px] text-zinc-400 flex flex-wrap items-center gap-1.5">
+                        <span className="uppercase tracking-wider font-semibold text-zinc-500">
+                          Live Checkout Preview:
                         </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={freeThresholdDraft}
-                          onChange={(e) =>
-                            setFreeThresholdDraft(e.target.value)
-                          }
-                          placeholder="80"
-                          className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white"
-                        />
+                        <span className="text-zinc-200 font-medium">
+                          {siteBanners.shippingFeeEnabled === false ||
+                          (Number(shippingFeeDraft) || 0) <= 0
+                            ? 'Standard Delivery (Complimentary Free Delivery)'
+                            : checkoutDeliveryLabelDraft.trim()
+                            ? checkoutDeliveryLabelDraft.trim()
+                            : (Number(freeThresholdDraft) || 0) > 0
+                            ? `Standard Delivery (Complimentary over $${
+                                Number(freeThresholdDraft) || 0
+                              }, otherwise $${Number(shippingFeeDraft) || 0})`
+                            : `Standard Delivery ($${
+                                Number(shippingFeeDraft) || 0
+                              } flat rate)`}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
                         onClick={async () => {
@@ -4575,25 +4644,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               (Number(freeThresholdDraft) || 0) * 100
                             ) / 100
                           );
+                          const cleanedLabel = checkoutDeliveryLabelDraft.trim();
                           setShippingFeeDraft(String(parsedFee));
                           setFreeThresholdDraft(String(parsedThreshold));
+                          setCheckoutDeliveryLabelDraft(cleanedLabel);
                           await onUpdateSiteBanners({
                             ...siteBanners,
                             shippingFeeEnabled:
                               siteBanners.shippingFeeEnabled !== false,
                             standardDeliveryFee: parsedFee,
                             freeShippingThreshold: parsedThreshold,
+                            standardDeliveryCheckoutLabel: cleanedLabel,
                           });
                           recordAdminActivity(
                             'Shipping Rates Updated',
-                            `Standard Delivery set to $${parsedFee} USD (Free over $${parsedThreshold} USD)`
+                            `Standard Delivery set to $${parsedFee} USD (Free over $${parsedThreshold} USD)${
+                              cleanedLabel ? ` · Text: "${cleanedLabel}"` : ''
+                            }`
                           );
                           setShippingSaveFeedback(
-                            `✓ Saved: $${parsedFee} shipping · Free over $${parsedThreshold}`
+                            `✓ Saved: $${parsedFee} shipping · Free over $${parsedThreshold}${
+                              cleanedLabel ? ` · Custom checkout text updated` : ''
+                            }`
                           );
                           setTimeout(() => setShippingSaveFeedback(''), 3500);
                         }}
-                        className="w-full py-2.5 px-4 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer"
+                        className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer"
                       >
                         Save Shipping Rates
                       </button>

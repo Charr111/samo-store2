@@ -369,8 +369,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Balenciaga-inspired Full-Width Search Strip ("WHAT ARE YOU LOOKING FOR?") — Hidden on Home Screen, shown on Category & Collection Pages */}
-      {currentRoute !== '/home' && (
+      {/* Balenciaga-inspired Full-Width Search Strip ("WHAT ARE YOU LOOKING FOR?") — Hidden on Home, Showroom, and Policy Pages; shown on Category & Collection Pages */}
+      {currentRoute !== '/home' &&
+        currentRoute !== '/showroom' &&
+        currentRoute !== '/refund-policy' &&
+        currentRoute !== '/exchange-policy' &&
+        currentRoute !== '/shipping-policy' && (
         <div className="flex items-center justify-between px-4 md:px-8 h-10 bg-white border-b border-zinc-200">
           <div className="flex items-center gap-3 flex-1">
             <Search className="w-4 h-4 text-zinc-500 shrink-0" />

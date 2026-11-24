@@ -27,6 +27,9 @@ export type RoutePath =
   | '/new-arrivals'
   | '/gifts'
   | '/showroom'
+  | '/refund-policy'
+  | '/exchange-policy'
+  | '/shipping-policy'
   | '/admin';
 
 export interface CategoryItem {
@@ -267,6 +270,7 @@ export interface SiteBannersConfig {
   shippingFeeEnabled?: boolean;
   standardDeliveryFee?: number;
   freeShippingThreshold?: number;
+  standardDeliveryCheckoutLabel?: string;
   googleSheetsSync?: GoogleSheetsSyncConfig;
   categoryBanners: Record<string, CategoryBannerConfig>;
 }

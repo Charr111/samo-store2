@@ -48,6 +48,7 @@ interface CartCheckoutDrawerProps {
   shippingFeeEnabled?: boolean;
   standardDeliveryFee?: number;
   freeShippingThreshold?: number;
+  standardDeliveryCheckoutLabel?: string;
 }
 
 export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
@@ -67,7 +68,8 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   codEnabled = false,
   shippingFeeEnabled = true,
   standardDeliveryFee = 6,
-  freeShippingThreshold = 80,
+  freeShippingThreshold = 100,
+  standardDeliveryCheckoutLabel = '',
 }) => {
   const [step, setStep] = useState<'cart' | 'checkout' | 'confirmed'>(initialStep);
   const [customerName, setCustomerName] = useState('');
@@ -257,12 +259,18 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     Number.isFinite(freeShippingThreshold) &&
     freeShippingThreshold >= 0
       ? Math.round(freeShippingThreshold * 100) / 100
-      : 80;
+      : 100;
   const isShippingFeeActive =
     shippingFeeEnabled !== false && activeDeliveryFee > 0;
+  const customCheckoutDeliveryText =
+    typeof standardDeliveryCheckoutLabel === 'string'
+      ? standardDeliveryCheckoutLabel.trim()
+      : '';
 
   const standardDeliveryOptionLabel = !isShippingFeeActive
     ? 'Standard Delivery (Complimentary Free Delivery)'
+    : customCheckoutDeliveryText
+    ? customCheckoutDeliveryText
     : activeFreeThreshold > 0
     ? `Standard Delivery (Complimentary over $${activeFreeThreshold}, otherwise $${activeDeliveryFee})`
     : `Standard Delivery ($${activeDeliveryFee} flat rate)`;
