@@ -389,9 +389,10 @@ export function findProductBySlug(
   const rawClean = (slugOrId || '').trim();
   if (!rawClean) return undefined;
   const targetSlug = createSafeSlug(rawClean);
+  const visibleProducts = products.filter((p) => p && !p.hiddenFromStore);
 
   // 1. Exact ID match (case-sensitive then insensitive)
-  const idMatches = products.filter(
+  const idMatches = visibleProducts.filter(
     (p) => p.id === rawClean || p.id.toLowerCase() === rawClean.toLowerCase()
   );
   if (idMatches.length > 0) {
@@ -400,7 +401,7 @@ export function findProductBySlug(
 
   // 2. Slug match within department (if provided)
   if (department) {
-    const deptMatches = products.filter(
+    const deptMatches = visibleProducts.filter(
       (p) =>
         p.department === department &&
         (getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug)
@@ -410,8 +411,8 @@ export function findProductBySlug(
     }
   }
 
-  // 3. Slug match across all products
-  const allMatches = products.filter(
+  // 3. Slug match across all visible products
+  const allMatches = visibleProducts.filter(
     (p) => getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug
   );
   if (allMatches.length > 0) {
@@ -2127,6 +2128,21 @@ export function toggleProductInStockState(
     sizeQuantities: refilledMap,
     quantity: nextTotal,
     inStock: true,
+  };
+}
+
+/**
+ * Toggles a product's storefront visibility state (`hiddenFromStore`) from the Admin Dashboard.
+ * When nextVisible is false, sets hiddenFromStore: true so the product is completely hidden from the live storefront.
+ * When nextVisible is true, sets hiddenFromStore: false so the product is visible on the live storefront.
+ */
+export function toggleProductVisibilityState(
+  product: ProductItem,
+  nextVisible: boolean
+): ProductItem {
+  return {
+    ...product,
+    hiddenFromStore: !nextVisible,
   };
 }
 

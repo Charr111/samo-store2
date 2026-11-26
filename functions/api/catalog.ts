@@ -55,6 +55,7 @@ let isolateCatalogCache: Record<string, unknown> | null = null;
 let isolateCatalogJson: string | null = null;
 let isolateCacheTimestamp = 0;
 let garmentCodeColumnMigrated = false;
+let hiddenFromStoreColumnMigrated = false;
 let promoMaxUsesColumnMigrated = false;
 let unusedSecondaryIndexesDropped = false;
 
@@ -126,6 +127,7 @@ async function readFromD1(
         setItems: parsedSetPieces,
         fullSetPieces: parsedSetPieces,
         inStock: Boolean(p.in_stock),
+        hiddenFromStore: Boolean(p.hidden_from_store),
         preorderEnabled: Boolean(p.preorder_enabled),
         description: p.description || '',
         details: safeJsonParse(p.details, []),
@@ -346,6 +348,7 @@ function buildProductPersistSignature(p: any): string {
     p?.isFullSet ? 1 : 0,
     setPiecesPayload,
     p?.inStock !== false ? 1 : 0,
+    p?.hiddenFromStore ? 1 : 0,
     p?.preorderEnabled ? 1 : 0,
     p?.description || '',
     Array.isArray(p?.details) ? p.details : [],
@@ -453,6 +456,20 @@ async function writeToD1(
       }
     }
 
+    if (!hiddenFromStoreColumnMigrated) {
+      try {
+        await db
+          .prepare(
+            'ALTER TABLE products ADD COLUMN hidden_from_store INTEGER NOT NULL DEFAULT 0;'
+          )
+          .run();
+      } catch {
+        // Column already exists
+      } finally {
+        hiddenFromStoreColumnMigrated = true;
+      }
+    }
+
     const existingProdSigById = new Map<string, string>();
     for (const ep of currentProductsList) {
       if (ep && ep.id) {
@@ -479,12 +496,12 @@ async function writeToD1(
             `INSERT INTO products (
               id, name, garment_code, department, category, price, original_price, discount_percent, discount_badge,
               style, custom_style, materials, sizes, size_quantities, image_url, gallery_urls,
-              has_colors, color_variants, is_full_set, full_set_pieces, in_stock, preorder_enabled,
+              has_colors, color_variants, is_full_set, full_set_pieces, in_stock, hidden_from_store, preorder_enabled,
               description, details, featured, size_type, created_at, updated_at
             ) VALUES (
               ?, ?, ?, ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?
             ) ON CONFLICT(id) DO UPDATE SET
               name=excluded.name,
@@ -507,6 +524,7 @@ async function writeToD1(
               is_full_set=excluded.is_full_set,
               full_set_pieces=excluded.full_set_pieces,
               in_stock=excluded.in_stock,
+              hidden_from_store=excluded.hidden_from_store,
               preorder_enabled=excluded.preorder_enabled,
               description=excluded.description,
               details=excluded.details,
@@ -536,6 +554,7 @@ async function writeToD1(
             p.isFullSet ? 1 : 0,
             JSON.stringify(setPiecesPayload),
             p.inStock !== false ? 1 : 0,
+            p.hiddenFromStore ? 1 : 0,
             p.preorderEnabled ? 1 : 0,
             p.description || '',
             JSON.stringify(Array.isArray(p.details) ? p.details : []),

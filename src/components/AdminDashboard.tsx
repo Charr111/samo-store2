@@ -461,6 +461,10 @@ interface AdminDashboardProps {
     productId: string,
     nextInStock: boolean
   ) => Promise<void>;
+  onToggleProductVisibility?: (
+    productId: string,
+    nextVisible: boolean
+  ) => Promise<void> | void;
   onAddCategory: (cat: Omit<CategoryItem, 'id'>) => Promise<void>;
   onUpdateCategory: (
     categoryId: string,
@@ -552,6 +556,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   siteBanners,
   onUpdateSiteBanners,
   onToggleProductStock,
+  onToggleProductVisibility,
   onAddCategory,
   onUpdateCategory,
   onUpdateCategorySortOrder,
@@ -3753,7 +3758,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setMobileSidebarOpen(false);
   };
 
-  // Reusable Product List Row Component (matching Reference Image: Thumbnail + Name/Category + Price + Toggle + Edit + Delete)
+  // Reusable Product List Row Component (matching Reference Image: Thumbnail + Name/Category + Price + Stacked Out of stock / On Off Toggles + Edit + Delete)
   const renderProductRow = (prod: ProductItem) => {
     const hasColors =
       Boolean(prod.hasColors) &&
@@ -3764,12 +3769,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           .quantity
       : sumSizeQuantities(prod.sizes, prod.sizeQuantities);
     const isItemInStock = Boolean(prod.inStock) && totalQty > 0;
+    const isItemVisibleOnStore = !prod.hiddenFromStore;
     const pricing = getEffectiveProductPrice(prod);
 
     return (
       <div
         key={prod.id}
-        className="py-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:bg-zinc-800/35 transition-colors"
+        className={`py-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:bg-zinc-800/35 transition-colors ${
+          !isItemVisibleOnStore ? 'opacity-75' : ''
+        }`}
       >
         {/* Left: Thumbnail + Product Name + Category */}
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
@@ -3824,13 +3832,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </span>
                 </>
               )}
+              {!isItemVisibleOnStore && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-amber-400 font-semibold">
+                    Hidden
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right: Price + In-Stock Toggle Switch + Edit Pencil + Delete Trash */}
-        <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-5 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/70 shrink-0">
-          <div className="text-left sm:text-right font-mono-tabular min-w-[76px]">
+        {/* Right: Price + Stacked (Out of stock / On Off) Toggle Switches + Edit Pencil + Delete Trash */}
+        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-5 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-zinc-800/70 shrink-0">
+          <div className="text-left sm:text-right font-mono-tabular min-w-[68px] sm:min-w-[76px]">
             <div className="text-xs sm:text-sm font-bold text-white">
               ${pricing.effectivePrice.toLocaleString()}
             </div>
@@ -3848,33 +3864,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* In-Stock Toggle Switch (When toggled off, product appears Out of Stock on user website) */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isItemInStock}
-              aria-label={`Toggle stock status for ${prod.name}`}
-              title={
-                isItemInStock
-                  ? 'In Stock (Click to mark Out of Stock on website)'
-                  : 'Out of Stock (Click to mark In Stock on website)'
-              }
-              onClick={() => onToggleProductStock(prod.id, !isItemInStock)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
-                isItemInStock
-                  ? 'bg-white border-white'
-                  : 'bg-zinc-800 border-zinc-700'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
-                  isItemInStock
-                    ? 'translate-x-5 bg-zinc-950'
-                    : 'translate-x-1 bg-zinc-400'
-                }`}
-              />
-            </button>
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Stacked Toggles Column: Top = "Out of stock", Bottom = "On / Off" */}
+            <div className="flex flex-col gap-1.5 items-end">
+              {/* Top Toggle: Out of stock */}
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-[10px] font-medium text-zinc-400 whitespace-nowrap select-none">
+                  Out of stock
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isItemInStock}
+                  aria-label={`Out of stock toggle for ${prod.name}`}
+                  title={
+                    isItemInStock
+                      ? 'In Stock (Click to mark Out of Stock on website)'
+                      : 'Out of Stock (Click to mark In Stock on website)'
+                  }
+                  onClick={() => onToggleProductStock(prod.id, !isItemInStock)}
+                  className={`relative inline-flex h-5 w-9 sm:h-5 sm:w-10 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                    isItemInStock
+                      ? 'bg-white border-white'
+                      : 'bg-zinc-800 border-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full transition-transform duration-200 ${
+                      isItemInStock
+                        ? 'translate-x-4 sm:translate-x-5 bg-zinc-950'
+                        : 'translate-x-0.5 bg-zinc-400'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Bottom Toggle: On / Off (Hides or shows product completely on website) */}
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-[10px] font-medium text-zinc-400 whitespace-nowrap select-none">
+                  On / Off
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isItemVisibleOnStore}
+                  aria-label={`On / Off visibility toggle for ${prod.name}`}
+                  title={
+                    isItemVisibleOnStore
+                      ? 'Product ON (Visible on website — click to hide completely)'
+                      : 'Product OFF (Hidden from website — click to show on website)'
+                  }
+                  onClick={() =>
+                    onToggleProductVisibility?.(prod.id, !isItemVisibleOnStore)
+                  }
+                  className={`relative inline-flex h-5 w-9 sm:h-5 sm:w-10 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                    isItemVisibleOnStore
+                      ? 'bg-emerald-500 border-emerald-400'
+                      : 'bg-zinc-800 border-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full transition-transform duration-200 ${
+                      isItemVisibleOnStore
+                        ? 'translate-x-4 sm:translate-x-5 bg-zinc-950'
+                        : 'translate-x-0.5 bg-zinc-400'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
 
             {/* Edit Item Button */}
             <button

@@ -75,6 +75,7 @@ import {
   syncFullSetsWithCatalog,
   syncProductFromColorVariants,
   toggleProductInStockState,
+  toggleProductVisibilityState,
   updateCategorySortOrder,
 } from './utils/catalogLogic';
 import {
@@ -453,6 +454,7 @@ function normalizeStoredProducts(
       discountType: item.discountType || 'none',
       discountValue: Number(item.discountValue) || 0,
       inStock: explicitOutOfStock ? false : totalQty > 0,
+      hiddenFromStore: Boolean(item.hiddenFromStore),
     };
 
     if (
@@ -2497,6 +2499,28 @@ export default function App() {
     });
   };
 
+  const handleToggleProductVisibility = async (
+    productId: string,
+    nextVisible: boolean
+  ) => {
+    setProducts((prev) => {
+      const nextCatalog = prev.map((p) =>
+        p.id === productId ? toggleProductVisibilityState(p, nextVisible) : p
+      );
+      pushServerCatalogPatch(
+        { products: nextCatalog },
+        { skipSheetsPush: true }
+      );
+      return nextCatalog;
+    });
+
+    if (!nextVisible) {
+      setActiveProductModal((prev) =>
+        prev && prev.id === productId ? null : prev
+      );
+    }
+  };
+
   const handleUpdateSiteBanners = async (nextBanners: SiteBannersConfig) => {
     const merged = mergeSiteBannersConfig(nextBanners, categories);
     setSiteBanners(merged);
@@ -3080,9 +3104,10 @@ export default function App() {
     [categories]
   );
 
-  // Filter out products belonging to any category that the admin has toggled OFF (active === false)
-  // while keeping the full products list intact for the Admin Dashboard.
+  // Filter out products that are hidden individually (hiddenFromStore === true) or belong to any category
+  // that the admin has toggled OFF (active === false), while keeping the full products list intact for the Admin Dashboard.
   const publicProducts = useMemo(() => {
+    const visibleItems = products.filter((p) => !p.hiddenFromStore);
     const disabledWomenCats = new Set(
       getCategoriesByDepartment(categories, 'women')
         .filter((c) => c.active === false)
@@ -3094,9 +3119,9 @@ export default function App() {
         .map((c) => normalizeKidsCategoryName(c.name).trim().toLowerCase())
     );
     if (disabledWomenCats.size === 0 && disabledKidsCats.size === 0) {
-      return products;
+      return visibleItems;
     }
-    return products.filter((p) => {
+    return visibleItems.filter((p) => {
       if (p.department === 'women') {
         const catLower = (p.category || '').trim().toLowerCase();
         const canonicalWomenCat =
@@ -3322,7 +3347,7 @@ export default function App() {
 
     return activeCats.map((cat) => {
       const catLower = cat.name.toLowerCase();
-      const matchingProd = products.find(
+      const matchingProd = publicProducts.find(
         (p) =>
           p.department === homeCategoryDept &&
           (p.category.toLowerCase() === catLower ||
@@ -3340,7 +3365,7 @@ export default function App() {
         styleType: matchingProd?.style || fallback.style,
       };
     });
-  }, [homeCategoryDept, womenCategories, kidsCategories, products]);
+  }, [homeCategoryDept, womenCategories, kidsCategories, publicProducts]);
 
   // Home New Arrivals Carousel Products filtered by Women | Kids switcher (Women: SAHARA CROC CRESCENT 1st, old 1st -> 3rd, old 3rd -> 4th)
   const homeNewArrivalsProducts = useMemo(
@@ -3435,6 +3460,7 @@ export default function App() {
           onUpdateProductColorVariants={handleUpdateProductColorVariants}
           onUpdateProductMeta={handleUpdateProductMeta}
           onToggleProductStock={handleToggleProductStock}
+          onToggleProductVisibility={handleToggleProductVisibility}
           onDeleteProduct={handleDeleteProduct}
           onAddPromoCode={handleAddPromoCode}
           onDeletePromoCode={handleDeletePromoCode}
@@ -4450,7 +4476,7 @@ export default function App() {
       {/* SOLE ITEM POP-UP MODAL */}
       <ProductModal
         product={activeProductModal}
-        allProducts={products}
+        allProducts={publicProducts}
         categories={categories}
         sizeGuideConfig={sizeGuideConfig}
         onClose={handleCloseProductModal}
@@ -4468,7 +4494,7 @@ export default function App() {
         isOpen={cartDrawerOpen}
         initialStep={cartDrawerInitialStep}
         cartItems={cartItems}
-        products={products}
+        products={publicProducts}
         promoCodes={promoCodes}
         orders={orders}
         onClose={() => handleCloseCartDrawer(false)}

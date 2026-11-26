@@ -120,6 +120,7 @@ export interface ProductItem {
   materials: string[];
   description: string;
   inStock: boolean;
+  hiddenFromStore?: boolean;
   featured: boolean;
   createdAt?: string;
   updatedAt?: string;

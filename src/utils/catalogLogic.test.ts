@@ -2262,5 +2262,27 @@ test('mergeConcurrentOrdersById preserves orders from two customers shopping con
   assert.ok(afterDelete.every((o) => o.id !== 'ord-older-1'));
 });
 
+import { toggleProductVisibilityState } from './catalogLogic';
+
+test('toggleProductVisibilityState toggles hiddenFromStore without altering quantities or prices and findProductBySlug excludes hidden items', () => {
+  const sample = INITIAL_PRODUCTS[0];
+  const hiddenProd = toggleProductVisibilityState(sample, false);
+  assert.equal(hiddenProd.hiddenFromStore, true);
+  assert.equal(hiddenProd.quantity, sample.quantity);
+  assert.equal(hiddenProd.price, sample.price);
+  assert.deepEqual(hiddenProd.sizeQuantities, sample.sizeQuantities);
+
+  // When hiddenFromStore is true, findProductBySlug must not return it for storefront URLs
+  const catalogWithHidden = [hiddenProd, ...INITIAL_PRODUCTS.slice(1)];
+  assert.equal(findProductBySlug(catalogWithHidden, sample.id), undefined);
+
+  // Toggling back ON (nextVisible = true) makes it visible again with all quantities preserved
+  const restoredProd = toggleProductVisibilityState(hiddenProd, true);
+  assert.equal(restoredProd.hiddenFromStore, false);
+  const catalogRestored = [restoredProd, ...INITIAL_PRODUCTS.slice(1)];
+  assert.equal(findProductBySlug(catalogRestored, sample.id)?.id, sample.id);
+});
+
+
 
 

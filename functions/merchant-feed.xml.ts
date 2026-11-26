@@ -94,7 +94,7 @@ export function buildGoogleMerchantFeedXml(
   };
 
   for (const prod of activeProducts) {
-    if (!prod || !prod.id || !prod.name) continue;
+    if (!prod || !prod.id || !prod.name || prod.hiddenFromStore) continue;
 
     const prodPath = buildProductUrl(prod);
     const prodLink = `${SITE_ORIGIN}${prodPath}`;

@@ -126,6 +126,7 @@ export async function initD1Schema(): Promise<void> {
       is_full_set INTEGER NOT NULL DEFAULT 0,
       full_set_pieces TEXT,
       in_stock INTEGER NOT NULL DEFAULT 1,
+      hidden_from_store INTEGER NOT NULL DEFAULT 0,
       preorder_enabled INTEGER NOT NULL DEFAULT 0,
       description TEXT,
       details TEXT,
@@ -206,6 +207,13 @@ export async function initD1Schema(): Promise<void> {
   }
   try {
     await d1Query('ALTER TABLE products ADD COLUMN garment_code TEXT;');
+  } catch {
+    // Column already exists
+  }
+  try {
+    await d1Query(
+      'ALTER TABLE products ADD COLUMN hidden_from_store INTEGER NOT NULL DEFAULT 0;'
+    );
   } catch {
     // Column already exists
   }
@@ -320,6 +328,7 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
         setItems: parsedSetPieces,
         fullSetPieces: parsedSetPieces,
         inStock: Boolean(p.in_stock),
+        hiddenFromStore: Boolean(p.hidden_from_store),
         preorderEnabled: Boolean(p.preorder_enabled),
         description: p.description || '',
         details: p.details ? JSON.parse(p.details) : [],
@@ -524,12 +533,12 @@ export async function upsertD1Product(p: any): Promise<void> {
   const sql = `INSERT INTO products (
     id, name, garment_code, department, category, price, original_price, discount_percent, discount_badge,
     style, custom_style, materials, sizes, size_quantities, image_url, gallery_urls,
-    has_colors, color_variants, is_full_set, full_set_pieces, in_stock, preorder_enabled,
+    has_colors, color_variants, is_full_set, full_set_pieces, in_stock, hidden_from_store, preorder_enabled,
     description, details, featured, size_type, created_at, updated_at
   ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?
   ) ON CONFLICT(id) DO UPDATE SET
     name=excluded.name,
@@ -552,6 +561,7 @@ export async function upsertD1Product(p: any): Promise<void> {
     is_full_set=excluded.is_full_set,
     full_set_pieces=excluded.full_set_pieces,
     in_stock=excluded.in_stock,
+    hidden_from_store=excluded.hidden_from_store,
     preorder_enabled=excluded.preorder_enabled,
     description=excluded.description,
     details=excluded.details,
@@ -587,6 +597,7 @@ export async function upsertD1Product(p: any): Promise<void> {
     p.isFullSet ? 1 : 0,
     JSON.stringify(setPiecesPayload),
     p.inStock !== false ? 1 : 0,
+    p.hiddenFromStore ? 1 : 0,
     p.preorderEnabled ? 1 : 0,
     p.description || '',
     JSON.stringify(Array.isArray(p.details) ? p.details : []),

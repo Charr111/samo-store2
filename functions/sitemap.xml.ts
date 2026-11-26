@@ -93,7 +93,7 @@ export function buildSitemapXml(
     : INITIAL_PRODUCTS;
 
   for (const prod of activeProducts) {
-    if (!prod || !prod.id || !prod.name) continue;
+    if (!prod || !prod.id || !prod.name || prod.hiddenFromStore) continue;
     const prodPath = buildProductUrl(prod);
     pushEntry(
       prodPath,
