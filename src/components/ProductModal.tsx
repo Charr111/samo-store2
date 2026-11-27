@@ -804,36 +804,29 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   <span
                     className={
                       pricing.hasDiscount
-                        ? 'text-[18.7px] sm:text-[19.8px] font-bold text-zinc-950'
+                        ? 'text-[14.5px] sm:text-[15.5px] font-bold text-zinc-950'
                         : 'text-[17px] sm:text-lg font-normal md:font-bold text-zinc-950'
                     }
                   >
                     ${pricing.effectivePrice.toLocaleString()}
                   </span>
                   {pricing.hasDiscount && (
-                    <span className="text-[11.65px] sm:text-[13.6px] text-zinc-400 line-through">
+                    <span className="text-[18.7px] sm:text-[19.8px] font-bold text-zinc-950 line-through decoration-zinc-950">
                       ${pricing.originalPrice.toLocaleString()}
                     </span>
                   )}
                 </div>
               </div>
 
-              {(pricing.hasDiscount || isSelectedConfigurationOut) && (
+              {isSelectedConfigurationOut && (
                 <div className="mt-2 flex items-center gap-2">
-                  {pricing.hasDiscount && (
-                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200">
-                      {pricing.discountBadge}
-                    </span>
-                  )}
-                  {isSelectedConfigurationOut && (
-                    <button
-                      type="button"
-                      onClick={() => scrollToPreorderBox(true)}
-                      className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700 cursor-pointer"
-                    >
-                      Out of Stock
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => scrollToPreorderBox(true)}
+                    className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700 cursor-pointer"
+                  >
+                    Out of Stock
+                  </button>
                 </div>
               )}
             </div>
