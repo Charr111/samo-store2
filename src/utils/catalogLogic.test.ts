@@ -100,18 +100,20 @@ test('calculateOrderTotals computes subtotal, promo code discount, delivery fee 
   assert.equal(withPctPromo.totalPrice, 800);
 });
 
-test('getComplementaryUpsellProducts returns items from the same department/category excluding cart items', () => {
+test('getComplementaryUpsellProducts recommends complementary outfit slots across the whole bag and prioritizes accessible add-on prices', () => {
   const makeProd = (
     id: string,
     department: 'women' | 'kids',
-    category: string
+    category: string,
+    price = 120,
+    hiddenFromStore = false
   ): ProductItem => ({
     id,
     name: id.toUpperCase(),
     department,
     category,
-    style: 'Fine Leather',
-    price: 500,
+    style: 'Classic',
+    price,
     quantity: 5,
     sizeQuantities: { M: 5 },
     isNewArrival: true,
@@ -122,30 +124,130 @@ test('getComplementaryUpsellProducts returns items from the same department/cate
     materials: ['Cow Leather'],
     description: 'desc',
     inStock: true,
+    hiddenFromStore,
     featured: true,
   });
 
-  const pWomenJacket1 = makeProd('w-jacket-1', 'women', 'Jacket');
-  const pWomenJacket2 = makeProd('w-jacket-2', 'women', 'Jacket');
-  const pWomenBag = makeProd('w-bag', 'women', 'Bags');
-  const pKidsBaby1 = makeProd('k-baby-1', 'kids', 'Baby');
-  const pKidsBaby2 = makeProd('k-baby-2', 'kids', 'Baby');
-  const pKidsJunior = makeProd('k-junior', 'kids', 'Junior');
-  const all = [pWomenJacket1, pWomenJacket2, pWomenBag, pKidsBaby1, pKidsBaby2, pKidsJunior];
+  const pTrouser1 = makeProd('w-trouser-1', 'women', 'Trousers', 110);
+  const pTrouser2 = makeProd('w-trouser-2', 'women', 'Trousers', 110);
+  const pDenim1 = makeProd('w-denim-1', 'women', 'Denim', 120);
+  const pDenim2 = makeProd('w-denim-2', 'women', 'Denim', 115);
+  const pTopAccessible = makeProd('w-top-accessible', 'women', 'Tops', 85);
+  const pTopExpensive = makeProd('w-top-expensive', 'women', 'Tops', 320);
+  const pTopHidden = makeProd('w-top-hidden', 'women', 'Tops', 80, true);
+  const pFur1 = makeProd('w-fur-1', 'women', 'Fur', 180);
+  const pFur2 = makeProd('w-fur-2', 'women', 'Fur', 175);
+  const pBag = makeProd('w-bag-1', 'women', 'Bags', 95);
+  const pKidsBaby1 = makeProd('k-baby-1', 'kids', 'Baby', 75);
+  const pKidsBaby2 = makeProd('k-baby-2', 'kids', 'Baby', 65);
+  const pKidsJunior = makeProd('k-junior', 'kids', 'Junior', 65);
 
-  const womenUpsell = getComplementaryUpsellProducts(
-    [{ product: pWomenJacket1 }],
+  const all = [
+    pTrouser1,
+    pTrouser2,
+    pDenim1,
+    pDenim2,
+    pTopAccessible,
+    pTopExpensive,
+    pTopHidden,
+    pFur1,
+    pFur2,
+    pBag,
+    pKidsBaby1,
+    pKidsBaby2,
+    pKidsJunior,
+  ];
+
+  // 1. Adding Trousers recommends an accessible complementary Top (NOT another Trouser or Denim, and never a hidden item)
+  const trouserUpsell = getComplementaryUpsellProducts(
+    [{ product: pTrouser1, quantity: 1 }],
     all
   );
-  assert.equal(womenUpsell.length, 1);
-  assert.equal(womenUpsell[0].id, 'w-jacket-2');
+  assert.equal(trouserUpsell.length, 1);
+  assert.equal(trouserUpsell[0].id, 'w-top-accessible');
 
+  // 2. Adding Denim AND Fur together in the bag evaluates the whole bag (Bottoms + Outerwear already in bag)
+  // and recommends the missing complementary Top (NOT another Fur and NOT another Denim)
+  const multiItemDenimAndFurUpsell = getComplementaryUpsellProducts(
+    [
+      { product: pDenim1, quantity: 1 },
+      { product: pFur1, quantity: 1 },
+    ],
+    all
+  );
+  assert.equal(multiItemDenimAndFurUpsell.length, 1);
+  assert.equal(multiItemDenimAndFurUpsell[0].id, 'w-top-accessible');
+
+  // 3. When Denim + Fur + Top are all in the bag, the remaining missing outfit slot is Finishing (Bags)
+  const fullOutfitUpsell = getComplementaryUpsellProducts(
+    [
+      { product: pDenim1, quantity: 1 },
+      { product: pFur1, quantity: 1 },
+      { product: pTopAccessible, quantity: 1 },
+    ],
+    all
+  );
+  assert.equal(fullOutfitUpsell.length, 1);
+  assert.equal(fullOutfitUpsell[0].id, 'w-bag-1');
+
+  // 4. Kids age group stays within the matching Kids age group (Baby / MINIS 1 To 5)
   const kidsBabyUpsell = getComplementaryUpsellProducts(
-    [{ product: pKidsBaby1 }],
+    [{ product: pKidsBaby1, quantity: 1 }],
     all
   );
   assert.equal(kidsBabyUpsell.length, 1);
   assert.equal(kidsBabyUpsell[0].id, 'k-baby-2');
+
+  // 5. Color Harmony & Universal Luxury Neutral Priority:
+  // Even when BLUE KNIT ($33) is listed before WHITE KNIT ($33) alphabetically,
+  // adding BOMBER JACKET ($35) prioritizes WHITE KNIT (universal luxury neutral) over BLUE KNIT
+  const pBomberJacket = {
+    ...makeProd('w-bomber', 'women', 'Jackets', 35),
+    name: 'BOMBER JACKET',
+  };
+  const pBlueKnit = {
+    ...makeProd('w-blue-knit', 'women', 'Tops', 33),
+    name: 'BLUE KNIT',
+  };
+  const pWhiteKnit = {
+    ...makeProd('w-white-knit', 'women', 'Tops', 33),
+    name: 'WHITE KNIT',
+  };
+  const bomberUpsell = getComplementaryUpsellProducts(
+    [{ product: pBomberJacket, quantity: 1 }],
+    [pBomberJacket, pBlueKnit, pWhiteKnit]
+  );
+  assert.equal(bomberUpsell.length, 1);
+  assert.equal(bomberUpsell[0].id, 'w-white-knit');
+
+  // 6. Dual-Slot "Complete the Look" (limit = 2):
+  // Card #1 is the best complementary apparel piece (WHITE KNIT), and Card #2 is the best color-matched One-Size Hat
+  const pCrimsonCoat = {
+    ...makeProd('w-crimson-coat', 'women', 'Trench Coat', 150),
+    name: 'CRIMSON CASHMERE COAT',
+  };
+  const pEspressoHat = {
+    ...makeProd('w-hat-espresso', 'women', 'Hat', 110),
+    name: 'ESPRESSO MINK COSSACK',
+    style: 'Accessories' as const,
+    sizes: ['OS'],
+    sizeQuantities: { OS: 1 },
+  };
+  const pBurgundyHat = {
+    ...makeProd('w-hat-burgundy', 'women', 'Hat', 110),
+    name: 'BURGUNDY MINK COSSACK',
+    style: 'Accessories' as const,
+    sizes: ['OS'],
+    sizeQuantities: { OS: 2 },
+  };
+  const dualSlotUpsell = getComplementaryUpsellProducts(
+    [{ product: pCrimsonCoat, quantity: 1 }],
+    [pCrimsonCoat, pBlueKnit, pWhiteKnit, pEspressoHat, pBurgundyHat],
+    2
+  );
+  assert.equal(dualSlotUpsell.length, 2);
+  assert.equal(dualSlotUpsell[0].id, 'w-white-knit');
+  assert.equal(dualSlotUpsell[1].id, 'w-hat-burgundy');
 });
 
 test('buildSizeQuantitiesMap defaults blank sizes to 5 and sumSizeQuantities totals per-size stock', () => {

@@ -1813,56 +1813,613 @@ export function hasEmailReachedPromoLimit(
   return usedCount >= maxUses;
 }
 
+export type WomenOutfitSlot =
+  | 'bottoms'
+  | 'tops'
+  | 'outerwear'
+  | 'one_piece'
+  | 'finishing'
+  | 'other';
+
 /**
- * Selects parallel similar products for the Shopping Bag drawer from the same
- * department and category as the items in the customer's bag, excluding items already in the cart.
+ * Classifies a Women category name into its luxury fashion outfit slot
+ * so the Shopping Bag "Complete the Look" engine can recommend true complementary pieces.
  */
-export function getComplementaryUpsellProducts(
-  cartItems: { product: ProductItem }[],
-  allProducts: ProductItem[],
-  limit = 1
-): ProductItem[] {
-  if (!Array.isArray(cartItems) || cartItems.length === 0) return [];
-  const inCartIds = new Set(cartItems.map((ci) => ci.product.id));
-  const anchor = cartItems[cartItems.length - 1].product;
-  const anchorCatLower = anchor.category.trim().toLowerCase();
-  const inCartCategories = new Set(
-    cartItems.map((ci) => ci.product.category.trim().toLowerCase())
+export function classifyWomenOutfitSlot(rawCategory: string): WomenOutfitSlot {
+  const lower = (rawCategory || '').trim().toLowerCase();
+  if (
+    lower === 'trousers' ||
+    lower === 'trouser' ||
+    lower === 'pants' ||
+    lower === 'pant' ||
+    lower === 'denim' ||
+    lower === 'jeans' ||
+    lower === 'skirts' ||
+    lower === 'skirt'
+  ) {
+    return 'bottoms';
+  }
+  if (
+    lower === 'tops' ||
+    lower === 'top' ||
+    lower === 'blouse' ||
+    lower === 'shirt' ||
+    lower === 'knitwear'
+  ) {
+    return 'tops';
+  }
+  if (
+    lower === 'jackets' ||
+    lower === 'jacket' ||
+    lower === 'fur' ||
+    lower === 'trench coat' ||
+    lower === 'trench-coat' ||
+    lower === 'coat' ||
+    lower === 'outerwear'
+  ) {
+    return 'outerwear';
+  }
+  if (
+    lower === 'dress' ||
+    lower === 'dresses' ||
+    lower === 'full set' ||
+    lower === 'full-set' ||
+    lower === 'classic set' ||
+    lower === 'classic-set' ||
+    lower === 'comfy set' ||
+    lower === 'comfy-set' ||
+    lower.endsWith(' set')
+  ) {
+    return 'one_piece';
+  }
+  if (
+    lower === 'bags' ||
+    lower === 'bag' ||
+    lower === 'accessories' ||
+    lower === 'accessory' ||
+    lower === 'belts' ||
+    lower === 'belt' ||
+    lower === 'footwear' ||
+    lower === 'shoes' ||
+    lower === 'sliders' ||
+    lower === 'hat' ||
+    lower === 'hats' ||
+    lower === 'headwear'
+  ) {
+    return 'finishing';
+  }
+  return 'other';
+}
+
+export type LuxuryColorFamily =
+  | 'monochrome'
+  | 'warm_earth'
+  | 'burgundy_red'
+  | 'blue_cool'
+  | 'green_olive'
+  | 'statement';
+
+const UNIVERSAL_NEUTRAL_KEYWORDS = [
+  'white',
+  'ivory',
+  'pearl',
+  'oatmeal',
+  'dove',
+  'snow',
+  'alabaster',
+  'black',
+  'noir',
+  'onyx',
+  'coal',
+  'charcoal',
+  'graphite',
+  'grey',
+  'gray',
+  'light grey',
+  'slate',
+  'graige',
+  'silver',
+  'beige',
+  'camel',
+  'sahara',
+  'fawn',
+  'taupe',
+  'sand',
+  'brown',
+  'espresso',
+  'chocolate',
+  'truffle',
+  'cognac',
+  'umber',
+  'chestnut',
+  'chiffon top',
+] as const;
+
+const STATEMENT_COLOR_KEYWORDS = [
+  'blue',
+  'azure',
+  'sky',
+  'mint',
+  'jade',
+  'emerald',
+  'orange',
+  'sunset',
+  'zebra',
+  'joker',
+  'mosaic',
+  'borealis',
+  'lavender',
+] as const;
+
+const COLOR_FAMILY_KEYWORDS: Record<LuxuryColorFamily, readonly string[]> = {
+  monochrome: [
+    'white',
+    'ivory',
+    'pearl',
+    'oatmeal',
+    'dove',
+    'snow',
+    'alabaster',
+    'black',
+    'noir',
+    'onyx',
+    'coal',
+    'charcoal',
+    'graphite',
+    'grey',
+    'gray',
+    'light grey',
+    'slate',
+    'graige',
+    'silver',
+    'chiffon top',
+  ],
+  warm_earth: [
+    'beige',
+    'camel',
+    'sahara',
+    'fawn',
+    'taupe',
+    'sand',
+    'brown',
+    'espresso',
+    'chocolate',
+    'truffle',
+    'cognac',
+    'umber',
+    'chestnut',
+    'terracotta',
+    'graige',
+    'oatmeal',
+  ],
+  burgundy_red: [
+    'burgundy',
+    'merlot',
+    'crimson',
+    'ruby',
+    'scarlet',
+    'oxblood',
+    'blush',
+  ],
+  blue_cool: ['blue', 'navy', 'midnight', 'azure', 'sky', 'denim'],
+  green_olive: ['olive', 'matcha', 'sage', 'mint', 'jade', 'emerald'],
+  statement: [
+    'orange',
+    'sunset',
+    'zebra',
+    'joker',
+    'mosaic',
+    'borealis',
+    'lavender',
+    'plum',
+  ],
+};
+
+function matchesWordKeyword(haystackLower: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i').test(
+    haystackLower
   );
-  const anchorMaterials = new Set(
-    (anchor.materials || []).map((m) => m.trim().toLowerCase())
+}
+
+/**
+ * Extracts a product's luxury color profile from its explicit `selectedColor`,
+ * product `name`, and `colorVariants` so "Complete the Look" prioritizes universal
+ * luxury neutrals and color-harmonious pairings over clashing statement colors.
+ */
+export function detectProductColorProfile(
+  prod: ProductItem,
+  selectedColor?: string
+): {
+  isUniversalNeutral: boolean;
+  isStatementColor: boolean;
+  families: Set<LuxuryColorFamily>;
+} {
+  const variantNames =
+    prod.hasColors && Array.isArray(prod.colorVariants)
+      ? prod.colorVariants.map((v) => v?.colorName || '').join(' ')
+      : '';
+  const combinedLower = [selectedColor || '', prod.name || '', variantNames]
+    .join(' ')
+    .trim()
+    .toLowerCase();
+
+  const isUniversalNeutral = UNIVERSAL_NEUTRAL_KEYWORDS.some((kw) =>
+    matchesWordKeyword(combinedLower, kw)
+  );
+  const isStatementColor = STATEMENT_COLOR_KEYWORDS.some((kw) =>
+    matchesWordKeyword(combinedLower, kw)
   );
 
-  const availablePool = allProducts.filter((p) => {
-    if (inCartIds.has(p.id)) return false;
-    const totalStock = sumSizeQuantities(p.sizes, p.sizeQuantities);
-    return p.inStock && totalStock > 0 && p.department === anchor.department;
+  const families = new Set<LuxuryColorFamily>();
+  (Object.keys(COLOR_FAMILY_KEYWORDS) as LuxuryColorFamily[]).forEach((fam) => {
+    if (
+      COLOR_FAMILY_KEYWORDS[fam].some((kw) =>
+        matchesWordKeyword(combinedLower, kw)
+      )
+    ) {
+      families.add(fam);
+    }
   });
+
+  return {
+    isUniversalNeutral,
+    isStatementColor,
+    families,
+  };
+}
+
+/**
+ * Industry-standard "Complete the Look" Shopping Bag Cross-Sell Engine:
+ * - Analyzes ALL items currently in the customer's bag (`cartItems`), not just the last item added.
+ * - Never recommends a product from the exact same Women category already in the bag when complementary categories exist.
+ * - Fills missing outfit slots across the whole bag (e.g., Trousers/Denim -> Tops/Jackets/Fur; Denim + Fur -> Tops/Bags/Footwear/Hat/Accessories).
+ * - Applies Luxury Color Harmony & Universal Neutral Priority (+8 for universal neutrals, +10 for color-palette harmony, -6 for unmatched statement colors).
+ * - Applies price conversion psychology (prioritizing accessible add-on prices at or below the bag's highest item price and items that bridge the free-shipping threshold).
+ */
+export function getComplementaryUpsellProducts(
+  cartItems: {
+    product: ProductItem;
+    quantity?: number;
+    selectedColor?: string;
+  }[],
+  allProducts: ProductItem[],
+  limit = 1,
+  freeShippingThreshold = 100
+): ProductItem[] {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) return [];
+
+  const inCartIds = new Set<string>();
+  const inCartCategoriesLower = new Set<string>();
+  const inCartSlots = new Set<WomenOutfitSlot>();
+  const inCartStylesLower = new Set<string>();
+  const inCartMaterialsLower = new Set<string>();
+  const inCartKidsCategories = new Set<string>();
+  const inCartColorFamilies = new Set<LuxuryColorFamily>();
+
+  let bagSubtotal = 0;
+  let highestBagItemPrice = 0;
+
+  for (const ci of cartItems) {
+    if (!ci || !ci.product) continue;
+    const prod = ci.product;
+    inCartIds.add(prod.id);
+
+    // Also exclude standalone pieces that are already part of a Full Set in the bag
+    if (Array.isArray(prod.setItems)) {
+      for (const piece of prod.setItems) {
+        if (piece?.productId) {
+          inCartIds.add(piece.productId);
+        }
+      }
+    }
+
+    const catLower = (prod.category || '').trim().toLowerCase();
+    if (catLower) {
+      inCartCategoriesLower.add(catLower);
+    }
+
+    if (prod.department === 'kids') {
+      inCartKidsCategories.add(
+        normalizeKidsCategoryName(prod.category).toLowerCase()
+      );
+    } else {
+      const slot = classifyWomenOutfitSlot(prod.category);
+      inCartSlots.add(slot);
+      // If a Full Set or Classic/Comfy Set is in the bag, it already covers tops + bottoms
+      if (catLower.includes('set') && slot === 'one_piece') {
+        inCartSlots.add('one_piece');
+      }
+    }
+
+    const colorProfile = detectProductColorProfile(prod, ci.selectedColor);
+    colorProfile.families.forEach((fam) => inCartColorFamilies.add(fam));
+
+    const styleLower = (prod.style || '').trim().toLowerCase();
+    if (styleLower) {
+      inCartStylesLower.add(styleLower);
+    }
+
+    if (Array.isArray(prod.materials)) {
+      for (const mat of prod.materials) {
+        const cleanMat = (mat || '').trim().toLowerCase();
+        if (cleanMat) inCartMaterialsLower.add(cleanMat);
+      }
+    }
+
+    const effPrice = getEffectiveProductPrice(prod).effectivePrice;
+    const qty = Math.max(1, Number(ci.quantity) || 1);
+    bagSubtotal += effPrice * qty;
+    if (effPrice > highestBagItemPrice) {
+      highestBagItemPrice = effPrice;
+    }
+  }
+
+  const anchor = cartItems[cartItems.length - 1].product;
+  const targetDepartment = anchor.department;
+
+  const availablePool = allProducts.filter((p) => {
+    if (!p || inCartIds.has(p.id)) return false;
+    if (p.hiddenFromStore) return false;
+    const totalStock = sumSizeQuantities(p.sizes, p.sizeQuantities);
+    return p.inStock && totalStock > 0 && p.department === targetDepartment;
+  });
+
+  if (availablePool.length === 0) return [];
 
   const scored = availablePool.map((candidate) => {
     let score = 0;
-    const candidateCatLower = candidate.category.trim().toLowerCase();
-    const sameCategory = candidateCatLower === anchorCatLower;
-    const matchesAnyCartCategory = inCartCategories.has(candidateCatLower);
-    const sameStyle =
-      candidate.style.trim().toLowerCase() === anchor.style.trim().toLowerCase();
-    const sharesMaterial = (candidate.materials || []).some((m) =>
-      anchorMaterials.has(m.trim().toLowerCase())
-    );
+    const candidateCatLower = (candidate.category || '').trim().toLowerCase();
+    const candidateStyleLower = (candidate.style || '').trim().toLowerCase();
+    const candidatePrice = getEffectiveProductPrice(candidate);
+    const effCandidatePrice = candidatePrice.effectivePrice;
 
-    // Parallel recommendation: prioritize the exact same category as the item being purchased
-    if (sameCategory) {
-      score += 12;
-    } else if (matchesAnyCartCategory) {
-      score += 8;
+    if (targetDepartment === 'kids') {
+      // Kids categories represent age groups (MINIS 1 To 5, CHILDREN 6+, Teen 13+)
+      const normKidsCat = normalizeKidsCategoryName(
+        candidate.category
+      ).toLowerCase();
+      if (inCartKidsCategories.has(normKidsCat)) {
+        score += 30;
+      }
+    } else {
+      const candidateSlot = classifyWomenOutfitSlot(candidate.category);
+      const isCategoryAlreadyInBag =
+        inCartCategoriesLower.has(candidateCatLower);
+      const isSlotAlreadyInBag =
+        candidateSlot !== 'other' &&
+        candidateSlot !== 'finishing' &&
+        inCartSlots.has(candidateSlot);
+
+      // 1. Never recommend the exact same category already in the bag when complementary options exist
+      if (isCategoryAlreadyInBag) {
+        score -= 50;
+      } else if (isSlotAlreadyInBag) {
+        // e.g. Customer already has Denim (bottoms) in bag -> don't recommend Trousers (also bottoms) if Tops/Outerwear/Bags exist
+        score -= 18;
+      }
+
+      // 2. Whole-Bag Outfit Slot Complementarity across ALL items in the bag
+      if (!isCategoryAlreadyInBag) {
+        if (inCartSlots.has('bottoms')) {
+          if (candidateSlot === 'tops' && !inCartSlots.has('tops')) {
+            score += 34;
+          } else if (
+            candidateSlot === 'outerwear' &&
+            !inCartSlots.has('outerwear')
+          ) {
+            score += 32;
+          } else if (candidateSlot === 'finishing') {
+            score += 24;
+          }
+        }
+
+        if (inCartSlots.has('tops')) {
+          if (candidateSlot === 'bottoms' && !inCartSlots.has('bottoms')) {
+            score += 34;
+          } else if (
+            candidateSlot === 'outerwear' &&
+            !inCartSlots.has('outerwear')
+          ) {
+            score += 30;
+          } else if (candidateSlot === 'finishing') {
+            score += 24;
+          }
+        }
+
+        if (inCartSlots.has('outerwear')) {
+          if (candidateSlot === 'tops' && !inCartSlots.has('tops')) {
+            score += 34;
+          } else if (
+            candidateSlot === 'bottoms' &&
+            !inCartSlots.has('bottoms')
+          ) {
+            score += 32;
+          } else if (candidateSlot === 'finishing') {
+            score += 26;
+          }
+        }
+
+        if (inCartSlots.has('one_piece')) {
+          if (candidateSlot === 'finishing') {
+            score += 35;
+          } else if (
+            candidateSlot === 'outerwear' &&
+            !inCartSlots.has('outerwear')
+          ) {
+            score += 28;
+          }
+        }
+
+        if (inCartSlots.size === 1 && inCartSlots.has('finishing')) {
+          if (
+            candidateSlot === 'outerwear' ||
+            candidateSlot === 'tops' ||
+            candidateSlot === 'bottoms' ||
+            candidateSlot === 'one_piece'
+          ) {
+            score += 30;
+          } else if (candidateSlot === 'finishing') {
+            score += 22;
+          }
+        }
+
+        if (candidateSlot === 'other') {
+          score += 18;
+        }
+      }
     }
-    if (sameStyle) score += 5;
-    if (sharesMaterial) score += 3;
 
-    return { candidate, score };
+    // 3. Luxury Color Harmony & Universal Neutral Priority
+    const candidateColor = detectProductColorProfile(candidate);
+    const sharesBagColorFamily = Array.from(candidateColor.families).some(
+      (fam) => inCartColorFamilies.has(fam)
+    );
+    const isHarmoniousNeutralWithBagPalette =
+      inCartColorFamilies.size > 0 &&
+      (candidateColor.families.has('monochrome') ||
+        (candidateColor.families.has('warm_earth') &&
+          (inCartColorFamilies.has('warm_earth') ||
+            inCartColorFamilies.has('monochrome') ||
+            inCartColorFamilies.has('burgundy_red') ||
+            inCartColorFamilies.has('green_olive'))));
+
+    if (sharesBagColorFamily) {
+      // Direct color-family match with an item in the bag (e.g. Burgundy/Crimson -> Burgundy Mink Cossack, Espresso/Camel -> Espresso/Taupe, Denim/Navy -> Midnight, Black/Grey -> Charcoal/Silver)
+      score += 18;
+    } else if (
+      (candidateColor.isUniversalNeutral && !candidateColor.isStatementColor) ||
+      isHarmoniousNeutralWithBagPalette
+    ) {
+      // Universal luxury neutrals (White, Ivory, Black, Noir, Beige, Camel, Grey, Brown, Espresso, Chiffon Top) pair with any outfit
+      score += 10;
+    }
+
+    if (candidateColor.isStatementColor && !sharesBagColorFamily) {
+      // Deprioritize loud/statement colors (Blue, Mint, Orange, Zebra, etc.) unless the bag shares that color family
+      score -= 6;
+    }
+
+    // 4. Price & Conversion Psychology ("Easy-to-Sell" Impulse Price + Free-Shipping Bridge)
+    if (highestBagItemPrice > 0 && effCandidatePrice > 0) {
+      if (effCandidatePrice <= highestBagItemPrice) {
+        // Accessible add-on price at or below what the customer already committed to buying
+        score += 12;
+        if (effCandidatePrice >= highestBagItemPrice * 0.35) {
+          score += 5;
+        }
+      } else if (effCandidatePrice <= highestBagItemPrice * 1.25) {
+        score += 4;
+      } else if (effCandidatePrice > highestBagItemPrice * 1.6) {
+        score -= 10;
+      }
+
+      // Free-Shipping Threshold Bridge Bonus
+      if (
+        freeShippingThreshold > 0 &&
+        bagSubtotal > 0 &&
+        bagSubtotal < freeShippingThreshold
+      ) {
+        const gapToFreeShipping = freeShippingThreshold - bagSubtotal;
+        if (
+          effCandidatePrice >= gapToFreeShipping &&
+          effCandidatePrice <=
+            Math.max(highestBagItemPrice * 1.2, gapToFreeShipping + 60)
+        ) {
+          score += 8;
+        }
+      }
+    }
+
+    // 5. Style, Material Harmony & Promotional Appeal
+    const isAccessoriesCompatibleWithClassic =
+      candidateStyleLower === 'accessories' &&
+      (inCartStylesLower.has('classic') ||
+        inCartStylesLower.has('classic luxury'));
+    if (
+      inCartStylesLower.has(candidateStyleLower) ||
+      isAccessoriesCompatibleWithClassic
+    ) {
+      score += 6;
+    }
+    const sharesMaterial = (candidate.materials || []).some((m) =>
+      inCartMaterialsLower.has((m || '').trim().toLowerCase())
+    );
+    if (sharesMaterial) {
+      score += 4;
+    }
+    if (candidatePrice.hasDiscount) {
+      score += 3;
+    }
+
+    return { candidate, score, effCandidatePrice };
   });
 
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    // Tie-breaker: prefer the more accessible impulse price point
+    return a.effCandidatePrice - b.effCandidatePrice;
+  });
+
+  // Dual-Slot "Complete the Look" (when limit >= 2 on Women's catalog):
+  // Card #1: Top-scoring complementary apparel piece (preserving 100% of the clothing logic).
+  // Card #2: Best color-matched One-Size Mink Cossack Hat (or best finishing accessory if a Hat is already in the bag).
+  if (limit >= 2 && targetDepartment === 'women' && scored.length >= 2) {
+    const isHatCategory = (cat: string) => {
+      const lower = (cat || '').trim().toLowerCase();
+      return lower === 'hat' || lower === 'hats' || lower === 'headwear';
+    };
+
+    const hasHatInBag =
+      inCartCategoriesLower.has('hat') ||
+      inCartCategoriesLower.has('hats') ||
+      inCartCategoriesLower.has('headwear');
+
+    const topApparelEntry =
+      scored.find(
+        (entry) =>
+          classifyWomenOutfitSlot(entry.candidate.category) !== 'finishing'
+      ) || scored[0];
+
+    const firstCard = topApparelEntry.candidate;
+    const firstCardCatLower = (firstCard.category || '').trim().toLowerCase();
+
+    let secondEntry =
+      !hasHatInBag && !isHatCategory(firstCard.category)
+        ? scored.find(
+            (entry) =>
+              entry.candidate.id !== firstCard.id &&
+              isHatCategory(entry.candidate.category)
+          )
+        : undefined;
+
+    if (!secondEntry) {
+      secondEntry =
+        scored.find(
+          (entry) =>
+            entry.candidate.id !== firstCard.id &&
+            classifyWomenOutfitSlot(entry.candidate.category) === 'finishing' &&
+            (entry.candidate.category || '').trim().toLowerCase() !==
+              firstCardCatLower
+        ) ||
+        scored.find(
+          (entry) =>
+            entry.candidate.id !== firstCard.id &&
+            (entry.candidate.category || '').trim().toLowerCase() !==
+              firstCardCatLower
+        ) ||
+        scored.find((entry) => entry.candidate.id !== firstCard.id);
+    }
+
+    if (secondEntry) {
+      const selectedIds = new Set([firstCard.id, secondEntry.candidate.id]);
+      const remaining = scored
+        .filter((entry) => !selectedIds.has(entry.candidate.id))
+        .map((entry) => entry.candidate);
+      return [firstCard, secondEntry.candidate, ...remaining].slice(0, limit);
+    }
+  }
+
   return scored.slice(0, limit).map((entry) => entry.candidate);
 }
 

@@ -290,7 +290,12 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   );
 
   const bagTotalWithoutDelivery = Math.max(0, totals.subtotal - totals.discountAmount);
-  const upsellProducts = getComplementaryUpsellProducts(cartItems, products, 1);
+  const upsellProducts = getComplementaryUpsellProducts(
+    cartItems,
+    products,
+    2,
+    isShippingFeeActive ? activeFreeThreshold : 0
+  );
 
   const handleQuickAddUpsell = (prod: ProductItem) => {
     if (prod.hasColors && Array.isArray(prod.colorVariants) && prod.colorVariants.length > 0) {
@@ -682,22 +687,22 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     })}
                   </div>
 
-                  {/* Similar Item Section (Single Parallel Recommendation) */}
+                  {/* Complete the Look Section (Dual-Slot: 1 Apparel Complement + 1 Color-Matched Hat / Finishing Piece) */}
                   {upsellProducts.length > 0 && (
-                    <div className="pt-4 border-t border-zinc-950 space-y-3">
+                    <div className="pt-3.5 border-t border-zinc-950 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-display text-xs font-extrabold uppercase tracking-[0.14em] text-zinc-950">
-                          Similar Item
+                        <h3 className="font-display text-[11.5px] font-extrabold uppercase tracking-[0.14em] text-zinc-950">
+                          Complete the Look
                         </h3>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3">
-                        {upsellProducts.slice(0, 1).map((upsell) => {
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {upsellProducts.slice(0, 2).map((upsell) => {
                           const upsellPricing = getEffectiveProductPrice(upsell);
                           return (
                             <div
                               key={upsell.id}
-                              className="p-3 border border-zinc-200 hover:border-zinc-950 bg-zinc-50/60 flex items-center gap-3.5 transition-colors"
+                              className="p-2.5 border border-zinc-200 hover:border-zinc-950 bg-zinc-50/60 flex items-center gap-3 transition-colors"
                             >
                               <div
                                 onClick={() => {
@@ -706,7 +711,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                     onSelectProduct(upsell);
                                   }
                                 }}
-                                className="w-16 h-20 shrink-0 border border-zinc-200 bg-white cursor-pointer"
+                                className="w-[61px] h-[76px] shrink-0 border border-zinc-200 bg-white cursor-pointer"
                               >
                                 <ProductImage
                                   src={upsell.imageUrl}
@@ -719,7 +724,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                               </div>
 
                               <div className="flex-1 min-w-0">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <div className="text-[9.5px] font-semibold uppercase tracking-wider text-zinc-500">
                                   {upsell.department} · {upsell.category}
                                   {Array.isArray(upsell.materials) && upsell.materials[0]
                                     ? ` · ${upsell.materials[0]}`
@@ -732,16 +737,16 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                       onSelectProduct(upsell);
                                     }
                                   }}
-                                  className="text-xs font-bold uppercase tracking-wider text-zinc-950 truncate hover:underline cursor-pointer mt-0.5"
+                                  className="text-[11.5px] font-bold uppercase tracking-wider text-zinc-950 truncate hover:underline cursor-pointer mt-0.5"
                                 >
                                   {upsell.name}
                                 </h4>
                                 <div className="mt-1 flex items-center gap-1.5 font-mono-tabular">
-                                  <span className="text-xs font-bold text-zinc-950">
+                                  <span className="text-[11.5px] font-bold text-zinc-950">
                                     ${upsellPricing.effectivePrice.toLocaleString()}
                                   </span>
                                   {upsellPricing.hasDiscount && (
-                                    <span className="text-[10px] text-zinc-400 line-through">
+                                    <span className="text-[9.5px] text-zinc-400 line-through">
                                       ${upsellPricing.originalPrice.toLocaleString()}
                                     </span>
                                   )}
@@ -751,7 +756,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleQuickAddUpsell(upsell)}
-                                className="px-3 py-2 bg-zinc-950 text-white text-[10px] font-bold uppercase tracking-[0.12em] hover:bg-zinc-800 transition-colors shrink-0 cursor-pointer"
+                                className="px-2.5 py-1.5 bg-zinc-950 text-white text-[9.5px] font-bold uppercase tracking-[0.12em] hover:bg-zinc-800 transition-colors shrink-0 cursor-pointer"
                               >
                                 + Add to Bag
                               </button>

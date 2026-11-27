@@ -469,7 +469,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'bg-white text-zinc-950 hover:bg-zinc-100'
                   }`}
                 >
-                  Women ({womenCategories.length})
+                  Women
                 </button>
                 <button
                   type="button"
@@ -480,7 +480,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'bg-white text-zinc-950 hover:bg-zinc-100'
                   }`}
                 >
-                  Kids ({kidsCategories.length})
+                  Kids
                 </button>
               </div>
 

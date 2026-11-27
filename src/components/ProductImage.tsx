@@ -38,12 +38,18 @@ export const ProductImage: React.FC<ProductImageProps> = ({
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const retriedRef = useRef<boolean>(false);
-  const [loaded, setLoaded] = useState<boolean>(true);
+  const [loaded, setLoaded] = useState<boolean>(() =>
+    Boolean(normalizedSrc && normalizedSrc.startsWith('studio://'))
+  );
   const [failed, setFailed] = useState<boolean>(false);
 
   React.useEffect(() => {
     retriedRef.current = false;
     setFailed(false);
+    if (!normalizedSrc || normalizedSrc.startsWith('studio://')) {
+      setLoaded(true);
+      return;
+    }
     if (
       imgRef.current &&
       imgRef.current.complete &&
@@ -52,7 +58,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
       setLoaded(true);
       setFailed(false);
     } else {
-      setLoaded(true);
+      setLoaded(false);
     }
   }, [normalizedSrc, normalizedDesktopSrc]);
 
@@ -62,14 +68,26 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     style: styleType,
   });
 
-  // If no image URL is uploaded yet (or an external image failed), render a clean blank studio box
+  const placeholderLogoClass = `${
+    compact ? 'w-10' : 'w-20 sm:w-24'
+  } h-auto object-contain opacity-100 select-none pointer-events-none`;
+
+  // If no image URL is uploaded yet (or an external image failed), render the gray studio box with centered black SAMO logo
   if (!normalizedSrc || failed) {
     return (
       <div
         className={`relative flex items-center justify-center overflow-hidden bg-[#EFEFEF] select-none ${className}`}
         role="img"
         aria-label={seoAltText}
-      />
+      >
+        <img
+          src="https://images.samoweave.com/logo/samo-weave-logo.png"
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className={placeholderLogoClass}
+        />
+      </div>
     );
   }
 
@@ -81,8 +99,21 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   if (!isStudioUri) {
     return (
       <div className={`relative overflow-hidden bg-[#F3F3F4] ${className}`}>
+        {!loaded && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+          >
+            <img
+              src="https://images.samoweave.com/logo/samo-weave-logo.png"
+              alt=""
+              decoding="async"
+              className={placeholderLogoClass}
+            />
+          </div>
+        )}
         {hasSeparateDesktopExternal ? (
-          <picture className="block h-full w-full">
+          <picture className="relative z-10 block h-full w-full">
             <source media="(min-width: 1024px)" srcSet={normalizedDesktopSrc} />
             <img
               ref={(el) => {
@@ -121,7 +152,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
                 setFailed(true);
               }}
               className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
-                loaded ? 'opacity-100' : 'opacity-100'
+                loaded ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </picture>
@@ -162,8 +193,8 @@ export const ProductImage: React.FC<ProductImageProps> = ({
               }
               setFailed(true);
             }}
-            className={`h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
-              loaded ? 'opacity-100' : 'opacity-100'
+            className={`relative z-10 h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02] ${
+              loaded ? 'opacity-100' : 'opacity-0'
             }`}
           />
         )}
