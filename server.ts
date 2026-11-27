@@ -758,6 +758,34 @@ async function startServer() {
     }
   });
 
+  // Per-IP Daily Homepage Newsletter Pop-Up Frequency Cap & Permanent Subscriber IP Suppression
+  // (Kept strictly in server memory to avoid consuming Cloudflare D1 / R2 Free Tier operations)
+  const popupImpressionsMemory: Record<string, { date: string; count: number }> = {};
+  const subscribedNewsletterIpsMemory = new Set<string>();
+
+  const resolveClientIp = (req: express.Request): string => {
+    const cfIp = req.headers['cf-connecting-ip'];
+    if (typeof cfIp === 'string' && cfIp.trim()) {
+      return cfIp.trim();
+    }
+    const xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.trim()) {
+      return xff.split(',')[0].trim();
+    }
+    if (Array.isArray(xff) && xff.length > 0) {
+      return xff[0].trim();
+    }
+    return req.socket?.remoteAddress || '127.0.0.1';
+  };
+
+  const hasSubscribedCookieHeader = (req: express.Request): boolean => {
+    const rawCookie = req.headers.cookie;
+    if (typeof rawCookie !== 'string' || !rawCookie.trim()) return false;
+    return rawCookie
+      .split(';')
+      .some((part) => part.trim() === 'samo_nl_subscribed=1');
+  };
+
   app.post('/api/newsletter/subscribe', async (req, res) => {
     res.set(R2_CORS_HEADERS);
     try {
@@ -795,10 +823,19 @@ async function startServer() {
         subscribedAt: new Date().toISOString(),
       };
 
+      const clientIp = resolveClientIp(req);
+      if (clientIp) {
+        subscribedNewsletterIpsMemory.add(clientIp);
+      }
+
       await upsertD1NewsletterSubscriber(newSub);
       lastD1FetchMs = 0;
       const all = await readD1NewsletterSubscribers();
 
+      res.set(
+        'Set-Cookie',
+        'samo_nl_subscribed=1; Path=/; Max-Age=31536000; SameSite=Lax'
+      );
       res
         .status(200)
         .json({ success: true, subscriber: newSub, subscribers: all });
@@ -810,20 +847,6 @@ async function startServer() {
       res.status(500).json({ error: message });
     }
   });
-
-  // Per-IP Daily Homepage Newsletter Pop-Up Frequency Cap Endpoints (kept in server memory to avoid consuming Cloudflare R2 Free Tier operations)
-  const popupImpressionsMemory: Record<string, { date: string; count: number }> = {};
-
-  const resolveClientIp = (req: express.Request): string => {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff.trim()) {
-      return xff.split(',')[0].trim();
-    }
-    if (Array.isArray(xff) && xff.length > 0) {
-      return xff[0].trim();
-    }
-    return req.socket?.remoteAddress || '127.0.0.1';
-  };
 
   app.get('/api/newsletter/popup-eligibility', async (req, res) => {
     res.set(R2_CORS_HEADERS);
@@ -837,16 +860,20 @@ async function startServer() {
       );
       const entry = popupImpressionsMemory[clientIp];
       const countToday = entry && entry.date === today ? entry.count : 0;
+      const isAlreadySubscribed =
+        subscribedNewsletterIpsMemory.has(clientIp) ||
+        hasSubscribedCookieHeader(req);
 
       res.json({
         ip: clientIp,
         date: today,
         countToday,
         maxPerDay,
-        eligible: countToday < maxPerDay,
+        subscribed: isAlreadySubscribed,
+        eligible: !isAlreadySubscribed && countToday < maxPerDay,
       });
     } catch {
-      res.json({ eligible: true, countToday: 0 });
+      res.json({ eligible: true, countToday: 0, subscribed: false });
     }
   });
 

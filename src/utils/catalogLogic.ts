@@ -4730,4 +4730,66 @@ export function mergeConcurrentOrdersById<
   return merged;
 }
 
+export const NEWSLETTER_SUBSCRIBED_STORAGE_KEY =
+  'samo_newsletter_popup_subscribed_v1';
+export const NEWSLETTER_SUBSCRIBED_COOKIE_NAME = 'samo_nl_subscribed';
+export const NEWSLETTER_SESSION_SHOWN_KEY =
+  'samo_popup_shown_this_session_v1';
 
+/**
+ * Checks whether a cookie string (from `document.cookie` or an HTTP `Cookie` header)
+ * contains the permanent newsletter subscriber flag (`samo_nl_subscribed=1`).
+ */
+export function hasNewsletterSubscribedCookie(
+  cookieString?: string | null
+): boolean {
+  if (typeof cookieString !== 'string' || !cookieString.trim()) {
+    return false;
+  }
+  return cookieString
+    .split(';')
+    .some((part) => part.trim() === `${NEWSLETTER_SUBSCRIBED_COOKIE_NAME}=1`);
+}
+
+/**
+ * Returns a 365-day first-party cookie string marking the visitor as permanently
+ * subscribed to the SAMO newsletter so the pop-up never reappears.
+ */
+export function buildNewsletterSubscribedCookieString(): string {
+  return `${NEWSLETTER_SUBSCRIBED_COOKIE_NAME}=1; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+export interface NewsletterPopupSessionEligibilityInput {
+  isSubscribedLocalStorage: boolean;
+  cookieString?: string | null;
+  shownInCurrentRef: boolean;
+  shownInSessionStorage: boolean;
+  localShownToday: number;
+  maxPerDay: number;
+  serverEligible?: boolean;
+  serverSubscribed?: boolean;
+}
+
+/**
+ * Evaluates whether the Homepage Newsletter Pop-Up is allowed to open during the current visit:
+ * 1. Never opens if the user has ever subscribed (via localStorage, 365-day cookie, or server IP memory).
+ * 2. Never opens a second time during the same active browsing session (`shownInCurrentRef` or `sessionStorage`),
+ *    even if the user stays on the site for 5-30 minutes and navigates between `/home` and other pages.
+ * 3. Only opens in a new session (after closing and re-entering the site) if daily impressions < `maxPerDay`.
+ */
+export function evaluateNewsletterPopupSessionEligibility(
+  input: NewsletterPopupSessionEligibilityInput
+): boolean {
+  if (input.isSubscribedLocalStorage) return false;
+  if (hasNewsletterSubscribedCookie(input.cookieString)) return false;
+  if (input.serverSubscribed === true) return false;
+  if (input.shownInCurrentRef) return false;
+  if (input.shownInSessionStorage) return false;
+
+  const safeMaxPerDay = Math.max(1, Math.min(50, Number(input.maxPerDay) || 1));
+  const safeShownToday = Math.max(0, Number(input.localShownToday) || 0);
+  if (safeShownToday >= safeMaxPerDay) return false;
+
+  if (input.serverEligible === false) return false;
+  return true;
+}

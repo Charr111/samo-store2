@@ -2262,7 +2262,12 @@ test('mergeConcurrentOrdersById preserves orders from two customers shopping con
   assert.ok(afterDelete.every((o) => o.id !== 'ord-older-1'));
 });
 
-import { toggleProductVisibilityState } from './catalogLogic';
+import {
+  buildNewsletterSubscribedCookieString,
+  evaluateNewsletterPopupSessionEligibility,
+  hasNewsletterSubscribedCookie,
+  toggleProductVisibilityState,
+} from './catalogLogic';
 
 test('toggleProductVisibilityState toggles hiddenFromStore without altering quantities or prices and findProductBySlug excludes hidden items', () => {
   const sample = INITIAL_PRODUCTS[0];
@@ -2283,6 +2288,105 @@ test('toggleProductVisibilityState toggles hiddenFromStore without altering quan
   assert.equal(findProductBySlug(catalogRestored, sample.id)?.id, sample.id);
 });
 
+test('evaluateNewsletterPopupSessionEligibility enforces permanent subscriber suppression and strict 1-per-session browsing guard when maxTimesPerDay is 2', () => {
+  const cookieStr = buildNewsletterSubscribedCookieString();
+  assert.equal(hasNewsletterSubscribedCookie(cookieStr), true);
+  assert.equal(hasNewsletterSubscribedCookie('other_cookie=1; foo=bar'), false);
 
+  // 1. Fresh visitor on first visit of the day (Times Per Day = 2) -> Eligible
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: '',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 0,
+      maxPerDay: 2,
+      serverEligible: true,
+      serverSubscribed: false,
+    }),
+    true
+  );
 
+  // 2. Same visitor stays on website for 10 minutes, navigates to /women and back to /home
+  // within the same active session (shownInCurrentRef = true or shownInSessionStorage = true) -> NOT Eligible
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: '',
+      shownInCurrentRef: true,
+      shownInSessionStorage: true,
+      localShownToday: 1,
+      maxPerDay: 2,
+      serverEligible: true,
+      serverSubscribed: false,
+    }),
+    false
+  );
 
+  // 3. Visitor closes website and re-enters later that day in a NEW session (session flags reset, localShownToday = 1 < maxPerDay = 2) -> Eligible for 2nd daily impression
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: '',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 1,
+      maxPerDay: 2,
+      serverEligible: true,
+      serverSubscribed: false,
+    }),
+    true
+  );
+
+  // 4. Visitor closes and enters a 3rd time on the same day when maxPerDay = 2 (localShownToday = 2) -> NOT Eligible
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: '',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 2,
+      maxPerDay: 2,
+      serverEligible: true,
+      serverSubscribed: false,
+    }),
+    false
+  );
+
+  // 5. Subscribed user (via localStorage, 365-day cookie, or server IP memory) -> NEVER Eligible even when localShownToday = 0 and maxPerDay = 2
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: true,
+      cookieString: '',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 0,
+      maxPerDay: 2,
+    }),
+    false
+  );
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: 'theme=dark; samo_nl_subscribed=1',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 0,
+      maxPerDay: 2,
+    }),
+    false
+  );
+  assert.equal(
+    evaluateNewsletterPopupSessionEligibility({
+      isSubscribedLocalStorage: false,
+      cookieString: '',
+      shownInCurrentRef: false,
+      shownInSessionStorage: false,
+      localShownToday: 0,
+      maxPerDay: 2,
+      serverSubscribed: true,
+    }),
+    false
+  );
+});

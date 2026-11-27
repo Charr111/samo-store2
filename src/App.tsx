@@ -47,11 +47,13 @@ import {
 import {
   buildCategoryUrl,
   buildDefaultCategoryBannerForCategory,
+  buildNewsletterSubscribedCookieString,
   buildProductUrl,
   buildSizeQuantitiesMap,
   createSafeSlug,
   decrementStockForAcceptedOrder,
   DEFAULT_NEWSLETTER_POPUP_CONFIG,
+  evaluateNewsletterPopupSessionEligibility,
   filterCatalogProducts,
   filterGiftsProducts,
   filterNewArrivalProducts,
@@ -60,10 +62,13 @@ import {
   getCategoryBannerSplitIndex,
   getEffectiveProductPrice,
   getSizeQuantity,
+  hasNewsletterSubscribedCookie,
   isAuthorizedAdminEmail,
   mergeNewsletterPopupConfig,
   mergeSiteBannersConfig,
   moveCategoryInDepartment,
+  NEWSLETTER_SESSION_SHOWN_KEY,
+  NEWSLETTER_SUBSCRIBED_STORAGE_KEY,
   normalizeKidsCategoryName,
   orderHomeNewArrivalsProducts,
   parseCatalogUrlState,
@@ -625,8 +630,27 @@ export default function App() {
   >('cart');
   const cartReturnProductRef = useRef<ProductItem | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState<string>('');
-  const [newsletterSubscribed, setNewsletterSubscribed] =
-    useState<boolean>(false);
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState<boolean>(
+    () => {
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          localStorage.getItem(NEWSLETTER_SUBSCRIBED_STORAGE_KEY) === '1'
+        ) {
+          return true;
+        }
+      } catch {}
+      try {
+        if (
+          typeof document !== 'undefined' &&
+          hasNewsletterSubscribedCookie(document.cookie)
+        ) {
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+  );
   const [newsletterSubscribers, setNewsletterSubscribers] = useState<
     NewsletterSubscriber[]
   >([]);
@@ -641,6 +665,7 @@ export default function App() {
     );
   const [isNewsletterPopupOpen, setIsNewsletterPopupOpen] =
     useState<boolean>(false);
+  const popupShownInCurrentVisitRef = useRef<boolean>(false);
   const [seoConfig, setSeoConfig] = useState<SeoConfigState>(() => {
     const stored = loadStored<SeoConfigState | null>(STORAGE_KEYS.seoConfig, null);
     if (stored && stored.siteTitleSuffix) return stored;
@@ -851,7 +876,22 @@ export default function App() {
     seoConfig,
   ]);
 
-  // Homepage 10% OFF Newsletter Pop-Up Timer & IP Daily Frequency Cap
+  const markUserPermanentlySubscribedToNewsletter = () => {
+    popupShownInCurrentVisitRef.current = true;
+    try {
+      localStorage.setItem(NEWSLETTER_SUBSCRIBED_STORAGE_KEY, '1');
+    } catch {}
+    try {
+      sessionStorage.setItem(NEWSLETTER_SESSION_SHOWN_KEY, '1');
+    } catch {}
+    try {
+      if (typeof document !== 'undefined') {
+        document.cookie = buildNewsletterSubscribedCookieString();
+      }
+    } catch {}
+  };
+
+  // Homepage 10% OFF Newsletter Pop-Up Timer, 1-Per-Session Browsing Guard & IP Daily Frequency Cap
   useEffect(() => {
     if (currentRoute !== '/home' || !newsletterPopupConfig.enabled) {
       return;
@@ -865,27 +905,74 @@ export default function App() {
       Math.min(50, Number(newsletterPopupConfig.maxTimesPerDay) || 1)
     );
 
-    let cancelled = false;
-    const timerId = window.setTimeout(async () => {
-      if (cancelled) return;
+    const readClientNewsletterEligibilityState = (todayStr: string) => {
+      let isSubscribedLocalStorage = false;
       try {
-        if (localStorage.getItem('samo_newsletter_popup_subscribed_v1') === '1') {
-          return;
-        }
+        isSubscribedLocalStorage =
+          localStorage.getItem(NEWSLETTER_SUBSCRIBED_STORAGE_KEY) === '1';
       } catch {}
 
-      const todayStr = new Date().toISOString().slice(0, 10);
+      let shownInSessionStorage = false;
+      try {
+        shownInSessionStorage =
+          sessionStorage.getItem(NEWSLETTER_SESSION_SHOWN_KEY) === '1';
+      } catch {}
+
       const localCountKey = `samo_popup_imp_${todayStr}`;
       let localShownToday = 0;
       try {
         localShownToday = Number(localStorage.getItem(localCountKey) || '0') || 0;
       } catch {}
 
-      if (localShownToday >= maxPerDay) {
+      const cookieString =
+        typeof document !== 'undefined' ? document.cookie : '';
+
+      return {
+        isSubscribedLocalStorage,
+        shownInSessionStorage,
+        localCountKey,
+        localShownToday,
+        cookieString,
+      };
+    };
+
+    const initialTodayStr = new Date().toISOString().slice(0, 10);
+    const initialClientState = readClientNewsletterEligibilityState(initialTodayStr);
+    if (
+      !evaluateNewsletterPopupSessionEligibility({
+        isSubscribedLocalStorage: initialClientState.isSubscribedLocalStorage,
+        cookieString: initialClientState.cookieString,
+        shownInCurrentRef: popupShownInCurrentVisitRef.current,
+        shownInSessionStorage: initialClientState.shownInSessionStorage,
+        localShownToday: initialClientState.localShownToday,
+        maxPerDay,
+      })
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const timerId = window.setTimeout(async () => {
+      if (cancelled) return;
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const clientState = readClientNewsletterEligibilityState(todayStr);
+
+      if (
+        !evaluateNewsletterPopupSessionEligibility({
+          isSubscribedLocalStorage: clientState.isSubscribedLocalStorage,
+          cookieString: clientState.cookieString,
+          shownInCurrentRef: popupShownInCurrentVisitRef.current,
+          shownInSessionStorage: clientState.shownInSessionStorage,
+          localShownToday: clientState.localShownToday,
+          maxPerDay,
+        })
+      ) {
         return;
       }
 
       let serverEligible = true;
+      let serverSubscribed = false;
       try {
         const res = await fetch(
           `/api/newsletter/popup-eligibility?maxPerDay=${maxPerDay}`,
@@ -893,17 +980,45 @@ export default function App() {
         );
         if (res.ok) {
           const data = await res.json();
-          if (data && data.eligible === false) {
+          if (data && data.subscribed === true) {
+            serverSubscribed = true;
+            serverEligible = false;
+            markUserPermanentlySubscribedToNewsletter();
+          } else if (data && data.eligible === false) {
             serverEligible = false;
           }
         }
       } catch {}
 
-      if (cancelled || !serverEligible) return;
+      if (
+        cancelled ||
+        !evaluateNewsletterPopupSessionEligibility({
+          isSubscribedLocalStorage: clientState.isSubscribedLocalStorage,
+          cookieString: clientState.cookieString,
+          shownInCurrentRef: popupShownInCurrentVisitRef.current,
+          shownInSessionStorage: clientState.shownInSessionStorage,
+          localShownToday: clientState.localShownToday,
+          maxPerDay,
+          serverEligible,
+          serverSubscribed,
+        })
+      ) {
+        return;
+      }
 
-      setIsNewsletterPopupOpen(true);
+      // Mark shown for this active browsing session so navigating away from /home
+      // and back to /home during the same visit never triggers a 2nd pop-up.
+      popupShownInCurrentVisitRef.current = true;
       try {
-        localStorage.setItem(localCountKey, String(localShownToday + 1));
+        sessionStorage.setItem(NEWSLETTER_SESSION_SHOWN_KEY, '1');
+      } catch {}
+      setIsNewsletterPopupOpen(true);
+
+      try {
+        localStorage.setItem(
+          clientState.localCountKey,
+          String(clientState.localShownToday + 1)
+        );
       } catch {}
       try {
         await fetch('/api/newsletter/popup-impression', {
@@ -2925,6 +3040,7 @@ export default function App() {
         err
       );
     }
+    markUserPermanentlySubscribedToNewsletter();
     setNewsletterSubscribed(true);
     setNewsletterEmail('');
   };
@@ -2983,9 +3099,7 @@ export default function App() {
       return next;
     });
 
-    try {
-      localStorage.setItem('samo_newsletter_popup_subscribed_v1', '1');
-    } catch {}
+    markUserPermanentlySubscribedToNewsletter();
     setNewsletterSubscribed(true);
   };
 
