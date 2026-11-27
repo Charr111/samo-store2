@@ -149,7 +149,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
                 alt={`${product.name} — View ${idx + 1}`}
                 category={product.category}
                 styleType={product.style}
-                compact={true}
+                compact={false}
                 className="h-full w-full"
               />
             </div>
