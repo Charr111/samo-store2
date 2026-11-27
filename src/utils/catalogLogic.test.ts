@@ -2492,3 +2492,137 @@ test('evaluateNewsletterPopupSessionEligibility enforces permanent subscriber su
     false
   );
 });
+
+import {
+  applyExclusiveHomeCategoryCover,
+  deserializeProductD1Meta,
+  ensureHomepageMerchandisingDefaults,
+  getHomeWomenCategoryTiles,
+  normalizeHomeWomenCategoryTile,
+  orderHomeBagsProducts,
+  serializeProductD1Meta,
+} from './catalogLogic';
+
+test('D1 discount & homepage merchandising serialization preserves percentage and fixed discounts plus all 3 homepage toggles across refresh/clear-cache', () => {
+  const sampleBag: ProductItem = {
+    ...INITIAL_PRODUCTS[0],
+    id: 'test-bag-discount',
+    name: 'SAHARA CROC CRESCENT',
+    department: 'women',
+    category: 'Bags',
+    style: 'Fine Leather',
+    price: 83,
+    discountType: 'fixed',
+    discountValue: 8,
+    isNewArrival: true,
+    showInHomeNewArrivals: true,
+    homeNewArrivalsOrder: 2,
+    isHomeCategoryCover: false,
+    showInHomeBags: true,
+    homeBagsOrder: 1,
+  };
+
+  const d1Row = serializeProductD1Meta(sampleBag);
+  assert.equal(d1Row.featuredColumn, 1);
+  assert.equal(d1Row.discountPercentColumn, 8);
+  assert.equal(d1Row.discountBadgeColumn, 'fixed');
+
+  const restored = deserializeProductD1Meta({
+    custom_style: d1Row.customStyleColumn,
+    discount_badge: d1Row.discountBadgeColumn,
+    discount_percent: d1Row.discountPercentColumn,
+    featured: d1Row.featuredColumn,
+  });
+
+  assert.equal(restored.discountType, 'fixed');
+  assert.equal(restored.discountValue, 8);
+  assert.equal(restored.isNewArrival, true);
+  assert.equal(restored.showInHomeNewArrivals, true);
+  assert.equal(restored.homeNewArrivalsOrder, 2);
+  assert.equal(restored.showInHomeBags, true);
+  assert.equal(restored.homeBagsOrder, 1);
+
+  const pricing = getEffectiveProductPrice({
+    ...sampleBag,
+    ...restored,
+  });
+  assert.equal(pricing.hasDiscount, true);
+  assert.equal(pricing.originalPrice, 83);
+  assert.equal(pricing.effectivePrice, 75);
+});
+
+test('Homepage merchandising defaults pre-populate existing items, enforce 1-per-category Women cover exclusivity, and order carousels by 1, 2, 3...', () => {
+  const defaulted = ensureHomepageMerchandisingDefaults(INITIAL_PRODUCTS);
+
+  // 1. Pre-populated Homepage New Arrivals (Women & Kids)
+  const womenHomeNew = orderHomeNewArrivalsProducts(defaulted, 'women');
+  assert.equal(womenHomeNew.length > 0, true);
+  assert.equal(
+    womenHomeNew[0].name.toUpperCase().includes('SAHARA CROC CRESCENT'),
+    true
+  );
+  assert.equal(womenHomeNew[0].showInHomeNewArrivals, true);
+  assert.equal(womenHomeNew[0].homeNewArrivalsOrder, 1);
+
+  // Reorder #2 to #1 and #1 to #3 and verify exact ascending order
+  if (womenHomeNew.length >= 2) {
+    const firstId = womenHomeNew[0].id;
+    const secondId = womenHomeNew[1].id;
+    const reorderedCatalog = defaulted.map((p) => {
+      if (p.id === firstId) return { ...p, homeNewArrivalsOrder: 3 };
+      if (p.id === secondId) return { ...p, homeNewArrivalsOrder: 1 };
+      return p;
+    });
+    const afterReorder = orderHomeNewArrivalsProducts(reorderedCatalog, 'women');
+    assert.equal(afterReorder[0].id, secondId);
+  }
+
+  // Turning off isNewArrival automatically excludes item from Homepage New Arrivals
+  const turnedOffNew = defaulted.map((p, idx) =>
+    idx === 0 ? { ...p, isNewArrival: false, showInHomeNewArrivals: true } : p
+  );
+  const normalizedOff = ensureHomepageMerchandisingDefaults(turnedOffNew);
+  assert.equal(normalizedOff[0].showInHomeNewArrivals, false);
+
+  // 2. Section 2 Women's 4 Category Tiles (Jackets, Trousers, Skirts, Denim) & 1-per-category exclusivity
+  const womenCats = INITIAL_CATEGORIES.filter((c) => c.department === 'women');
+  const tiles = getHomeWomenCategoryTiles(defaulted, womenCats);
+  assert.deepEqual(
+    tiles.map((t) => t.tileName),
+    ['Jackets', 'Trousers', 'Skirts', 'Denim']
+  );
+
+  const jackets = defaulted.filter(
+    (p) =>
+      p.department === 'women' &&
+      normalizeHomeWomenCategoryTile(p.category) === 'Jackets'
+  );
+  assert.equal(jackets.filter((p) => p.isHomeCategoryCover).length, 1);
+
+  if (jackets.length >= 2) {
+    const secondJacket = jackets.find((p) => !p.isHomeCategoryCover)!;
+    const swapped = applyExclusiveHomeCategoryCover(
+      defaulted,
+      secondJacket.id,
+      true,
+      secondJacket.category
+    );
+    const updatedJackets = swapped.filter(
+      (p) =>
+        p.department === 'women' &&
+        normalizeHomeWomenCategoryTile(p.category) === 'Jackets'
+    );
+    assert.equal(updatedJackets.filter((p) => p.isHomeCategoryCover).length, 1);
+    assert.equal(
+      updatedJackets.find((p) => p.isHomeCategoryCover)?.id,
+      secondJacket.id
+    );
+  }
+
+  // 3. Homepage Bags Collection toggle & 1, 2, 3... ordering
+  const homeBags = orderHomeBagsProducts(defaulted);
+  assert.equal(homeBags.length > 0, true);
+  assert.equal(homeBags[0].showInHomeBags, true);
+  assert.equal(homeBags[0].homeBagsOrder, 1);
+});
+

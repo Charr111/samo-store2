@@ -4,6 +4,11 @@
  * Never imported into client bundles.
  */
 
+import {
+  deserializeProductD1Meta,
+  serializeProductD1Meta,
+} from '../src/utils/catalogLogic';
+
 export interface D1Config {
   accountId: string;
   databaseId: string;
@@ -305,6 +310,7 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
       const parsedSetPieces = p.full_set_pieces
         ? JSON.parse(p.full_set_pieces)
         : [];
+      const unpackedMeta = deserializeProductD1Meta(p);
       return {
         id: p.id,
         name: p.name,
@@ -315,6 +321,8 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
         originalPrice: p.original_price ?? undefined,
         discountPercent: p.discount_percent ?? undefined,
         discountBadge: p.discount_badge ?? undefined,
+        discountType: unpackedMeta.discountType,
+        discountValue: unpackedMeta.discountValue,
         style: p.style || 'Classic Luxury',
         customStyle: p.custom_style ?? undefined,
         materials: p.materials ? JSON.parse(p.materials) : [],
@@ -332,7 +340,23 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
         preorderEnabled: Boolean(p.preorder_enabled),
         description: p.description || '',
         details: p.details ? JSON.parse(p.details) : [],
-        featured: Boolean(p.featured),
+        isNewArrival: unpackedMeta.isNewArrival,
+        featured: unpackedMeta.featured,
+        ...(unpackedMeta.showInHomeNewArrivals !== undefined
+          ? { showInHomeNewArrivals: unpackedMeta.showInHomeNewArrivals }
+          : {}),
+        ...(unpackedMeta.homeNewArrivalsOrder !== undefined
+          ? { homeNewArrivalsOrder: unpackedMeta.homeNewArrivalsOrder }
+          : {}),
+        ...(unpackedMeta.isHomeCategoryCover !== undefined
+          ? { isHomeCategoryCover: unpackedMeta.isHomeCategoryCover }
+          : {}),
+        ...(unpackedMeta.showInHomeBags !== undefined
+          ? { showInHomeBags: unpackedMeta.showInHomeBags }
+          : {}),
+        ...(unpackedMeta.homeBagsOrder !== undefined
+          ? { homeBagsOrder: unpackedMeta.homeBagsOrder }
+          : {}),
         sizeType: p.size_type || 'letter',
         createdAt: p.created_at || new Date().toISOString(),
         updatedAt: p.updated_at || new Date().toISOString(),
@@ -575,6 +599,8 @@ export async function upsertD1Product(p: any): Promise<void> {
     ? p.fullSetPieces
     : [];
 
+  const serializedMeta = serializeProductD1Meta(p || {});
+
   const params = [
     p.id,
     p.name || '',
@@ -583,10 +609,10 @@ export async function upsertD1Product(p: any): Promise<void> {
     p.category || 'Tops',
     p.price ?? 0,
     p.originalPrice ?? null,
-    p.discountPercent ?? null,
-    p.discountBadge ?? null,
+    serializedMeta.discountPercentColumn,
+    serializedMeta.discountBadgeColumn,
     p.style || 'Classic Luxury',
-    p.customStyle ?? null,
+    serializedMeta.customStyleColumn,
     JSON.stringify(Array.isArray(p.materials) ? p.materials : []),
     JSON.stringify(Array.isArray(p.sizes) ? p.sizes : []),
     JSON.stringify(p.sizeQuantities || {}),
@@ -601,7 +627,7 @@ export async function upsertD1Product(p: any): Promise<void> {
     p.preorderEnabled ? 1 : 0,
     p.description || '',
     JSON.stringify(Array.isArray(p.details) ? p.details : []),
-    p.featured ? 1 : 0,
+    serializedMeta.featuredColumn,
     p.sizeType || 'letter',
     p.createdAt || new Date().toISOString(),
     p.updatedAt || new Date().toISOString(),

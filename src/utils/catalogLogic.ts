@@ -4267,12 +4267,44 @@ export function buildOrderConfirmationEmailPayload(
   return payload;
 }
 
+export const HOME_WOMEN_CATEGORY_TILES = [
+  'Jackets',
+  'Trousers',
+  'Skirts',
+  'Denim',
+] as const;
+
+export type HomeWomenCategoryTileName =
+  (typeof HOME_WOMEN_CATEGORY_TILES)[number];
+
 /**
- * Orders the Homepage "New Arrivals" row for the selected department ('women' | 'kids').
- * For 'women', places "SAHARA CROC CRESCENT" 1st, keeps the previous 2nd item in 2nd position,
- * moves the previous 1st item to 3rd position, and moves the previous 3rd item to 4th position.
+ * Maps a Women's category name to one of the 4 canonical Homepage Section 2 Women category tiles:
+ * 'Jackets', 'Trousers', 'Skirts', or 'Denim' (or null if it belongs to another category).
  */
-export function orderHomeNewArrivalsProducts(
+export function normalizeHomeWomenCategoryTile(
+  rawCategory?: string | null
+): HomeWomenCategoryTileName | null {
+  const lower = (rawCategory || '').trim().toLowerCase();
+  if (lower === 'jacket' || lower === 'jackets') return 'Jackets';
+  if (lower === 'trousers' || lower === 'trouser') return 'Trousers';
+  if (lower === 'skirts' || lower === 'skirt') return 'Skirts';
+  if (lower === 'denim' || lower === 'jeans') return 'Denim';
+  return null;
+}
+
+/**
+ * Checks whether a product category is Bags ('Bags' | 'Bag').
+ */
+export function isBagCategory(rawCategory?: string | null): boolean {
+  const lower = (rawCategory || '').trim().toLowerCase();
+  return lower === 'bags' || lower === 'bag';
+}
+
+/**
+ * Internal helper returning the default legacy homepage New Arrivals sequence for a department
+ * (Women: SAHARA CROC CRESCENT 1st, old 2nd -> 2nd, old 1st -> 3rd, old 3rd -> 4th).
+ */
+function buildLegacyHomeNewArrivalsSequence(
   products: ProductItem[],
   department: Department
 ): ProductItem[] {
@@ -4329,6 +4361,601 @@ export function orderHomeNewArrivalsProducts(
     ];
   }
   return rawNewArrivals;
+}
+
+/**
+ * Pre-populates and normalizes the 3 Homepage Merchandising toggles & ordering numbers
+ * and discount fields across the product catalog:
+ * 1. Normalizes discountType ('none' | 'percentage' | 'fixed') and discountValue (>= 0).
+ * 2. Homepage "New Arrivals" Carousel (`showInHomeNewArrivals`, `homeNewArrivalsOrder`):
+ *    - Can ONLY be ON if `isNewArrival` is ON (except for SAHARA CROC CRESCENT which was already
+ *      appearing 1st on the homepage New Arrivals carousel—we automatically mark it `isNewArrival: true`
+ *      if `showInHomeNewArrivals` was not explicitly turned off so it stays 1st with toggle ON and order #1!).
+ *    - All items already appearing in the Homepage "New Arrivals" carousel default to `showInHomeNewArrivals: true`
+ *      and receive sequential `homeNewArrivalsOrder` (`1, 2, 3...`) matching their current homepage appearance order.
+ * 3. Homepage Section 2 Women Category Cover Photo (`isHomeCategoryCover`):
+ *    - Enforces 1-product-per-category exclusivity for Women's `Jackets`, `Trousers`, `Skirts`, and `Denim`.
+ *    - If no product in one of those 4 categories has `isHomeCategoryCover === true` (and none was explicitly
+ *      toggled yet), defaults the first product in that category to `isHomeCategoryCover: true`.
+ * 4. Homepage "Bags Collection" Carousel (`showInHomeBags`, `homeBagsOrder`):
+ *    - All Women's `Bags` products already appearing in the Homepage "Bags Collection" carousel default to
+ *      `showInHomeBags: true` with sequential `homeBagsOrder` (`1, 2, 3...`) in their current homepage order.
+ */
+export function ensureHomepageMerchandisingDefaults(
+  products: ProductItem[]
+): ProductItem[] {
+  if (!Array.isArray(products) || products.length === 0) return [];
+
+  // Step 0: Determine default homepage New Arrivals order for Women and Kids
+  const legacyWomenNa = buildLegacyHomeNewArrivalsSequence(products, 'women');
+  const legacyKidsNa = buildLegacyHomeNewArrivalsSequence(products, 'kids');
+
+  const defaultNaOrderMap = new Map<string, number>();
+  legacyWomenNa.forEach((p, idx) => {
+    defaultNaOrderMap.set(p.id, idx + 1);
+  });
+  legacyKidsNa.forEach((p, idx) => {
+    defaultNaOrderMap.set(p.id, idx + 1);
+  });
+
+  // Determine default homepage Bags order
+  const defaultBagsOrderMap = new Map<string, number>();
+  let bagSeq = 1;
+  for (const p of products) {
+    if (p && p.department === 'women' && isBagCategory(p.category)) {
+      defaultBagsOrderMap.set(p.id, bagSeq++);
+    }
+  }
+
+  // Track 1-per-category cover exclusivity for Women's Jackets, Trousers, Skirts, Denim
+  const coverSelectedByTile = new Map<HomeWomenCategoryTileName, string>();
+  const hasExplicitCoverFlagByTile = new Map<
+    HomeWomenCategoryTileName,
+    boolean
+  >();
+
+  for (const p of products) {
+    if (!p || p.department !== 'women') continue;
+    const tile = normalizeHomeWomenCategoryTile(p.category);
+    if (!tile) continue;
+    if (typeof p.isHomeCategoryCover === 'boolean') {
+      hasExplicitCoverFlagByTile.set(tile, true);
+    }
+    if (p.isHomeCategoryCover === true && !coverSelectedByTile.has(tile)) {
+      coverSelectedByTile.set(tile, p.id);
+    }
+  }
+
+  // For any of the 4 Women tiles that doesn't have an active cover yet and wasn't explicitly set to all-false,
+  // pick the first product in that category as the default cover (matching current homepage Section 2)
+  for (const tile of HOME_WOMEN_CATEGORY_TILES) {
+    if (!coverSelectedByTile.has(tile)) {
+      const firstInTile =
+        products.find(
+          (p) =>
+            p &&
+            !p.hiddenFromStore &&
+            p.department === 'women' &&
+            normalizeHomeWomenCategoryTile(p.category) === tile
+        ) ||
+        products.find(
+          (p) =>
+            p &&
+            p.department === 'women' &&
+            normalizeHomeWomenCategoryTile(p.category) === tile
+        );
+      if (firstInTile && !hasExplicitCoverFlagByTile.get(tile)) {
+        coverSelectedByTile.set(tile, firstInTile.id);
+      }
+    }
+  }
+
+  return products.map((p) => {
+    if (!p) return p;
+
+    // 1. Clean discount fields
+    const rawDiscountType = p.discountType;
+    const validDiscountType: DiscountType =
+      rawDiscountType === 'percentage' || rawDiscountType === 'fixed'
+        ? rawDiscountType
+        : 'none';
+    const rawDiscountVal = Number(p.discountValue) || 0;
+    const cleanDiscountValue =
+      validDiscountType !== 'none' && rawDiscountVal > 0
+        ? Math.round(rawDiscountVal * 100) / 100
+        : 0;
+    const finalDiscountType: DiscountType =
+      cleanDiscountValue > 0 ? validDiscountType : 'none';
+
+    // 2. Clean New Arrival & Homepage New Arrivals Carousel toggle + order
+    const isSaharaDefaultFirst =
+      p.department === 'women' &&
+      p.name.trim().toLowerCase().includes('sahara croc crescent') &&
+      p.showInHomeNewArrivals === undefined;
+
+    const effectiveIsNewArrival = isSaharaDefaultFirst
+      ? true
+      : Boolean(p.isNewArrival);
+
+    let showInHomeNewArrivals: boolean;
+    if (!effectiveIsNewArrival) {
+      showInHomeNewArrivals = false;
+    } else if (typeof p.showInHomeNewArrivals === 'boolean') {
+      showInHomeNewArrivals = p.showInHomeNewArrivals;
+    } else {
+      showInHomeNewArrivals = true;
+    }
+
+    const defaultNaOrder = defaultNaOrderMap.get(p.id);
+    const rawNaOrder = Number(p.homeNewArrivalsOrder);
+    const homeNewArrivalsOrder =
+      Number.isFinite(rawNaOrder) && rawNaOrder > 0
+        ? Math.floor(rawNaOrder)
+        : defaultNaOrder ?? undefined;
+
+    // 3. Clean Homepage Section 2 Women Category Cover Photo toggle (strictly 1 per category)
+    const womenTile =
+      p.department === 'women'
+        ? normalizeHomeWomenCategoryTile(p.category)
+        : null;
+    const isHomeCategoryCover = womenTile
+      ? coverSelectedByTile.get(womenTile) === p.id
+      : false;
+
+    // 4. Clean Homepage "Bags Collection" Carousel toggle + order (only for Bags)
+    const isBag = p.department === 'women' && isBagCategory(p.category);
+    const showInHomeBags = isBag
+      ? typeof p.showInHomeBags === 'boolean'
+        ? p.showInHomeBags
+        : true
+      : false;
+    const defaultBagOrder = defaultBagsOrderMap.get(p.id);
+    const rawBagOrder = Number(p.homeBagsOrder);
+    const homeBagsOrder = isBag
+      ? Number.isFinite(rawBagOrder) && rawBagOrder > 0
+        ? Math.floor(rawBagOrder)
+        : defaultBagOrder ?? 1
+      : undefined;
+
+    return {
+      ...p,
+      isNewArrival: effectiveIsNewArrival,
+      featured: effectiveIsNewArrival,
+      discountType: finalDiscountType,
+      discountValue: cleanDiscountValue,
+      showInHomeNewArrivals,
+      ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+      isHomeCategoryCover,
+      ...(isBag
+        ? {
+            showInHomeBags,
+            homeBagsOrder,
+          }
+        : {
+            showInHomeBags: false,
+          }),
+    };
+  });
+}
+
+/**
+ * Enforces 1-product-per-category exclusivity for the Homepage Section 2 Women Category Cover toggle:
+ * When `enable` is true for `targetProductId` (in Women's `Jackets`, `Trousers`, `Skirts`, or `Denim`),
+ * turns OFF `isHomeCategoryCover` on every other product in that same category and turns it ON for `targetProductId`.
+ */
+export function applyExclusiveHomeCategoryCover(
+  products: ProductItem[],
+  targetProductId: string,
+  enable: boolean,
+  explicitCategoryOverride?: string
+): ProductItem[] {
+  const targetProduct = products.find((p) => p.id === targetProductId);
+  const targetTile = normalizeHomeWomenCategoryTile(
+    explicitCategoryOverride || targetProduct?.category
+  );
+
+  if (!targetTile) {
+    return products.map((p) =>
+      p.id === targetProductId ? { ...p, isHomeCategoryCover: false } : p
+    );
+  }
+
+  return products.map((p) => {
+    if (p.department !== 'women') return p;
+    const pTile = normalizeHomeWomenCategoryTile(p.category);
+    if (pTile !== targetTile) return p;
+
+    if (p.id === targetProductId) {
+      return {
+        ...p,
+        isHomeCategoryCover: enable,
+      };
+    }
+
+    // If enabling on targetProductId, automatically turn OFF any other product in this same category
+    if (enable && p.isHomeCategoryCover) {
+      return {
+        ...p,
+        isHomeCategoryCover: false,
+      };
+    }
+    return p;
+  });
+}
+
+/**
+ * Orders the Homepage "New Arrivals" row for the selected department ('women' | 'kids').
+ * - Includes only products where `isNewArrival` is true and `showInHomeNewArrivals !== false`.
+ * - Sorts products by `homeNewArrivalsOrder` ascending (1, 2, 3...) when numbered,
+ *   falling back to the default sequence ("SAHARA CROC CRESCENT" 1st for Women) for unnumbered ties.
+ */
+export function orderHomeNewArrivalsProducts(
+  products: ProductItem[],
+  department: Department
+): ProductItem[] {
+  const legacyOrdered = buildLegacyHomeNewArrivalsSequence(
+    products,
+    department
+  );
+  const legacyIndexMap = new Map<string, number>();
+  legacyOrdered.forEach((p, idx) => {
+    legacyIndexMap.set(p.id, idx + 1);
+  });
+
+  // Candidate pool: products in department that have isNewArrival ON (or Sahara default) and showInHomeNewArrivals !== false
+  const eligible = products.filter((p) => {
+    if (!p || p.department !== department) return false;
+    if (
+      p.department === 'kids' &&
+      (p.isFullSet || p.category.trim().toLowerCase() === 'full set')
+    ) {
+      return false;
+    }
+    if (p.showInHomeNewArrivals === false) return false;
+    const isSaharaDefault =
+      department === 'women' &&
+      p.name.trim().toLowerCase().includes('sahara croc crescent') &&
+      p.showInHomeNewArrivals === undefined;
+    return Boolean(p.isNewArrival) || isSaharaDefault;
+  });
+
+  return [...eligible].sort((a, b) => {
+    const aOrder =
+      typeof a.homeNewArrivalsOrder === 'number' &&
+      Number.isFinite(a.homeNewArrivalsOrder) &&
+      a.homeNewArrivalsOrder > 0
+        ? a.homeNewArrivalsOrder
+        : legacyIndexMap.get(a.id) ?? 9999;
+    const bOrder =
+      typeof b.homeNewArrivalsOrder === 'number' &&
+      Number.isFinite(b.homeNewArrivalsOrder) &&
+      b.homeNewArrivalsOrder > 0
+        ? b.homeNewArrivalsOrder
+        : legacyIndexMap.get(b.id) ?? 9999;
+
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+
+    const aLegacy = legacyIndexMap.get(a.id) ?? 9999;
+    const bLegacy = legacyIndexMap.get(b.id) ?? 9999;
+    return aLegacy - bLegacy;
+  });
+}
+
+/**
+ * Orders the Homepage "Bags Collection" carousel (Women's Bags only):
+ * - Includes only Women's `Bags` products where `showInHomeBags !== false`.
+ * - Sorts by `homeBagsOrder` ascending (1, 2, 3...), preserving catalog order for ties.
+ */
+export function orderHomeBagsProducts(products: ProductItem[]): ProductItem[] {
+  const indexed: { product: ProductItem; catalogIndex: number }[] = [];
+  products.forEach((p, idx) => {
+    if (!p || p.department !== 'women') return;
+    if (!isBagCategory(p.category)) return;
+    if (p.showInHomeBags === false) return;
+    indexed.push({ product: p, catalogIndex: idx + 1 });
+  });
+
+  indexed.sort((a, b) => {
+    const aOrder =
+      typeof a.product.homeBagsOrder === 'number' &&
+      Number.isFinite(a.product.homeBagsOrder) &&
+      a.product.homeBagsOrder > 0
+        ? a.product.homeBagsOrder
+        : a.catalogIndex;
+    const bOrder =
+      typeof b.product.homeBagsOrder === 'number' &&
+      Number.isFinite(b.product.homeBagsOrder) &&
+      b.product.homeBagsOrder > 0
+        ? b.product.homeBagsOrder
+        : b.catalogIndex;
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    return a.catalogIndex - b.catalogIndex;
+  });
+
+  return indexed.map((entry) => entry.product);
+}
+
+/**
+ * Builds the 4 Women category tiles for Homepage Section 2:
+ * Strictly displays Women's `Jackets` (or `Jacket`), `Trousers`, `Skirts`, and `Denim`.
+ * For each tile, uses the product in that category with `isHomeCategoryCover === true`
+ * (or falls back to the first visible product in that category, then the studio fallback).
+ */
+export function getHomeWomenCategoryTiles(
+  products: ProductItem[],
+  womenCategories: CategoryItem[]
+): Array<{
+  tileName: HomeWomenCategoryTileName;
+  displayLabel: string;
+  targetCategoryName: string;
+  category: CategoryItem;
+  coverProduct: ProductItem | null;
+  imageUrl: string;
+  styleType: ProductItem['style'];
+}> {
+  const fallbackStudioMap: Record<
+    HomeWomenCategoryTileName,
+    { src: string; style: ProductItem['style'] }
+  > = {
+    Jackets: {
+      src: 'studio://women-jacket-leather-biker',
+      style: 'Fine Leather',
+    },
+    Trousers: {
+      src: 'studio://women-trousers-wide-leather',
+      style: 'Classic',
+    },
+    Skirts: {
+      src: 'studio://women-skirts-pleated-leather',
+      style: 'Sport Chic',
+    },
+    Denim: {
+      src: 'studio://women-denim-raw-indigo',
+      style: 'Sport Chic',
+    },
+  };
+
+  return HOME_WOMEN_CATEGORY_TILES.map((tileName) => {
+    const matchedCat = womenCategories.find(
+      (c) =>
+        c.department === 'women' &&
+        normalizeHomeWomenCategoryTile(c.name) === tileName
+    );
+    const targetCategoryName =
+      matchedCat?.name || (tileName === 'Jackets' ? 'Jacket' : tileName);
+
+    const syntheticCategory: CategoryItem = matchedCat || {
+      id: `women-${createSafeSlug(tileName)}`,
+      name: targetCategoryName,
+      slug: createSafeSlug(targetCategoryName),
+      department: 'women',
+      description: `Women's ${tileName}`,
+      active: true,
+    };
+
+    const categoryProducts = products.filter(
+      (p) =>
+        p &&
+        !p.hiddenFromStore &&
+        p.department === 'women' &&
+        normalizeHomeWomenCategoryTile(p.category) === tileName
+    );
+
+    const explicitCover =
+      categoryProducts.find((p) => p.isHomeCategoryCover === true) ||
+      products.find(
+        (p) =>
+          p &&
+          p.department === 'women' &&
+          normalizeHomeWomenCategoryTile(p.category) === tileName &&
+          p.isHomeCategoryCover === true
+      ) ||
+      categoryProducts[0] ||
+      null;
+
+    const fallback = fallbackStudioMap[tileName];
+
+    return {
+      tileName,
+      displayLabel: `Women's ${tileName}`,
+      targetCategoryName,
+      category: syntheticCategory,
+      coverProduct: explicitCover,
+      imageUrl: explicitCover?.imageUrl || fallback.src,
+      styleType: explicitCover?.style || fallback.style,
+    };
+  });
+}
+
+export interface ProductD1SerializedMeta {
+  discountBadgeColumn: string | null;
+  discountPercentColumn: number | null;
+  featuredColumn: number;
+  customStyleColumn: string;
+}
+
+/**
+ * Serializes a product's discount and homepage merchandising settings into existing
+ * Cloudflare D1 `products` columns (`discount_badge`, `discount_percent`, `featured`, `custom_style`)
+ * so 100% of product discounts and homepage toggles persist across refreshes & cache clears
+ * with zero D1 schema migrations or extra queries.
+ */
+export function serializeProductD1Meta(
+  p: Partial<ProductItem> & { discountPercent?: unknown }
+): ProductD1SerializedMeta {
+  const rawType = p.discountType;
+  const discountType: DiscountType =
+    rawType === 'percentage' || rawType === 'fixed' ? rawType : 'none';
+  const rawVal = Number(p.discountValue ?? p.discountPercent) || 0;
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  const effectiveDiscountType: DiscountType =
+    discountValue > 0 ? discountType : 'none';
+
+  const isNewArrival =
+    typeof p.isNewArrival === 'boolean'
+      ? p.isNewArrival
+      : Boolean(p.featured);
+
+  const showInHomeNewArrivals = isNewArrival
+    ? typeof p.showInHomeNewArrivals === 'boolean'
+      ? p.showInHomeNewArrivals
+      : true
+    : false;
+
+  const homeNewArrivalsOrder =
+    typeof p.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(p.homeNewArrivalsOrder) &&
+    p.homeNewArrivalsOrder > 0
+      ? Math.floor(p.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof p.isHomeCategoryCover === 'boolean'
+      ? p.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof p.showInHomeBags === 'boolean' ? p.showInHomeBags : undefined;
+
+  const homeBagsOrder =
+    typeof p.homeBagsOrder === 'number' &&
+    Number.isFinite(p.homeBagsOrder) &&
+    p.homeBagsOrder > 0
+      ? Math.floor(p.homeBagsOrder)
+      : undefined;
+
+  const envelope = {
+    _samoMeta: 1,
+    discountType: effectiveDiscountType,
+    discountValue,
+    isNewArrival,
+    showInHomeNewArrivals,
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
+
+  return {
+    discountBadgeColumn:
+      effectiveDiscountType !== 'none' ? effectiveDiscountType : null,
+    discountPercentColumn: discountValue > 0 ? discountValue : null,
+    featuredColumn: isNewArrival ? 1 : 0,
+    customStyleColumn: JSON.stringify(envelope),
+  };
+}
+
+/**
+ * Unpacks a D1 `products` table row's `discount_badge`, `discount_percent`, `featured`, and `custom_style`
+ * columns back into strongly-typed `ProductItem` discount and homepage merchandising fields.
+ */
+export function deserializeProductD1Meta(row: Record<string, unknown>): {
+  discountType: DiscountType;
+  discountValue: number;
+  isNewArrival: boolean;
+  featured: boolean;
+  showInHomeNewArrivals?: boolean;
+  homeNewArrivalsOrder?: number;
+  isHomeCategoryCover?: boolean;
+  showInHomeBags?: boolean;
+  homeBagsOrder?: number;
+} {
+  let parsedEnvelope: Record<string, unknown> | null = null;
+  if (
+    typeof row.custom_style === 'string' &&
+    row.custom_style.trim().startsWith('{')
+  ) {
+    try {
+      const obj = JSON.parse(row.custom_style);
+      if (obj && typeof obj === 'object') {
+        parsedEnvelope = obj as Record<string, unknown>;
+      }
+    } catch {
+      parsedEnvelope = null;
+    }
+  }
+
+  const rawBadge =
+    typeof parsedEnvelope?.discountType === 'string'
+      ? parsedEnvelope.discountType
+      : typeof row.discount_badge === 'string'
+      ? row.discount_badge.trim().toLowerCase()
+      : '';
+
+  const rawVal =
+    typeof parsedEnvelope?.discountValue === 'number'
+      ? parsedEnvelope.discountValue
+      : Number(row.discount_percent) || 0;
+
+  let discountType: DiscountType = 'none';
+  if (rawBadge === 'percentage' || rawBadge === 'fixed') {
+    discountType = rawBadge;
+  } else if (rawVal > 0) {
+    discountType = 'percentage';
+  }
+
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  if (discountValue <= 0) {
+    discountType = 'none';
+  }
+
+  const isNewArrival =
+    typeof parsedEnvelope?.isNewArrival === 'boolean'
+      ? parsedEnvelope.isNewArrival
+      : Boolean(row.featured);
+
+  const showInHomeNewArrivals =
+    !isNewArrival
+      ? false
+      : typeof parsedEnvelope?.showInHomeNewArrivals === 'boolean'
+      ? parsedEnvelope.showInHomeNewArrivals
+      : undefined;
+
+  const homeNewArrivalsOrder =
+    typeof parsedEnvelope?.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeNewArrivalsOrder) &&
+    parsedEnvelope.homeNewArrivalsOrder > 0
+      ? Math.floor(parsedEnvelope.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof parsedEnvelope?.isHomeCategoryCover === 'boolean'
+      ? parsedEnvelope.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof parsedEnvelope?.showInHomeBags === 'boolean'
+      ? parsedEnvelope.showInHomeBags
+      : undefined;
+
+  const homeBagsOrder =
+    typeof parsedEnvelope?.homeBagsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeBagsOrder) &&
+    parsedEnvelope.homeBagsOrder > 0
+      ? Math.floor(parsedEnvelope.homeBagsOrder)
+      : undefined;
+
+  return {
+    discountType,
+    discountValue,
+    isNewArrival,
+    featured: isNewArrival,
+    ...(showInHomeNewArrivals !== undefined ? { showInHomeNewArrivals } : {}),
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
 }
 
 /**

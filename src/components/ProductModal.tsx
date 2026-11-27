@@ -801,11 +801,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   {product.name}
                 </h2>
                 <div className="flex items-baseline gap-2 font-mono-tabular shrink-0">
-                  <span className="text-[17px] sm:text-lg font-normal md:font-bold text-zinc-950">
+                  <span
+                    className={
+                      pricing.hasDiscount
+                        ? 'text-[18.7px] sm:text-[19.8px] font-bold text-zinc-950'
+                        : 'text-[17px] sm:text-lg font-normal md:font-bold text-zinc-950'
+                    }
+                  >
                     ${pricing.effectivePrice.toLocaleString()}
                   </span>
                   {pricing.hasDiscount && (
-                    <span className="text-xs sm:text-sm text-zinc-400 line-through">
+                    <span className="text-[11.65px] sm:text-[13.6px] text-zinc-400 line-through">
                       ${pricing.originalPrice.toLocaleString()}
                     </span>
                   )}

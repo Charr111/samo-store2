@@ -122,6 +122,11 @@ export interface ProductItem {
   inStock: boolean;
   hiddenFromStore?: boolean;
   featured: boolean;
+  showInHomeNewArrivals?: boolean;
+  homeNewArrivalsOrder?: number;
+  isHomeCategoryCover?: boolean;
+  showInHomeBags?: boolean;
+  homeBagsOrder?: number;
   createdAt?: string;
   updatedAt?: string;
 }

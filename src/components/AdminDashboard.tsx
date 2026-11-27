@@ -86,10 +86,12 @@ import {
   getEffectiveProductPrice,
   getSizeQuantity,
   isAuthorizedAdminEmail,
+  isBagCategory,
   LETTER_SIZES,
   mergeColorsList,
   mergeMaterialsList,
   MONTHS_SIZES,
+  normalizeHomeWomenCategoryTile,
   normalizeKidsCategoryName,
   normalizeSizeEntry,
   NUMERIC_SIZES,
@@ -726,6 +728,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     useState<DiscountType>('none');
   const [itemDiscountValue, setItemDiscountValue] = useState('');
   const [itemIsNewArrival, setItemIsNewArrival] = useState<boolean>(true);
+  const [itemShowInHomeNewArrivals, setItemShowInHomeNewArrivals] =
+    useState<boolean>(true);
+  const [itemHomeNewArrivalsOrder, setItemHomeNewArrivalsOrder] =
+    useState<string>('');
+  const [itemIsHomeCategoryCover, setItemIsHomeCategoryCover] =
+    useState<boolean>(false);
+  const [itemShowInHomeBags, setItemShowInHomeBags] = useState<boolean>(true);
+  const [itemHomeBagsOrder, setItemHomeBagsOrder] = useState<string>('');
   const [itemIsFullSet, setItemIsFullSet] = useState<boolean>(false);
   const [linkTwoSetPieces, setLinkTwoSetPieces] = useState<boolean>(false);
 
@@ -1380,6 +1390,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .map((u) => u.trim())
       .filter((u) => Boolean(u) && u !== primaryImage);
 
+    const resolvedShowInHomeNewArrivals = itemIsNewArrival
+      ? Boolean(itemShowInHomeNewArrivals)
+      : false;
+    const parsedHomeNewArrivalsOrder = Number(
+      itemHomeNewArrivalsOrder.trim()
+    );
+    const resolvedHomeNewArrivalsOrder =
+      Number.isFinite(parsedHomeNewArrivalsOrder) &&
+      parsedHomeNewArrivalsOrder > 0
+        ? Math.max(1, Math.round(parsedHomeNewArrivalsOrder))
+        : undefined;
+    const resolvedIsHomeCategoryCover =
+      itemDept === 'women' &&
+      normalizeHomeWomenCategoryTile(itemCategory) !== null
+        ? Boolean(itemIsHomeCategoryCover)
+        : false;
+    const resolvedShowInHomeBags = isBagCategory(itemCategory)
+      ? Boolean(itemShowInHomeBags)
+      : false;
+    const parsedHomeBagsOrder = Number(itemHomeBagsOrder.trim());
+    const resolvedHomeBagsOrder =
+      isBagCategory(itemCategory) &&
+      Number.isFinite(parsedHomeBagsOrder) &&
+      parsedHomeBagsOrder > 0
+        ? Math.max(1, Math.round(parsedHomeBagsOrder))
+        : undefined;
+
     // CASE A: 2-PIECE LINKED FULL SET PRODUCT
     if (isFullSetCategorySelected) {
       const pool =
@@ -1539,6 +1576,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isFullSet: true,
         setItems: setItemsPayload,
         isNewArrival: itemIsNewArrival,
+        showInHomeNewArrivals: resolvedShowInHomeNewArrivals,
+        homeNewArrivalsOrder: resolvedHomeNewArrivalsOrder,
+        isHomeCategoryCover: resolvedIsHomeCategoryCover,
+        showInHomeBags: resolvedShowInHomeBags,
+        homeBagsOrder: resolvedHomeBagsOrder,
         discountType: itemDiscountType,
         discountValue: numericDiscountVal,
         imageUrl: itemUrl.trim() || prod1.imageUrl || fallbackStudioUri,
@@ -1562,6 +1604,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setItemDescription('');
       setItemDiscountType('none');
       setItemDiscountValue('');
+      setItemShowInHomeNewArrivals(true);
+      setItemHomeNewArrivalsOrder('');
+      setItemIsHomeCategoryCover(false);
+      setItemShowInHomeBags(true);
+      setItemHomeBagsOrder('');
       setHasThirdSetPiece(false);
       setItemHasColors(false);
       setDraftColors([]);
@@ -1615,7 +1662,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       const synced = syncProductFromColorVariants(builtVariants, itemSizeType);
-      const mainImg = builtVariants[0]?.imageUrl || primaryImage;
+      const mainImg =
+        itemUrl.trim() || builtVariants[0]?.imageUrl || primaryImage;
       const mergedGallery =
         additionalUrls.length > 0
           ? additionalUrls
@@ -1634,6 +1682,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         colorVariants: builtVariants,
         isFullSet: isFullSetCategorySelected,
         isNewArrival: itemIsNewArrival,
+        showInHomeNewArrivals: resolvedShowInHomeNewArrivals,
+        homeNewArrivalsOrder: resolvedHomeNewArrivalsOrder,
+        isHomeCategoryCover: resolvedIsHomeCategoryCover,
+        showInHomeBags: resolvedShowInHomeBags,
+        homeBagsOrder: resolvedHomeBagsOrder,
         discountType: itemDiscountType,
         discountValue: numericDiscountVal,
         imageUrl: mainImg,
@@ -1675,6 +1728,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         colorVariants: [],
         isFullSet: isFullSetCategorySelected,
         isNewArrival: itemIsNewArrival,
+        showInHomeNewArrivals: resolvedShowInHomeNewArrivals,
+        homeNewArrivalsOrder: resolvedHomeNewArrivalsOrder,
+        isHomeCategoryCover: resolvedIsHomeCategoryCover,
+        showInHomeBags: resolvedShowInHomeBags,
+        homeBagsOrder: resolvedHomeBagsOrder,
         discountType: itemDiscountType,
         discountValue: numericDiscountVal,
         imageUrl: primaryImage,
@@ -1703,6 +1761,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setItemDiscountType('none');
     setItemDiscountValue('');
     setItemIsNewArrival(true);
+    setItemShowInHomeNewArrivals(true);
+    setItemHomeNewArrivalsOrder('');
+    setItemIsHomeCategoryCover(false);
+    setItemShowInHomeBags(true);
+    setItemHomeBagsOrder('');
     setItemIsFullSet(false);
     setHasThirdSetPiece(false);
     setLinkTwoSetPieces(false);
@@ -1724,12 +1787,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       updates.isNewArrival !== undefined
         ? updates.isNewArrival
         : currentProd.isNewArrival;
+    const nextShowInHomeNewArrivals = nextIsNew
+      ? updates.showInHomeNewArrivals !== undefined
+        ? Boolean(updates.showInHomeNewArrivals)
+        : Boolean(currentProd.showInHomeNewArrivals)
+      : false;
     const merged: ProductItem = {
       ...currentProd,
       ...updates,
       isNewArrival: nextIsNew,
       featured: nextIsNew,
+      showInHomeNewArrivals: nextShowInHomeNewArrivals,
     };
+
+    if (
+      updates.imageUrl !== undefined &&
+      Array.isArray(merged.colorVariants) &&
+      merged.colorVariants.length > 0
+    ) {
+      const firstCv = merged.colorVariants[0];
+      if (!firstCv.imageUrl || firstCv.imageUrl === currentProd.imageUrl) {
+        merged.colorVariants = [
+          {
+            ...firstCv,
+            imageUrl: updates.imageUrl,
+          },
+          ...merged.colorVariants.slice(1),
+        ];
+      }
+    }
 
     if (
       updates.colorVariants &&
@@ -1810,7 +1896,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ...prev,
           hasColors: true,
           colorVariants,
-          imageUrl: colorVariants[0]?.imageUrl || prev.imageUrl,
+          imageUrl:
+            prev.imageUrl?.trim() ||
+            colorVariants[0]?.imageUrl ||
+            prev.imageUrl,
           ...synced,
         };
       }
@@ -1912,11 +2001,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           v.colorName.toLowerCase() === colorName.toLowerCase() ? updater(v) : v
         );
         const synced = syncProductFromColorVariants(next, prev.sizeType);
+        const editedFirstColorImage =
+          current[0] &&
+          current[0].colorName.toLowerCase() === colorName.toLowerCase() &&
+          next[0]?.imageUrl !== current[0]?.imageUrl;
         return {
           ...prev,
           hasColors: true,
           colorVariants: next,
-          imageUrl: next[0]?.imageUrl || prev.imageUrl,
+          imageUrl: editedFirstColorImage
+            ? next[0]?.imageUrl || prev.imageUrl
+            : prev.imageUrl?.trim() || next[0]?.imageUrl || prev.imageUrl,
           ...synced,
         };
       });
@@ -2215,6 +2310,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         discountType: cleaned.discountType || 'none',
         discountValue: Number(cleaned.discountValue || 0),
         isNewArrival: Boolean(cleaned.isNewArrival),
+        showInHomeNewArrivals: Boolean(
+          cleaned.isNewArrival && cleaned.showInHomeNewArrivals
+        ),
+        homeNewArrivalsOrder: Number(cleaned.homeNewArrivalsOrder || 0),
+        isHomeCategoryCover: Boolean(cleaned.isHomeCategoryCover),
+        showInHomeBags: Boolean(cleaned.showInHomeBags),
+        homeBagsOrder: Number(cleaned.homeBagsOrder || 0),
         isFullSet: Boolean(cleaned.isFullSet),
         inStock: Boolean(cleaned.inStock),
         quantity: Number(cleaned.quantity || 0),
@@ -12189,6 +12291,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             handleUpdateDraftProductMeta(prod.id, {
                               isNewArrival: e.target.checked,
                               featured: e.target.checked,
+                              ...(e.target.checked
+                                ? {}
+                                : { showInHomeNewArrivals: false }),
                             })
                           }
                           className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
@@ -12219,6 +12324,247 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         {prod.isNewArrival ? 'In New Arrivals' : `${prod.category} Only`}
                       </span>
+                    </div>
+
+                    {/* Homepage Merchandising Controls: (1) Homepage New Arrivals Carousel + Order, (2) Women Section 2 Category Cover (1-per-category), (3) Homepage Bags Collection Carousel + Order */}
+                    <div className="p-3.5 bg-white border border-zinc-300 rounded-lg space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-zinc-200 pb-2">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-950">
+                          Homepage Merchandising &amp; Display Order (/home)
+                        </span>
+                        <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                          Synced to Cloudflare D1
+                        </span>
+                      </div>
+
+                      {/* 1. Homepage "New Arrivals" Carousel Toggle + Order Number (Women & Kids — Requires New Arrival ON) */}
+                      <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <label
+                          className={`flex items-start sm:items-center gap-2.5 select-none ${
+                            prod.isNewArrival
+                              ? 'cursor-pointer'
+                              : 'cursor-not-allowed opacity-60'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!prod.isNewArrival}
+                            checked={Boolean(
+                              prod.isNewArrival && prod.showInHomeNewArrivals
+                            )}
+                            onChange={(e) => {
+                              if (!prod.isNewArrival) return;
+                              const checked = e.target.checked;
+                              const deptNewIds = products.filter(
+                                (p) =>
+                                  p.department === prod.department &&
+                                  p.isNewArrival &&
+                                  p.showInHomeNewArrivals
+                              );
+                              const defaultNextOrder =
+                                prod.homeNewArrivalsOrder &&
+                                prod.homeNewArrivalsOrder > 0
+                                  ? prod.homeNewArrivalsOrder
+                                  : deptNewIds.length + 1;
+                              handleUpdateDraftProductMeta(prod.id, {
+                                showInHomeNewArrivals: checked,
+                                ...(checked
+                                  ? { homeNewArrivalsOrder: defaultNextOrder }
+                                  : {}),
+                              });
+                            }}
+                            className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                          />
+                          <div>
+                            <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                              Show in Homepage &ldquo;New Arrivals&rdquo; Carousel (
+                              {prod.department === 'kids' ? 'Kids' : 'Women'})
+                            </span>
+                            <span className="block text-[11px] text-zinc-500">
+                              {prod.isNewArrival
+                                ? 'Set order # (1 = first, 2 = second, 3 = third...) in the Homepage New Arrivals section.'
+                                : 'Turn ON "Show in New Arrivals" above first to enable Homepage New Arrivals placement.'}
+                            </span>
+                          </div>
+                        </label>
+
+                        <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                            Order #:
+                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            disabled={
+                              !prod.isNewArrival || !prod.showInHomeNewArrivals
+                            }
+                            aria-label="Homepage New Arrivals Order Number"
+                            placeholder="1, 2, 3..."
+                            value={
+                              prod.homeNewArrivalsOrder &&
+                              prod.homeNewArrivalsOrder > 0
+                                ? String(prod.homeNewArrivalsOrder)
+                                : ''
+                            }
+                            onChange={(e) => {
+                              const rawVal = e.target.value.replace(
+                                /^0+(?=\d)/,
+                                ''
+                              );
+                              if (rawVal.trim() === '') {
+                                handleUpdateDraftProductMeta(prod.id, {
+                                  homeNewArrivalsOrder: undefined,
+                                });
+                                return;
+                              }
+                              const parsed = Number(rawVal);
+                              if (!Number.isNaN(parsed) && parsed >= 1) {
+                                handleUpdateDraftProductMeta(prod.id, {
+                                  homeNewArrivalsOrder: Math.round(parsed),
+                                });
+                              }
+                            }}
+                            className="w-16 px-2 py-1 text-xs font-mono-tabular font-bold text-center bg-white border border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-400"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2. Homepage Section 2 Women Category Cover Photo Toggle (Exclusive 1-Per-Category for Jackets, Trousers, Skirts, Denim) */}
+                      {(() => {
+                        const homeCatTile =
+                          prod.department === 'women'
+                            ? normalizeHomeWomenCategoryTile(prod.category)
+                            : null;
+                        if (!homeCatTile) return null;
+                        const currentCoverProd = products.find(
+                          (p) =>
+                            p.id !== prod.id &&
+                            p.department === 'women' &&
+                            normalizeHomeWomenCategoryTile(p.category) ===
+                              homeCatTile &&
+                            p.isHomeCategoryCover
+                        );
+                        return (
+                          <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(prod.isHomeCategoryCover)}
+                                onChange={(e) =>
+                                  handleUpdateDraftProductMeta(prod.id, {
+                                    isHomeCategoryCover: e.target.checked,
+                                  })
+                                }
+                                className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
+                              />
+                              <div>
+                                <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                                  Use as Homepage &ldquo;Women&rsquo;s{' '}
+                                  {homeCatTile}&rdquo; Category Cover Photo
+                                </span>
+                                <span className="block text-[11px] text-zinc-500">
+                                  1 product per category. Turning this ON
+                                  displays this item&rsquo;s photo on the
+                                  Homepage Women&rsquo;s {homeCatTile} card
+                                  {currentCoverProd
+                                    ? ` and automatically replaces "${currentCoverProd.name}".`
+                                    : '.'}
+                                </span>
+                              </div>
+                            </label>
+                            <span
+                              className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider self-start sm:self-center shrink-0 ${
+                                prod.isHomeCategoryCover
+                                  ? 'bg-zinc-950 text-white'
+                                  : 'bg-zinc-100 text-zinc-500 border border-zinc-300'
+                              }`}
+                            >
+                              {prod.isHomeCategoryCover
+                                ? `Active ${homeCatTile} Cover`
+                                : 'Not Cover'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {/* 3. Homepage "Bags Collection" Carousel Toggle + Order Number (Only Appears on Bags Products) */}
+                      {isBagCategory(prod.category) && (
+                        <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(prod.showInHomeBags)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                const activeHomeBags = products.filter(
+                                  (p) =>
+                                    isBagCategory(p.category) &&
+                                    p.showInHomeBags
+                                );
+                                const defaultNextBagOrder =
+                                  prod.homeBagsOrder && prod.homeBagsOrder > 0
+                                    ? prod.homeBagsOrder
+                                    : activeHomeBags.length + 1;
+                                handleUpdateDraftProductMeta(prod.id, {
+                                  showInHomeBags: checked,
+                                  ...(checked
+                                    ? { homeBagsOrder: defaultNextBagOrder }
+                                    : {}),
+                                });
+                              }}
+                              className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
+                            />
+                            <div>
+                              <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                                Show in Homepage &ldquo;Bags Collection&rdquo;
+                                Carousel
+                              </span>
+                              <span className="block text-[11px] text-zinc-500">
+                                Set order # (1 = first, 2 = second, 3 =
+                                third...) in the Homepage Bags Collection
+                                section.
+                              </span>
+                            </div>
+                          </label>
+
+                          <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                              Order #:
+                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              disabled={!prod.showInHomeBags}
+                              aria-label="Homepage Bags Collection Order Number"
+                              placeholder="1, 2, 3..."
+                              value={
+                                prod.homeBagsOrder && prod.homeBagsOrder > 0
+                                  ? String(prod.homeBagsOrder)
+                                  : ''
+                              }
+                              onChange={(e) => {
+                                const rawVal = e.target.value.replace(
+                                  /^0+(?=\d)/,
+                                  ''
+                                );
+                                if (rawVal.trim() === '') {
+                                  handleUpdateDraftProductMeta(prod.id, {
+                                    homeBagsOrder: undefined,
+                                  });
+                                  return;
+                                }
+                                const parsed = Number(rawVal);
+                                if (!Number.isNaN(parsed) && parsed >= 1) {
+                                  handleUpdateDraftProductMeta(prod.id, {
+                                    homeBagsOrder: Math.round(parsed),
+                                  });
+                                }
+                              }}
+                              className="w-16 px-2 py-1 text-xs font-mono-tabular font-bold text-center bg-white border border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-400"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Description Editor */}
@@ -14276,7 +14622,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input
                       type="checkbox"
                       checked={itemIsNewArrival}
-                      onChange={(e) => setItemIsNewArrival(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setItemIsNewArrival(checked);
+                        if (!checked) {
+                          setItemShowInHomeNewArrivals(false);
+                        }
+                      }}
                       className="w-4 h-4 accent-zinc-950 cursor-pointer"
                     />
                     <span className="text-xs font-bold uppercase tracking-wider text-zinc-950">
@@ -14294,6 +14646,153 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       : 'New Arrivals (Women) (/new-arrivals/women)'}{' '}
                     in addition to its selected Category ({itemCategory}).
                   </p>
+                </div>
+
+                {/* Homepage Merchandising Controls for New Product */}
+                <div className="pt-2 border-t border-zinc-200 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-950">
+                      Homepage Merchandising &amp; Display Order (/home)
+                    </span>
+                    <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                      Synced to Cloudflare D1
+                    </span>
+                  </div>
+
+                  {/* 1. Homepage "New Arrivals" Carousel Toggle + Order Number */}
+                  <div className="p-2.5 bg-white border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <label
+                      className={`flex items-start sm:items-center gap-2.5 select-none ${
+                        itemIsNewArrival
+                          ? 'cursor-pointer'
+                          : 'cursor-not-allowed opacity-60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={!itemIsNewArrival}
+                        checked={Boolean(
+                          itemIsNewArrival && itemShowInHomeNewArrivals
+                        )}
+                        onChange={(e) => {
+                          if (!itemIsNewArrival) return;
+                          setItemShowInHomeNewArrivals(e.target.checked);
+                        }}
+                        className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                      />
+                      <div>
+                        <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                          Show in Homepage &ldquo;New Arrivals&rdquo; Carousel (
+                          {itemDept === 'kids' ? 'Kids' : 'Women'})
+                        </span>
+                        <span className="block text-[11px] text-zinc-500">
+                          {itemIsNewArrival
+                            ? 'Set order # (1 = first, 2 = second, 3 = third...) in Homepage New Arrivals.'
+                            : 'Requires "Show in New Arrivals" above to be ON.'}
+                        </span>
+                      </div>
+                    </label>
+                    <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                        Order #:
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={
+                          !itemIsNewArrival || !itemShowInHomeNewArrivals
+                        }
+                        aria-label="New Product Homepage New Arrivals Order Number"
+                        placeholder="1, 2, 3..."
+                        value={itemHomeNewArrivalsOrder}
+                        onChange={(e) =>
+                          setItemHomeNewArrivalsOrder(
+                            e.target.value.replace(/^0+(?=\d)/, '')
+                          )
+                        }
+                        className="w-16 px-2 py-1 text-xs font-mono-tabular font-bold text-center bg-white border border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Homepage Section 2 Women Category Cover Photo Toggle (Exclusive 1-Per-Category) */}
+                  {(() => {
+                    const homeCatTile =
+                      itemDept === 'women'
+                        ? normalizeHomeWomenCategoryTile(itemCategory)
+                        : null;
+                    if (!homeCatTile) return null;
+                    return (
+                      <div className="p-2.5 bg-white border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={itemIsHomeCategoryCover}
+                            onChange={(e) =>
+                              setItemIsHomeCategoryCover(e.target.checked)
+                            }
+                            className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
+                          />
+                          <div>
+                            <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                              Use as Homepage &ldquo;Women&rsquo;s {homeCatTile}
+                              &rdquo; Category Cover Photo
+                            </span>
+                            <span className="block text-[11px] text-zinc-500">
+                              1 product per category. Turning this ON replaces
+                              the previous Homepage Women&rsquo;s {homeCatTile}{' '}
+                              cover card.
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 3. Homepage "Bags Collection" Carousel Toggle + Order Number (Only Appears on Bags Products) */}
+                  {isBagCategory(itemCategory) && (
+                    <div className="p-2.5 bg-white border border-zinc-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={itemShowInHomeBags}
+                          onChange={(e) =>
+                            setItemShowInHomeBags(e.target.checked)
+                          }
+                          className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
+                        />
+                        <div>
+                          <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                            Show in Homepage &ldquo;Bags Collection&rdquo;
+                            Carousel
+                          </span>
+                          <span className="block text-[11px] text-zinc-500">
+                            Set order # (1 = first, 2 = second, 3 = third...) in
+                            Homepage Bags Collection.
+                          </span>
+                        </div>
+                      </label>
+                      <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                          Order #:
+                        </span>
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={!itemShowInHomeBags}
+                          aria-label="New Product Homepage Bags Collection Order Number"
+                          placeholder="1, 2, 3..."
+                          value={itemHomeBagsOrder}
+                          onChange={(e) =>
+                            setItemHomeBagsOrder(
+                              e.target.value.replace(/^0+(?=\d)/, '')
+                            )
+                          }
+                          className="w-16 px-2 py-1 text-xs font-mono-tabular font-bold text-center bg-white border border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-400"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

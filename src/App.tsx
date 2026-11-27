@@ -45,6 +45,7 @@ import {
   LEGACY_REMOVED_PRODUCT_IDS,
 } from './data/seedCatalog';
 import {
+  applyExclusiveHomeCategoryCover,
   buildCategoryUrl,
   buildDefaultCategoryBannerForCategory,
   buildNewsletterSubscribedCookieString,
@@ -53,6 +54,7 @@ import {
   createSafeSlug,
   decrementStockForAcceptedOrder,
   DEFAULT_NEWSLETTER_POPUP_CONFIG,
+  ensureHomepageMerchandisingDefaults,
   evaluateNewsletterPopupSessionEligibility,
   filterCatalogProducts,
   filterGiftsProducts,
@@ -61,6 +63,7 @@ import {
   getCategoryBannerKey,
   getCategoryBannerSplitIndex,
   getEffectiveProductPrice,
+  getHomeWomenCategoryTiles,
   getSizeQuantity,
   hasNewsletterSubscribedCookie,
   isAuthorizedAdminEmail,
@@ -69,7 +72,9 @@ import {
   moveCategoryInDepartment,
   NEWSLETTER_SESSION_SHOWN_KEY,
   NEWSLETTER_SUBSCRIBED_STORAGE_KEY,
+  normalizeHomeWomenCategoryTile,
   normalizeKidsCategoryName,
+  orderHomeBagsProducts,
   orderHomeNewArrivalsProducts,
   parseCatalogUrlState,
   parsePathnameToRoute,
@@ -256,6 +261,7 @@ export function deepCleanFirestorePayload<T>(value: T): T {
 
 let pendingLocalMutations = 0;
 let lastLocalMutationMs = 0;
+let localMutationSequence = 0;
 let lastPushedSheetsQuantitySignature = '';
 
 function buildProductsQuantitySignature(prods: ProductItem[]): string {
@@ -285,6 +291,7 @@ async function pushServerCatalogPatch(
   options?: { skipSheetsPush?: boolean; forceSheetsPush?: boolean }
 ): Promise<void> {
   pendingLocalMutations += 1;
+  localMutationSequence += 1;
   lastLocalMutationMs = Date.now();
   try {
     await fetch('/api/catalog', {
@@ -475,7 +482,7 @@ function normalizeStoredProducts(
         ...baseNormalized,
         hasColors: true,
         colorVariants: item.colorVariants,
-        imageUrl: item.colorVariants[0]?.imageUrl || baseNormalized.imageUrl,
+        imageUrl: baseNormalized.imageUrl || item.colorVariants[0]?.imageUrl || '',
         ...synced,
         inStock: explicitOutOfStock ? false : synced.inStock,
       };
@@ -488,7 +495,7 @@ function normalizeStoredProducts(
     };
   });
 
-  return syncFullSetsWithCatalog(normalized);
+  return ensureHomepageMerchandisingDefaults(syncFullSetsWithCatalog(normalized));
 }
 
 export default function App() {
@@ -1392,9 +1399,10 @@ export default function App() {
     let lastServerUpdatedAt = 0;
 
     const pullServerCatalog = async () => {
+      const pullStartMutationSeq = localMutationSequence;
       if (
         pendingLocalMutations > 0 ||
-        Date.now() - lastLocalMutationMs < 4500 ||
+        Date.now() - lastLocalMutationMs < 6000 ||
         (typeof window !== 'undefined' && window.scrollY < 0)
       ) {
         return;
@@ -1407,8 +1415,9 @@ export default function App() {
           !active ||
           !data ||
           typeof data !== 'object' ||
+          localMutationSequence !== pullStartMutationSeq ||
           pendingLocalMutations > 0 ||
-          Date.now() - lastLocalMutationMs < 4500 ||
+          Date.now() - lastLocalMutationMs < 6000 ||
           (typeof window !== 'undefined' && window.scrollY < 0)
         ) {
           return;
@@ -2410,7 +2419,7 @@ export default function App() {
       hasColors: false,
       colorVariants: [],
     };
-    const newProd =
+    const newProd: ProductItem =
       prod.hasColors &&
       Array.isArray(prod.colorVariants) &&
       prod.colorVariants.length > 0
@@ -2418,7 +2427,7 @@ export default function App() {
             ...baseProd,
             hasColors: true,
             colorVariants: prod.colorVariants,
-            imageUrl: prod.colorVariants[0]?.imageUrl || baseProd.imageUrl,
+            imageUrl: baseProd.imageUrl || prod.colorVariants[0]?.imageUrl || '',
             ...syncProductFromColorVariants(
               prod.colorVariants,
               baseProd.sizeType
@@ -2426,11 +2435,23 @@ export default function App() {
           }
         : baseProd;
 
-    setProducts((prev) => {
-      const next = [newProd, ...prev];
-      pushServerCatalogPatch({ products: next });
-      return next;
-    });
+    let nextCatalog = [newProd, ...productsRef.current];
+    if (
+      newProd.department === 'women' &&
+      newProd.isHomeCategoryCover &&
+      normalizeHomeWomenCategoryTile(newProd.category)
+    ) {
+      nextCatalog = applyExclusiveHomeCategoryCover(
+        nextCatalog,
+        newProd.id,
+        true,
+        newProd.category
+      );
+    }
+    const finalCatalog = ensureHomepageMerchandisingDefaults(nextCatalog);
+    productsRef.current = finalCatalog;
+    setProducts(finalCatalog);
+    await pushServerCatalogPatch({ products: finalCatalog });
   };
 
   const handleUpdateProductSizeQuantity = async (
@@ -2440,30 +2461,27 @@ export default function App() {
   ) => {
     const safeQty = Math.max(0, Math.floor(Number(nextQuantity) || 0));
     let updatedRef: ProductItem | null = null;
-    let syncedFullSets: ProductItem[] = [];
 
-    setProducts((prev) => {
-      const nextCatalog = prev.map((p) => {
-        if (p.id !== productId) return p;
-        const nextMap = {
-          ...buildSizeQuantitiesMap(p.sizes, p.sizeQuantities),
-          [size]: safeQty,
-        };
-        const nextTotal = sumSizeQuantities(p.sizes, nextMap);
-        const updated = {
-          ...p,
-          sizeQuantities: nextMap,
-          quantity: nextTotal,
-          inStock: nextTotal > 0,
-        };
-        updatedRef = updated;
-        return updated;
-      });
-      const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
-      syncedFullSets = withSyncedSets.filter((p) => p.isFullSet);
-      pushServerCatalogPatch({ products: withSyncedSets });
-      return withSyncedSets;
+    const nextCatalog = productsRef.current.map((p) => {
+      if (p.id !== productId) return p;
+      const nextMap = {
+        ...buildSizeQuantitiesMap(p.sizes, p.sizeQuantities),
+        [size]: safeQty,
+      };
+      const nextTotal = sumSizeQuantities(p.sizes, nextMap);
+      const updated = {
+        ...p,
+        sizeQuantities: nextMap,
+        quantity: nextTotal,
+        inStock: nextTotal > 0,
+      };
+      updatedRef = updated;
+      return updated;
     });
+    const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
+    const syncedFullSets = withSyncedSets.filter((p) => p.isFullSet);
+    productsRef.current = withSyncedSets;
+    setProducts(withSyncedSets);
 
     // Keep open modal in sync if viewing the same product or a linked Full Set
     setActiveProductModal((prev) => {
@@ -2472,6 +2490,8 @@ export default function App() {
       const syncedSet = syncedFullSets.find((s) => s.id === prev.id);
       return syncedSet || prev;
     });
+
+    await pushServerCatalogPatch({ products: withSyncedSets });
   };
 
   const handleUpdateProductColorVariants = async (
@@ -2481,43 +2501,43 @@ export default function App() {
   ) => {
     let updatedRef: ProductItem | null = null;
 
-    setProducts((prev) => {
-      const next = prev.map((p) => {
-        if (p.id !== productId) return p;
-        if (hasColors && colorVariants.length > 0) {
-          const synced = syncProductFromColorVariants(
-            colorVariants,
-            p.sizeType
-          );
-          const updated: ProductItem = {
-            ...p,
-            hasColors: true,
-            colorVariants,
-            imageUrl: colorVariants[0]?.imageUrl || p.imageUrl,
-            ...synced,
-          };
-          updatedRef = updated;
-          return updated;
-        }
-        const fallbackTotal = sumSizeQuantities(p.sizes, p.sizeQuantities);
+    const next = productsRef.current.map((p) => {
+      if (p.id !== productId) return p;
+      if (hasColors && colorVariants.length > 0) {
+        const synced = syncProductFromColorVariants(
+          colorVariants,
+          p.sizeType
+        );
         const updated: ProductItem = {
           ...p,
-          hasColors: false,
-          colorVariants: [],
-          quantity: fallbackTotal,
-          inStock: fallbackTotal > 0,
+          hasColors: true,
+          colorVariants,
+          imageUrl: p.imageUrl || colorVariants[0]?.imageUrl || '',
+          ...synced,
         };
         updatedRef = updated;
         return updated;
-      });
-      pushServerCatalogPatch({ products: next });
-      return next;
+      }
+      const fallbackTotal = sumSizeQuantities(p.sizes, p.sizeQuantities);
+      const updated: ProductItem = {
+        ...p,
+        hasColors: false,
+        colorVariants: [],
+        quantity: fallbackTotal,
+        inStock: fallbackTotal > 0,
+      };
+      updatedRef = updated;
+      return updated;
     });
+    productsRef.current = next;
+    setProducts(next);
 
     setActiveProductModal((prev) => {
       if (!prev || prev.id !== productId || !updatedRef) return prev;
       return updatedRef;
     });
+
+    await pushServerCatalogPatch({ products: next });
   };
 
   const handleUpdateProductMeta = async (
@@ -2526,64 +2546,86 @@ export default function App() {
   ) => {
     let updatedRef: ProductItem | null = null;
 
-    setProducts((prev) => {
-      const nextCatalog = prev.map((p) => {
-        if (p.id !== productId) return p;
-        const nextIsNew =
-          updates.isNewArrival !== undefined
-            ? updates.isNewArrival
-            : p.isNewArrival;
-        const merged: ProductItem = {
-          ...p,
-          ...updates,
-          isNewArrival: nextIsNew,
-          featured: nextIsNew,
-        };
+    let nextCatalog = productsRef.current.map((p) => {
+      if (p.id !== productId) return p;
+      const nextIsNew =
+        updates.isNewArrival !== undefined
+          ? updates.isNewArrival
+          : p.isNewArrival;
+      const nextShowInHomeNa = !nextIsNew
+        ? false
+        : updates.showInHomeNewArrivals !== undefined
+        ? updates.showInHomeNewArrivals
+        : p.showInHomeNewArrivals ?? true;
 
-        if (
-          updates.colorVariants &&
-          Array.isArray(merged.colorVariants) &&
-          merged.colorVariants.length > 0
-        ) {
-          const synced = syncProductFromColorVariants(
-            merged.colorVariants,
-            merged.sizeType
-          );
-          merged.hasColors = true;
-          merged.sizes = synced.sizes;
-          merged.sizeQuantities = synced.sizeQuantities;
-          merged.quantity = synced.quantity;
-          merged.inStock =
-            updates.inStock !== undefined ? updates.inStock : synced.inStock;
-        } else if (updates.sizes || updates.sizeQuantities) {
-          const nextSizes =
-            Array.isArray(merged.sizes) && merged.sizes.length > 0
-              ? merged.sizes
-              : ['M'];
-          const nextMap = buildSizeQuantitiesMap(
-            nextSizes,
-            merged.sizeQuantities
-          );
-          const nextTotal = sumSizeQuantities(nextSizes, nextMap);
-          merged.sizes = nextSizes;
-          merged.sizeQuantities = nextMap;
-          merged.quantity = nextTotal;
-          merged.inStock =
-            updates.inStock !== undefined ? updates.inStock : nextTotal > 0;
-        }
+      const merged: ProductItem = {
+        ...p,
+        ...updates,
+        isNewArrival: nextIsNew,
+        featured: nextIsNew,
+        showInHomeNewArrivals: nextShowInHomeNa,
+      };
 
-        updatedRef = merged;
-        return merged;
-      });
-      const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
-      pushServerCatalogPatch({ products: withSyncedSets });
-      return withSyncedSets;
+      if (
+        updates.colorVariants &&
+        Array.isArray(merged.colorVariants) &&
+        merged.colorVariants.length > 0
+      ) {
+        const synced = syncProductFromColorVariants(
+          merged.colorVariants,
+          merged.sizeType
+        );
+        merged.hasColors = true;
+        merged.sizes = synced.sizes;
+        merged.sizeQuantities = synced.sizeQuantities;
+        merged.quantity = synced.quantity;
+        merged.inStock =
+          updates.inStock !== undefined ? updates.inStock : synced.inStock;
+      } else if (updates.sizes || updates.sizeQuantities) {
+        const nextSizes =
+          Array.isArray(merged.sizes) && merged.sizes.length > 0
+            ? merged.sizes
+            : ['M'];
+        const nextMap = buildSizeQuantitiesMap(
+          nextSizes,
+          merged.sizeQuantities
+        );
+        const nextTotal = sumSizeQuantities(nextSizes, nextMap);
+        merged.sizes = nextSizes;
+        merged.sizeQuantities = nextMap;
+        merged.quantity = nextTotal;
+        merged.inStock =
+          updates.inStock !== undefined ? updates.inStock : nextTotal > 0;
+      }
+
+      updatedRef = merged;
+      return merged;
     });
+
+    if (typeof updates.isHomeCategoryCover === 'boolean') {
+      const targetProd = nextCatalog.find((p) => p.id === productId);
+      nextCatalog = applyExclusiveHomeCategoryCover(
+        nextCatalog,
+        productId,
+        updates.isHomeCategoryCover,
+        targetProd?.category
+      );
+      updatedRef =
+        nextCatalog.find((p) => p.id === productId) || updatedRef;
+    }
+
+    const withSyncedSets = ensureHomepageMerchandisingDefaults(
+      syncFullSetsWithCatalog(nextCatalog)
+    );
+    productsRef.current = withSyncedSets;
+    setProducts(withSyncedSets);
 
     setActiveProductModal((prev) => {
       if (!prev || prev.id !== productId || !updatedRef) return prev;
       return updatedRef;
     });
+
+    await pushServerCatalogPatch({ products: withSyncedSets });
   };
 
   const handleToggleProductStock = async (
@@ -2591,20 +2633,17 @@ export default function App() {
     nextInStock: boolean
   ) => {
     let updatedRef: ProductItem | null = null;
-    let syncedFullSets: ProductItem[] = [];
 
-    setProducts((prev) => {
-      const nextCatalog = prev.map((p) => {
-        if (p.id !== productId) return p;
-        const toggled = toggleProductInStockState(p, nextInStock);
-        updatedRef = toggled;
-        return toggled;
-      });
-      const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
-      syncedFullSets = withSyncedSets.filter((p) => p.isFullSet);
-      pushServerCatalogPatch({ products: withSyncedSets });
-      return withSyncedSets;
+    const nextCatalog = productsRef.current.map((p) => {
+      if (p.id !== productId) return p;
+      const toggled = toggleProductInStockState(p, nextInStock);
+      updatedRef = toggled;
+      return toggled;
     });
+    const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
+    const syncedFullSets = withSyncedSets.filter((p) => p.isFullSet);
+    productsRef.current = withSyncedSets;
+    setProducts(withSyncedSets);
 
     setActiveProductModal((prev) => {
       if (!prev) return prev;
@@ -2612,28 +2651,30 @@ export default function App() {
       const syncedSet = syncedFullSets.find((s) => s.id === prev.id);
       return syncedSet || prev;
     });
+
+    await pushServerCatalogPatch({ products: withSyncedSets });
   };
 
   const handleToggleProductVisibility = async (
     productId: string,
     nextVisible: boolean
   ) => {
-    setProducts((prev) => {
-      const nextCatalog = prev.map((p) =>
-        p.id === productId ? toggleProductVisibilityState(p, nextVisible) : p
-      );
-      pushServerCatalogPatch(
-        { products: nextCatalog },
-        { skipSheetsPush: true }
-      );
-      return nextCatalog;
-    });
+    const nextCatalog = productsRef.current.map((p) =>
+      p.id === productId ? toggleProductVisibilityState(p, nextVisible) : p
+    );
+    productsRef.current = nextCatalog;
+    setProducts(nextCatalog);
 
     if (!nextVisible) {
       setActiveProductModal((prev) =>
         prev && prev.id === productId ? null : prev
       );
     }
+
+    await pushServerCatalogPatch(
+      { products: nextCatalog },
+      { skipSheetsPush: true }
+    );
   };
 
   const handleUpdateSiteBanners = async (nextBanners: SiteBannersConfig) => {
@@ -3406,82 +3447,13 @@ export default function App() {
     );
   }, [activeCategoryBanner, displayedProducts.length]);
 
-  // Home Section 2: Category tiles for active department (Respects Admin Category Numbering Order; defaults to 4 signature tiles if untouched)
-  const homeCategoryTiles = useMemo(() => {
-    const defaultWomenIds = INITIAL_CATEGORIES.filter(
-      (c) => c.department === 'women'
-    ).map((c) => c.id);
-    const hasCustomWomenOrder =
-      womenCategories.length !== defaultWomenIds.length ||
-      womenCategories.some((c, idx) => {
-        const seedCat = INITIAL_CATEGORIES.find((ic) => ic.id === c.id);
-        return (
-          c.id !== defaultWomenIds[idx] ||
-          (seedCat && c.sortOrder !== seedCat.sortOrder)
-        );
-      });
+  // Home Section 2: Women's 4 Signature Categories (Jackets, Trousers, Skirts, Denim) with Exclusive 1-Per-Category Cover Photo
+  const homeCategoryTiles = useMemo(
+    () => getHomeWomenCategoryTiles(publicProducts, womenCategories),
+    [publicProducts, womenCategories]
+  );
 
-    const preferredWomenNames = ['Bags', 'Jacket', 'Trench Coat', 'Full Set'];
-    const activeCats =
-      homeCategoryDept === 'women'
-        ? hasCustomWomenOrder
-          ? womenCategories.slice(0, 4)
-          : [
-              ...preferredWomenNames
-                .map((name) =>
-                  womenCategories.find(
-                    (c) => c.name.toLowerCase() === name.toLowerCase()
-                  )
-                )
-                .filter((c): c is CategoryItem => Boolean(c)),
-              ...womenCategories.filter(
-                (c) =>
-                  !preferredWomenNames.some(
-                    (n) => n.toLowerCase() === c.name.toLowerCase()
-                  )
-              ),
-            ].slice(0, 4)
-        : kidsCategories;
-    const fallbackStudioMap: Record<string, { src: string; style: StyleType }> = {
-      bags: { src: 'studio://women-bags-hourglass-burgundy', style: 'Accessories' },
-      jacket: { src: 'studio://women-jacket-leather-biker', style: 'Fine Leather' },
-      'trench coat': { src: 'studio://women-trench-suede-coat', style: 'Suede' },
-      fur: { src: 'studio://women-fur-opera-coat', style: 'Fur' },
-      trousers: { src: 'studio://women-trousers-wide-leather', style: 'Classic' },
-      pants: { src: 'studio://women-pants-suede-flare', style: 'Suede' },
-      skirts: { src: 'studio://women-skirts-pleated-leather', style: 'Sport Chic' },
-      denim: { src: 'studio://women-denim-raw-indigo', style: 'Sport Chic' },
-      tops: { src: 'studio://women-tops-silk-drape', style: 'Classic' },
-      'full set': { src: 'studio://women-fullset-monolith', style: 'Fine Leather' },
-      belts: { src: 'studio://women-belts-double-buckle', style: 'Accessories' },
-      'minis 1 to 5': { src: 'studio://kids-baby-cashmere-knit-set', style: 'Classic' },
-      'children 6+': { src: 'studio://kids-junior-leather-bomber', style: 'Sport Chic' },
-      'teen 13+': { src: 'studio://kids-teen-suede-varsity', style: 'Suede' },
-    };
-
-    return activeCats.map((cat) => {
-      const catLower = cat.name.toLowerCase();
-      const matchingProd = publicProducts.find(
-        (p) =>
-          p.department === homeCategoryDept &&
-          (p.category.toLowerCase() === catLower ||
-            (catLower === 'full set' &&
-              p.department === 'women' &&
-              Boolean(p.isFullSet)))
-      );
-      const fallback = fallbackStudioMap[cat.name.toLowerCase()] || {
-        src: 'studio://women-jacket-leather-biker',
-        style: 'Fine Leather' as StyleType,
-      };
-      return {
-        category: cat,
-        imageUrl: matchingProd?.imageUrl || fallback.src,
-        styleType: matchingProd?.style || fallback.style,
-      };
-    });
-  }, [homeCategoryDept, womenCategories, kidsCategories, publicProducts]);
-
-  // Home New Arrivals Carousel Products filtered by Women | Kids switcher (Women: SAHARA CROC CRESCENT 1st, old 1st -> 3rd, old 3rd -> 4th)
+  // Home New Arrivals Carousel Products filtered by Women | Kids switcher (Ordered by homeNewArrivalsOrder 1, 2, 3...)
   const homeNewArrivalsProducts = useMemo(
     () => orderHomeNewArrivalsProducts(publicProducts, homeNewArrivalsDept),
     [publicProducts, homeNewArrivalsDept]
@@ -3506,14 +3478,11 @@ export default function App() {
     el.scrollBy({ left: direction * step, behavior: 'smooth' });
   };
 
-  // Home Bags Collection Carousel Products (Women's Bags only)
-  const homeBagsProducts = useMemo(() => {
-    return publicProducts.filter((p) => {
-      if (p.department !== 'women') return false;
-      const cat = (p.category || '').trim().toLowerCase();
-      return cat === 'bags' || cat === 'bag';
-    });
-  }, [publicProducts]);
+  // Home Bags Collection Carousel Products (Women's Bags only, ordered by homeBagsOrder 1, 2, 3...)
+  const homeBagsProducts = useMemo(
+    () => orderHomeBagsProducts(publicProducts),
+    [publicProducts]
+  );
 
   const handleBagsScroll = () => {
     const el = bagsScrollRef.current;
@@ -3960,7 +3929,7 @@ export default function App() {
                   />
                 </div>
 
-                {/* Section 2: Prada-Inspired Categories Section under Hero Video (Women | Kids Switcher + 2-Col Mobile / 4-Col Desktop 4:5 Studio Grid) */}
+                {/* Section 2: Prada-Inspired Women Categories Section under Hero Video (Jackets, Trousers, Skirts, Denim — 2-Col Mobile / 4-Col Desktop 4:5 Studio Grid) */}
                 <section className="w-full bg-white pt-10 pb-8">
                   <div className="max-w-xl mx-auto px-6 text-center space-y-5 mb-7">
                     <p className="text-xs sm:text-[13px] text-zinc-800 leading-relaxed font-normal">
@@ -3968,78 +3937,59 @@ export default function App() {
                       and refined details reveal new expressions of individuality.
                     </p>
 
-                    {/* Women | Kids Department Switcher Tabs */}
+                    {/* Women Department Header Tab (Kids tab removed from Section 2 per request) */}
                     <div
                       className="flex items-center justify-center gap-7"
                       role="tablist"
-                      aria-label="Select Department Categories"
+                      aria-label="Women Categories"
                     >
                       <button
                         type="button"
                         role="tab"
-                        aria-selected={homeCategoryDept === 'women'}
+                        aria-selected={true}
                         onClick={() => setHomeCategoryDept('women')}
-                        className={`pb-1.5 text-xs sm:text-[13px] tracking-[0.02em] transition-colors cursor-pointer ${
-                          homeCategoryDept === 'women'
-                            ? 'font-semibold text-zinc-950 border-b-2 border-zinc-950'
-                            : 'font-normal text-zinc-500 hover:text-zinc-950 border-b-2 border-transparent'
-                        }`}
+                        className="pb-1.5 text-xs sm:text-[13px] tracking-[0.02em] transition-colors cursor-pointer font-semibold text-zinc-950 border-b-2 border-zinc-950"
                       >
                         Women
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={homeCategoryDept === 'kids'}
-                        onClick={() => setHomeCategoryDept('kids')}
-                        className={`pb-1.5 text-xs sm:text-[13px] tracking-[0.02em] transition-colors cursor-pointer ${
-                          homeCategoryDept === 'kids'
-                            ? 'font-semibold text-zinc-950 border-b-2 border-zinc-950'
-                            : 'font-normal text-zinc-500 hover:text-zinc-950 border-b-2 border-transparent'
-                        }`}
-                      >
-                        Kids
                       </button>
                     </div>
                   </div>
 
-                  {/* Edge-to-Edge 2-Column Mobile / 4-Column Desktop 4:5 Category Tiles */}
-                  <div
-                    className={`grid grid-cols-2 ${
-                      homeCategoryTiles.length === 3
-                        ? 'lg:grid-cols-3'
-                        : 'lg:grid-cols-4'
-                    } gap-x-[2px] gap-y-2 bg-white`}
-                  >
-                    {homeCategoryTiles.map(({ category, imageUrl, styleType }) => (
-                      <div
-                        key={category.id}
-                        onClick={() =>
-                          handleNavigate(
-                            homeCategoryDept === 'women' ? '/women' : '/kids',
-                            category.name
-                          )
-                        }
-                        className="group cursor-pointer bg-white flex flex-col"
-                      >
-                        <div className="aspect-[4/5] w-full bg-[#EFEFEF] overflow-hidden">
-                          <ProductImage
-                            src={imageUrl}
-                            alt={`${category.name}`}
-                            category={category.name}
-                            styleType={styleType}
-                            className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]"
-                          />
+                  {/* Edge-to-Edge 2-Column Mobile / 4-Column Desktop 4:5 Women Category Tiles (Jackets, Trousers, Skirts, Denim) */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-[2px] gap-y-2 bg-white">
+                    {homeCategoryTiles.map(
+                      ({
+                        tileName,
+                        displayLabel,
+                        targetCategoryName,
+                        category,
+                        imageUrl,
+                        styleType,
+                      }) => (
+                        <div
+                          key={category.id || tileName}
+                          onClick={() =>
+                            handleNavigate('/women', targetCategoryName)
+                          }
+                          className="group cursor-pointer bg-white flex flex-col"
+                        >
+                          <div className="aspect-[4/5] w-full bg-[#EFEFEF] overflow-hidden">
+                            <ProductImage
+                              src={imageUrl}
+                              alt={displayLabel}
+                              category={targetCategoryName}
+                              styleType={styleType}
+                              className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]"
+                            />
+                          </div>
+                          <div className="py-4 px-2 text-center bg-white">
+                            <h2 className="text-xs sm:text-[13px] font-semibold tracking-[0.01em] text-zinc-950 group-hover:underline">
+                              {displayLabel}
+                            </h2>
+                          </div>
                         </div>
-                        <div className="py-4 px-2 text-center bg-white">
-                          <h2 className="text-xs sm:text-[13px] font-semibold tracking-[0.01em] text-zinc-950 group-hover:underline">
-                            {homeCategoryDept === 'women'
-                              ? `Women's ${category.name}`
-                              : category.name}
-                          </h2>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    )}
                   </div>
                 </section>
 

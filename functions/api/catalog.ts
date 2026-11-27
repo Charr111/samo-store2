@@ -68,6 +68,168 @@ function safeJsonParse<T = unknown>(str: unknown, fallback: T): T {
   }
 }
 
+function serializeProductD1Meta(p: Record<string, any>): {
+  discountBadgeColumn: string | null;
+  discountPercentColumn: number | null;
+  featuredColumn: number;
+  customStyleColumn: string;
+} {
+  const rawType = p?.discountType;
+  const discountType: 'none' | 'percentage' | 'fixed' =
+    rawType === 'percentage' || rawType === 'fixed' ? rawType : 'none';
+  const rawVal = Number(p?.discountValue ?? p?.discountPercent) || 0;
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  const effectiveDiscountType: 'none' | 'percentage' | 'fixed' =
+    discountValue > 0 ? discountType : 'none';
+
+  const isNewArrival =
+    typeof p?.isNewArrival === 'boolean'
+      ? p.isNewArrival
+      : Boolean(p?.featured);
+
+  const showInHomeNewArrivals = isNewArrival
+    ? typeof p?.showInHomeNewArrivals === 'boolean'
+      ? p.showInHomeNewArrivals
+      : true
+    : false;
+
+  const homeNewArrivalsOrder =
+    typeof p?.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(p.homeNewArrivalsOrder) &&
+    p.homeNewArrivalsOrder > 0
+      ? Math.floor(p.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof p?.isHomeCategoryCover === 'boolean'
+      ? p.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof p?.showInHomeBags === 'boolean' ? p.showInHomeBags : undefined;
+
+  const homeBagsOrder =
+    typeof p?.homeBagsOrder === 'number' &&
+    Number.isFinite(p.homeBagsOrder) &&
+    p.homeBagsOrder > 0
+      ? Math.floor(p.homeBagsOrder)
+      : undefined;
+
+  const envelope = {
+    _samoMeta: 1,
+    discountType: effectiveDiscountType,
+    discountValue,
+    isNewArrival,
+    showInHomeNewArrivals,
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
+
+  return {
+    discountBadgeColumn:
+      effectiveDiscountType !== 'none' ? effectiveDiscountType : null,
+    discountPercentColumn: discountValue > 0 ? discountValue : null,
+    featuredColumn: isNewArrival ? 1 : 0,
+    customStyleColumn: JSON.stringify(envelope),
+  };
+}
+
+function deserializeProductD1Meta(row: Record<string, any>) {
+  let parsedEnvelope: Record<string, any> | null = null;
+  if (
+    typeof row?.custom_style === 'string' &&
+    row.custom_style.trim().startsWith('{')
+  ) {
+    try {
+      const obj = JSON.parse(row.custom_style);
+      if (obj && typeof obj === 'object') {
+        parsedEnvelope = obj;
+      }
+    } catch {
+      parsedEnvelope = null;
+    }
+  }
+
+  const rawBadge =
+    typeof parsedEnvelope?.discountType === 'string'
+      ? parsedEnvelope.discountType
+      : typeof row?.discount_badge === 'string'
+      ? row.discount_badge.trim().toLowerCase()
+      : '';
+
+  const rawVal =
+    typeof parsedEnvelope?.discountValue === 'number'
+      ? parsedEnvelope.discountValue
+      : Number(row?.discount_percent) || 0;
+
+  let discountType: 'none' | 'percentage' | 'fixed' = 'none';
+  if (rawBadge === 'percentage' || rawBadge === 'fixed') {
+    discountType = rawBadge;
+  } else if (rawVal > 0) {
+    discountType = 'percentage';
+  }
+
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  if (discountValue <= 0) {
+    discountType = 'none';
+  }
+
+  const isNewArrival =
+    typeof parsedEnvelope?.isNewArrival === 'boolean'
+      ? parsedEnvelope.isNewArrival
+      : Boolean(row?.featured);
+
+  const showInHomeNewArrivals = !isNewArrival
+    ? false
+    : typeof parsedEnvelope?.showInHomeNewArrivals === 'boolean'
+    ? parsedEnvelope.showInHomeNewArrivals
+    : undefined;
+
+  const homeNewArrivalsOrder =
+    typeof parsedEnvelope?.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeNewArrivalsOrder) &&
+    parsedEnvelope.homeNewArrivalsOrder > 0
+      ? Math.floor(parsedEnvelope.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof parsedEnvelope?.isHomeCategoryCover === 'boolean'
+      ? parsedEnvelope.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof parsedEnvelope?.showInHomeBags === 'boolean'
+      ? parsedEnvelope.showInHomeBags
+      : undefined;
+
+  const homeBagsOrder =
+    typeof parsedEnvelope?.homeBagsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeBagsOrder) &&
+    parsedEnvelope.homeBagsOrder > 0
+      ? Math.floor(parsedEnvelope.homeBagsOrder)
+      : undefined;
+
+  return {
+    discountType,
+    discountValue,
+    isNewArrival,
+    featured: isNewArrival,
+    ...(showInHomeNewArrivals !== undefined ? { showInHomeNewArrivals } : {}),
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
+}
+
 async function readFromD1(
   db: D1DatabaseBinding
 ): Promise<Record<string, unknown> | null> {
@@ -104,6 +266,7 @@ async function readFromD1(
 
     const products = (prodsRes.results || []).map((p: any) => {
       const parsedSetPieces = safeJsonParse(p.full_set_pieces, []);
+      const unpackedMeta = deserializeProductD1Meta(p);
       return {
         id: p.id,
         name: p.name,
@@ -114,6 +277,8 @@ async function readFromD1(
         originalPrice: p.original_price ?? undefined,
         discountPercent: p.discount_percent ?? undefined,
         discountBadge: p.discount_badge ?? undefined,
+        discountType: unpackedMeta.discountType,
+        discountValue: unpackedMeta.discountValue,
         style: p.style || 'Classic Luxury',
         customStyle: p.custom_style ?? undefined,
         materials: safeJsonParse(p.materials, []),
@@ -131,7 +296,23 @@ async function readFromD1(
         preorderEnabled: Boolean(p.preorder_enabled),
         description: p.description || '',
         details: safeJsonParse(p.details, []),
-        featured: Boolean(p.featured),
+        isNewArrival: unpackedMeta.isNewArrival,
+        featured: unpackedMeta.featured,
+        ...(unpackedMeta.showInHomeNewArrivals !== undefined
+          ? { showInHomeNewArrivals: unpackedMeta.showInHomeNewArrivals }
+          : {}),
+        ...(unpackedMeta.homeNewArrivalsOrder !== undefined
+          ? { homeNewArrivalsOrder: unpackedMeta.homeNewArrivalsOrder }
+          : {}),
+        ...(unpackedMeta.isHomeCategoryCover !== undefined
+          ? { isHomeCategoryCover: unpackedMeta.isHomeCategoryCover }
+          : {}),
+        ...(unpackedMeta.showInHomeBags !== undefined
+          ? { showInHomeBags: unpackedMeta.showInHomeBags }
+          : {}),
+        ...(unpackedMeta.homeBagsOrder !== undefined
+          ? { homeBagsOrder: unpackedMeta.homeBagsOrder }
+          : {}),
         sizeType: p.size_type || 'letter',
         createdAt: p.created_at || new Date().toISOString(),
         updatedAt: p.updated_at || new Date().toISOString(),
@@ -326,6 +507,7 @@ function buildProductPersistSignature(p: any): string {
     : Array.isArray(p?.fullSetPieces)
     ? p.fullSetPieces
     : [];
+  const serializedMeta = serializeProductD1Meta(p || {});
   return JSON.stringify([
     p?.id || '',
     p?.name || '',
@@ -334,10 +516,10 @@ function buildProductPersistSignature(p: any): string {
     p?.category || 'Tops',
     p?.price ?? 0,
     p?.originalPrice ?? null,
-    p?.discountPercent ?? null,
-    p?.discountBadge ?? null,
+    serializedMeta.discountPercentColumn,
+    serializedMeta.discountBadgeColumn,
     p?.style || 'Classic Luxury',
-    p?.customStyle ?? null,
+    serializedMeta.customStyleColumn,
     Array.isArray(p?.materials) ? p.materials : [],
     Array.isArray(p?.sizes) ? p.sizes : [],
     p?.sizeQuantities || {},
@@ -352,7 +534,7 @@ function buildProductPersistSignature(p: any): string {
     p?.preorderEnabled ? 1 : 0,
     p?.description || '',
     Array.isArray(p?.details) ? p.details : [],
-    p?.featured ? 1 : 0,
+    serializedMeta.featuredColumn,
     p?.sizeType || 'letter',
   ]);
 }
@@ -490,6 +672,7 @@ async function writeToD1(
         : Array.isArray(p.fullSetPieces)
         ? p.fullSetPieces
         : [];
+      const serializedMeta = serializeProductD1Meta(p || {});
       statements.push(
         db
           .prepare(
@@ -540,10 +723,10 @@ async function writeToD1(
             p.category || 'Tops',
             p.price ?? 0,
             p.originalPrice ?? null,
-            p.discountPercent ?? null,
-            p.discountBadge ?? null,
+            serializedMeta.discountPercentColumn,
+            serializedMeta.discountBadgeColumn,
             p.style || 'Classic Luxury',
-            p.customStyle ?? null,
+            serializedMeta.customStyleColumn,
             JSON.stringify(Array.isArray(p.materials) ? p.materials : []),
             JSON.stringify(Array.isArray(p.sizes) ? p.sizes : []),
             JSON.stringify(p.sizeQuantities || {}),
@@ -558,7 +741,7 @@ async function writeToD1(
             p.preorderEnabled ? 1 : 0,
             p.description || '',
             JSON.stringify(Array.isArray(p.details) ? p.details : []),
-            p.featured ? 1 : 0,
+            serializedMeta.featuredColumn,
             p.sizeType || 'letter',
             p.createdAt || new Date().toISOString(),
             p.updatedAt || new Date().toISOString()

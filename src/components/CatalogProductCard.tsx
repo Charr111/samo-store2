@@ -227,11 +227,17 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
             {formattedName}
           </h3>
           <div className="flex items-baseline gap-1 font-mono-tabular shrink-0">
-            <span className="text-[12.5px] sm:text-[14px] font-bold text-zinc-950">
+            <span
+              className={
+                pricing.hasDiscount
+                  ? 'text-[13.75px] sm:text-[15.4px] font-bold text-zinc-950'
+                  : 'text-[12.5px] sm:text-[14px] font-bold text-zinc-950'
+              }
+            >
               ${pricing.effectivePrice.toLocaleString()}
             </span>
             {pricing.hasDiscount && (
-              <span className="text-[10.5px] sm:text-[11.5px] text-zinc-400 line-through">
+              <span className="text-[10.2px] sm:text-[11.15px] text-zinc-400 line-through">
                 ${pricing.originalPrice.toLocaleString()}
               </span>
             )}
