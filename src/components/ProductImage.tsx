@@ -69,7 +69,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   });
 
   const placeholderLogoClass = `${
-    compact ? 'w-10' : 'w-20 sm:w-24'
+    compact ? 'w-[42px]' : 'w-[84px] sm:w-[106px]'
   } h-auto object-contain opacity-100 select-none pointer-events-none`;
 
   // If no image URL is uploaded yet (or an external image failed), render the gray studio box with centered black SAMO logo

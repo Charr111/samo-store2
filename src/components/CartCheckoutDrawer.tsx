@@ -689,20 +689,20 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
                   {/* Complete the Look Section (Dual-Slot: 1 Apparel Complement + 1 Color-Matched Hat / Finishing Piece) */}
                   {upsellProducts.length > 0 && (
-                    <div className="pt-3.5 border-t border-zinc-950 space-y-2.5">
+                    <div className="pt-3 border-t border-zinc-950 space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-display text-[11.5px] font-extrabold uppercase tracking-[0.14em] text-zinc-950">
+                        <h3 className="font-display text-[11px] font-extrabold uppercase tracking-[0.14em] text-zinc-950">
                           Complete the Look
                         </h3>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-2.5">
+                      <div className="grid grid-cols-1 gap-2">
                         {upsellProducts.slice(0, 2).map((upsell) => {
                           const upsellPricing = getEffectiveProductPrice(upsell);
                           return (
                             <div
                               key={upsell.id}
-                              className="p-2.5 border border-zinc-200 hover:border-zinc-950 bg-zinc-50/60 flex items-center gap-3 transition-colors"
+                              className="p-2 border border-zinc-200 hover:border-zinc-950 bg-zinc-50/60 flex items-center gap-2.5 transition-colors"
                             >
                               <div
                                 onClick={() => {
@@ -711,7 +711,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                     onSelectProduct(upsell);
                                   }
                                 }}
-                                className="w-[61px] h-[76px] shrink-0 border border-zinc-200 bg-white cursor-pointer"
+                                className="w-[59px] h-[73px] shrink-0 border border-zinc-200 bg-white cursor-pointer"
                               >
                                 <ProductImage
                                   src={upsell.imageUrl}
@@ -724,12 +724,6 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                               </div>
 
                               <div className="flex-1 min-w-0">
-                                <div className="text-[9.5px] font-semibold uppercase tracking-wider text-zinc-500">
-                                  {upsell.department} · {upsell.category}
-                                  {Array.isArray(upsell.materials) && upsell.materials[0]
-                                    ? ` · ${upsell.materials[0]}`
-                                    : ''}
-                                </div>
                                 <h4
                                   onClick={() => {
                                     if (onSelectProduct) {
@@ -737,12 +731,12 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                       onSelectProduct(upsell);
                                     }
                                   }}
-                                  className="text-[11.5px] font-bold uppercase tracking-wider text-zinc-950 truncate hover:underline cursor-pointer mt-0.5"
+                                  className="text-[11px] font-bold uppercase tracking-wider text-zinc-950 truncate hover:underline cursor-pointer"
                                 >
                                   {upsell.name}
                                 </h4>
                                 <div className="mt-1 flex items-center gap-1.5 font-mono-tabular">
-                                  <span className="text-[11.5px] font-bold text-zinc-950">
+                                  <span className="text-[11px] font-bold text-zinc-950">
                                     ${upsellPricing.effectivePrice.toLocaleString()}
                                   </span>
                                   {upsellPricing.hasDiscount && (
@@ -756,9 +750,10 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleQuickAddUpsell(upsell)}
-                                className="px-2.5 py-1.5 bg-zinc-950 text-white text-[9.5px] font-bold uppercase tracking-[0.12em] hover:bg-zinc-800 transition-colors shrink-0 cursor-pointer"
+                                aria-label={`Add ${upsell.name} to bag`}
+                                className="w-8 h-8 flex items-center justify-center bg-zinc-950 text-white text-sm font-bold leading-none hover:bg-zinc-800 transition-colors shrink-0 cursor-pointer"
                               >
-                                + Add to Bag
+                                +
                               </button>
                             </div>
                           );
