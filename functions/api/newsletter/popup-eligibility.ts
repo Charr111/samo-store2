@@ -1,16 +1,20 @@
+import { getCorsHeaders } from '../_auth';
 import {
   hasWorkerSubscribedCookie,
-  NEWSLETTER_CORS_HEADERS,
   resolveWorkerClientIp,
   workerPopupImpressionsMemory,
   workerSubscribedNewsletterIpsMemory,
 } from './_memory';
 
-export const onRequestOptions = async () => {
-  return new Response(null, { status: 204, headers: NEWSLETTER_CORS_HEADERS });
+export const onRequestOptions = async (context: { request?: Request }) => {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(context?.request),
+  });
 };
 
 export const onRequestGet = async (context: { request: Request }) => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const clientIp = resolveWorkerClientIp(context.request);
     const today = new Date().toISOString().slice(0, 10);
@@ -38,7 +42,7 @@ export const onRequestGet = async (context: { request: Request }) => {
       {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }
@@ -49,7 +53,7 @@ export const onRequestGet = async (context: { request: Request }) => {
       {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }

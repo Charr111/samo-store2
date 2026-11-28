@@ -325,10 +325,48 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
   };
 
-  const handleApplyPromoCode = () => {
+  const handleApplyPromoCode = async () => {
     setPromoFeedback('');
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
+
+    try {
+      const resp = await fetch('/api/promo/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          email: customerEmail.trim(),
+        }),
+      });
+      const data = (await resp.json().catch(() => null)) as {
+        valid?: boolean;
+        promo?: PromoCodeItem;
+        error?: string;
+      } | null;
+
+      if (data && typeof data.valid === 'boolean') {
+        if (!data.valid || !data.promo) {
+          setAppliedPromo(null);
+          setPromoFeedback(
+            data.error || `Promo code "${code}" is invalid or inactive.`
+          );
+          return;
+        }
+        setAppliedPromo(data.promo);
+        setPromoFeedback(
+          `Applied ${data.promo.code} (${
+            data.promo.discountType === 'percentage'
+              ? `${data.promo.discountValue}% OFF`
+              : `$${data.promo.discountValue} OFF`
+          })`
+        );
+        return;
+      }
+    } catch {
+      // Fallback to local validation if network request fails
+    }
+
     const found = promoCodes.find(
       (p) => p.active && p.code.trim().toUpperCase() === code
     );

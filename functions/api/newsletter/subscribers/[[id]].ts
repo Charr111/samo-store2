@@ -1,5 +1,9 @@
-import type { D1DatabaseBinding, Env } from '../../catalog';
-import { NEWSLETTER_CORS_HEADERS } from '../_memory';
+import { getCorsHeaders, verifyFirebaseAdminRequest } from '../../_auth';
+import {
+  readCatalogSnapshot,
+  type D1DatabaseBinding,
+  type Env,
+} from '../../catalog';
 
 async function readSubscribersFromD1(db: D1DatabaseBinding) {
   const res = await db
@@ -16,19 +20,52 @@ async function readSubscribersFromD1(db: D1DatabaseBinding) {
   }));
 }
 
-export const onRequestOptions = async () => {
-  return new Response(null, { status: 204, headers: NEWSLETTER_CORS_HEADERS });
+export const onRequestOptions = async (context: { request?: Request }) => {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(context?.request),
+  });
 };
 
-export const onRequestGet = async (context: { env: Env }) => {
+export const onRequestGet = async (context: {
+  request: Request;
+  env: Env;
+}) => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const db: D1DatabaseBinding | undefined =
       context.env.DB || context.env.SAMO_D1;
+    const currentSnapshot = await readCatalogSnapshot(context.env);
+    const extraAdmins = Array.isArray(currentSnapshot.admins)
+      ? (currentSnapshot.admins as Array<{ email?: string }>)
+      : [];
+
+    const authCheck = await verifyFirebaseAdminRequest({
+      authorizationHeader: context.request.headers.get('Authorization'),
+      d1Db: db,
+      extraAdminEmails: extraAdmins,
+    });
+
+    if (!authCheck.authorized) {
+      return new Response(
+        JSON.stringify({
+          error: authCheck.error || 'Unauthorized admin access.',
+        }),
+        {
+          status: authCheck.status,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+
     if (!db) {
       return new Response(JSON.stringify({ subscribers: [] }), {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       });
@@ -37,7 +74,7 @@ export const onRequestGet = async (context: { env: Env }) => {
     return new Response(JSON.stringify({ subscribers }), {
       status: 200,
       headers: {
-        ...NEWSLETTER_CORS_HEADERS,
+        ...corsHeaders,
         'Content-Type': 'application/json',
       },
     });
@@ -49,7 +86,7 @@ export const onRequestGet = async (context: { env: Env }) => {
       {
         status: 500,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }
@@ -62,16 +99,43 @@ export const onRequestDelete = async (context: {
   env: Env;
   params: { id?: string | string[] };
 }) => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const db: D1DatabaseBinding | undefined =
       context.env.DB || context.env.SAMO_D1;
+    const currentSnapshot = await readCatalogSnapshot(context.env);
+    const extraAdmins = Array.isArray(currentSnapshot.admins)
+      ? (currentSnapshot.admins as Array<{ email?: string }>)
+      : [];
+
+    const authCheck = await verifyFirebaseAdminRequest({
+      authorizationHeader: context.request.headers.get('Authorization'),
+      d1Db: db,
+      extraAdminEmails: extraAdmins,
+    });
+
+    if (!authCheck.authorized) {
+      return new Response(
+        JSON.stringify({
+          error: authCheck.error || 'Unauthorized admin access.',
+        }),
+        {
+          status: authCheck.status,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+
     if (!db) {
       return new Response(
         JSON.stringify({ success: true, subscribers: [] }),
         {
           status: 200,
           headers: {
-            ...NEWSLETTER_CORS_HEADERS,
+            ...corsHeaders,
             'Content-Type': 'application/json',
           },
         }
@@ -106,7 +170,7 @@ export const onRequestDelete = async (context: {
       {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }
@@ -117,7 +181,7 @@ export const onRequestDelete = async (context: {
       {
         status: 500,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }

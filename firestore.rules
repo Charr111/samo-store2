@@ -30,7 +30,6 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == 'apolokor@gmail.com' ||
-        request.auth.token.email == 'charbelkorab11123@gmail.com' ||
         request.auth.token.email == 'joeykorab88@gmail.com' ||
         request.auth.token.email == 'samobougharios@gmail.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.token.email))

@@ -1,18 +1,22 @@
+import { getCorsHeaders } from '../_auth';
 import type { D1DatabaseBinding, Env } from '../catalog';
 import {
-  NEWSLETTER_CORS_HEADERS,
   resolveWorkerClientIp,
   workerSubscribedNewsletterIpsMemory,
 } from './_memory';
 
-export const onRequestOptions = async () => {
-  return new Response(null, { status: 204, headers: NEWSLETTER_CORS_HEADERS });
+export const onRequestOptions = async (context: { request?: Request }) => {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(context?.request),
+  });
 };
 
 export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }) => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const body = (await context.request.json().catch(() => ({}))) as {
       email?: unknown;
@@ -40,7 +44,7 @@ export const onRequestPost = async (context: {
         {
           status: 400,
           headers: {
-            ...NEWSLETTER_CORS_HEADERS,
+            ...corsHeaders,
             'Content-Type': 'application/json',
           },
         }
@@ -65,7 +69,6 @@ export const onRequestPost = async (context: {
 
     const db: D1DatabaseBinding | undefined =
       context.env.DB || context.env.SAMO_D1;
-    let allSubscribers = [newSub];
 
     if (db) {
       await db
@@ -84,31 +87,17 @@ export const onRequestPost = async (context: {
           newSub.subscribedAt
         )
         .run();
-
-      const res = await db
-        .prepare(
-          'SELECT * FROM newsletter_subscribers ORDER BY subscribed_at DESC;'
-        )
-        .all<any>();
-      allSubscribers = (res.results || []).map((r: any) => ({
-        id: r.id,
-        email: r.email,
-        ...(r.phone ? { phone: r.phone } : {}),
-        source: r.source === 'popup' ? 'popup' : 'footer',
-        subscribedAt: r.subscribed_at,
-      }));
     }
 
     return new Response(
       JSON.stringify({
         success: true,
         subscriber: newSub,
-        subscribers: allSubscribers,
       }),
       {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
           'Set-Cookie':
             'samo_nl_subscribed=1; Path=/; Max-Age=31536000; SameSite=Lax',
@@ -123,7 +112,7 @@ export const onRequestPost = async (context: {
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: {
-        ...NEWSLETTER_CORS_HEADERS,
+        ...corsHeaders,
         'Content-Type': 'application/json',
       },
     });

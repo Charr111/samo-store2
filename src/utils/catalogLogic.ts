@@ -1,4 +1,4 @@
-import {
+import type {
   AdminRecord,
   CategoryBannerConfig,
   CategoryItem,
@@ -18,7 +18,7 @@ import {
   SelectedSetPieceSize,
   SiteBannersConfig,
   SizeType,
-} from '../types/samo';
+} from '../types/samo.ts';
 
 export const PREBUILT_MATERIALS: readonly string[] = [
   'Cow Leather',

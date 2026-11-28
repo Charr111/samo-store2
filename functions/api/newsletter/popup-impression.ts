@@ -1,14 +1,18 @@
+import { getCorsHeaders } from '../_auth';
 import {
-  NEWSLETTER_CORS_HEADERS,
   resolveWorkerClientIp,
   workerPopupImpressionsMemory,
 } from './_memory';
 
-export const onRequestOptions = async () => {
-  return new Response(null, { status: 204, headers: NEWSLETTER_CORS_HEADERS });
+export const onRequestOptions = async (context: { request?: Request }) => {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(context?.request),
+  });
 };
 
 export const onRequestPost = async (context: { request: Request }) => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const clientIp = resolveWorkerClientIp(context.request);
     const today = new Date().toISOString().slice(0, 10);
@@ -33,7 +37,7 @@ export const onRequestPost = async (context: { request: Request }) => {
       {
         status: 200,
         headers: {
-          ...NEWSLETTER_CORS_HEADERS,
+          ...corsHeaders,
           'Content-Type': 'application/json',
         },
       }
@@ -42,7 +46,7 @@ export const onRequestPost = async (context: { request: Request }) => {
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: {
-        ...NEWSLETTER_CORS_HEADERS,
+        ...corsHeaders,
         'Content-Type': 'application/json',
       },
     });

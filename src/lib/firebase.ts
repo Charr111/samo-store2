@@ -92,7 +92,28 @@ async function testConnection() {
     }
   }
 }
-testConnection();
+if (typeof window !== 'undefined') {
+  testConnection();
+}
+
+export async function getAdminAuthHeaders(
+  extraHeaders?: Record<string, string>
+): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    ...(extraHeaders || {}),
+  };
+  try {
+    if (auth.currentUser) {
+      const idToken = await auth.currentUser.getIdToken();
+      if (idToken) {
+        headers.Authorization = `Bearer ${idToken}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[SAMO Auth] Failed to retrieve Firebase ID token:', err);
+  }
+  return headers;
+}
 
 export {
   signInWithPopup,
@@ -108,3 +129,4 @@ export {
   onSnapshot,
 };
 export type { User };
+

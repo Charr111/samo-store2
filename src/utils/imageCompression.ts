@@ -1,3 +1,5 @@
+import { getAdminAuthHeaders } from '../lib/firebase';
+
 export interface ImageCompressionOptions {
   maxWidth?: number;
   maxHeight?: number;
@@ -467,11 +469,12 @@ export async function uploadCompressedImageToR2(
     ? await compressImageToWebP(file, options)
     : await prepareOriginalQualityImage(file);
 
+  const authHeaders = await getAdminAuthHeaders({
+    'Content-Type': 'application/json',
+  });
   const response = await fetch('/api/r2-upload', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: authHeaders,
     body: JSON.stringify({
       fileName: prepared.fileName,
       contentType: prepared.contentType,
@@ -591,11 +594,12 @@ export async function compressAndUploadEmailBannerJpg(file: File): Promise<{
       .slice(0, 36) || 'campaign';
     const fileName = `order-email-banner-${Date.now()}-${cleanStem}.jpg`;
 
+    const authHeaders = await getAdminAuthHeaders({
+      'Content-Type': 'application/json',
+    });
     const response = await fetch('/api/r2-upload', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders,
       body: JSON.stringify({
         fileName,
         folder: 'banners',
@@ -672,9 +676,12 @@ export async function deleteMediaFromR2(
     return { deletedKeys: [] };
   }
   try {
+    const authHeaders = await getAdminAuthHeaders({
+      'Content-Type': 'application/json',
+    });
     const res = await fetch('/api/r2-delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ keys }),
     });
     if (res.ok) {
@@ -736,11 +743,12 @@ export async function uploadVideoFileToR2(file: File): Promise<{
     .slice(0, 50) || 'samo-hero-video';
   const fileName = `${Date.now()}-${safeBase}.${ext}`;
 
+  const authHeaders = await getAdminAuthHeaders({
+    'Content-Type': 'application/json',
+  });
   const response = await fetch('/api/r2-upload', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: authHeaders,
     body: JSON.stringify({
       fileName,
       contentType: resolvedContentType,

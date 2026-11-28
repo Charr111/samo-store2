@@ -4,10 +4,167 @@
  * Never imported into client bundles.
  */
 
-import {
-  deserializeProductD1Meta,
-  serializeProductD1Meta,
-} from '../src/utils/catalogLogic';
+function serializeProductD1Meta(p: Record<string, any>): {
+  discountBadgeColumn: string | null;
+  discountPercentColumn: number | null;
+  featuredColumn: number;
+  customStyleColumn: string;
+} {
+  const rawType = p?.discountType;
+  const discountType: 'none' | 'percentage' | 'fixed' =
+    rawType === 'percentage' || rawType === 'fixed' ? rawType : 'none';
+  const rawVal = Number(p?.discountValue ?? p?.discountPercent) || 0;
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  const effectiveDiscountType: 'none' | 'percentage' | 'fixed' =
+    discountValue > 0 ? discountType : 'none';
+
+  const isNewArrival =
+    typeof p?.isNewArrival === 'boolean'
+      ? p.isNewArrival
+      : Boolean(p?.featured);
+
+  const showInHomeNewArrivals = isNewArrival
+    ? typeof p?.showInHomeNewArrivals === 'boolean'
+      ? p.showInHomeNewArrivals
+      : true
+    : false;
+
+  const homeNewArrivalsOrder =
+    typeof p?.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(p.homeNewArrivalsOrder) &&
+    p.homeNewArrivalsOrder > 0
+      ? Math.floor(p.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof p?.isHomeCategoryCover === 'boolean'
+      ? p.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof p?.showInHomeBags === 'boolean' ? p.showInHomeBags : undefined;
+
+  const homeBagsOrder =
+    typeof p?.homeBagsOrder === 'number' &&
+    Number.isFinite(p.homeBagsOrder) &&
+    p.homeBagsOrder > 0
+      ? Math.floor(p.homeBagsOrder)
+      : undefined;
+
+  const envelope = {
+    _samoMeta: 1,
+    discountType: effectiveDiscountType,
+    discountValue,
+    isNewArrival,
+    showInHomeNewArrivals,
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
+
+  return {
+    discountBadgeColumn:
+      effectiveDiscountType !== 'none' ? effectiveDiscountType : null,
+    discountPercentColumn: discountValue > 0 ? discountValue : null,
+    featuredColumn: isNewArrival ? 1 : 0,
+    customStyleColumn: JSON.stringify(envelope),
+  };
+}
+
+function deserializeProductD1Meta(row: Record<string, any>) {
+  let parsedEnvelope: Record<string, any> | null = null;
+  if (
+    typeof row?.custom_style === 'string' &&
+    row.custom_style.trim().startsWith('{')
+  ) {
+    try {
+      const obj = JSON.parse(row.custom_style);
+      if (obj && typeof obj === 'object') {
+        parsedEnvelope = obj;
+      }
+    } catch {
+      parsedEnvelope = null;
+    }
+  }
+
+  const rawBadge =
+    typeof parsedEnvelope?.discountType === 'string'
+      ? parsedEnvelope.discountType
+      : typeof row?.discount_badge === 'string'
+      ? row.discount_badge.trim().toLowerCase()
+      : '';
+
+  const rawVal =
+    typeof parsedEnvelope?.discountValue === 'number'
+      ? parsedEnvelope.discountValue
+      : Number(row?.discount_percent) || 0;
+
+  let discountType: 'none' | 'percentage' | 'fixed' = 'none';
+  if (rawBadge === 'percentage' || rawBadge === 'fixed') {
+    discountType = rawBadge;
+  } else if (rawVal > 0) {
+    discountType = 'percentage';
+  }
+
+  const discountValue =
+    discountType !== 'none' && rawVal > 0
+      ? Math.round(rawVal * 100) / 100
+      : 0;
+  if (discountValue <= 0) {
+    discountType = 'none';
+  }
+
+  const isNewArrival =
+    typeof parsedEnvelope?.isNewArrival === 'boolean'
+      ? parsedEnvelope.isNewArrival
+      : Boolean(row?.featured);
+
+  const showInHomeNewArrivals = !isNewArrival
+    ? false
+    : typeof parsedEnvelope?.showInHomeNewArrivals === 'boolean'
+    ? parsedEnvelope.showInHomeNewArrivals
+    : undefined;
+
+  const homeNewArrivalsOrder =
+    typeof parsedEnvelope?.homeNewArrivalsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeNewArrivalsOrder) &&
+    parsedEnvelope.homeNewArrivalsOrder > 0
+      ? Math.floor(parsedEnvelope.homeNewArrivalsOrder)
+      : undefined;
+
+  const isHomeCategoryCover =
+    typeof parsedEnvelope?.isHomeCategoryCover === 'boolean'
+      ? parsedEnvelope.isHomeCategoryCover
+      : undefined;
+
+  const showInHomeBags =
+    typeof parsedEnvelope?.showInHomeBags === 'boolean'
+      ? parsedEnvelope.showInHomeBags
+      : undefined;
+
+  const homeBagsOrder =
+    typeof parsedEnvelope?.homeBagsOrder === 'number' &&
+    Number.isFinite(parsedEnvelope.homeBagsOrder) &&
+    parsedEnvelope.homeBagsOrder > 0
+      ? Math.floor(parsedEnvelope.homeBagsOrder)
+      : undefined;
+
+  return {
+    discountType,
+    discountValue,
+    isNewArrival,
+    featured: isNewArrival,
+    ...(showInHomeNewArrivals !== undefined ? { showInHomeNewArrivals } : {}),
+    ...(homeNewArrivalsOrder !== undefined ? { homeNewArrivalsOrder } : {}),
+    ...(isHomeCategoryCover !== undefined ? { isHomeCategoryCover } : {}),
+    ...(showInHomeBags !== undefined ? { showInHomeBags } : {}),
+    ...(homeBagsOrder !== undefined ? { homeBagsOrder } : {}),
+  };
+}
 
 export interface D1Config {
   accountId: string;
@@ -437,18 +594,40 @@ export async function readD1CatalogState(): Promise<PersistedCatalogState | null
     });
 
     // Parse preorders
-    const preorders = preordersRes.results.map((pr) => ({
-      id: pr.id,
-      productId: pr.product_id,
-      productName: pr.product_name,
-      size: pr.size || '',
-      colorName: pr.color_name || undefined,
-      clientName: pr.client_name,
-      clientEmail: pr.client_email || '',
-      clientPhone: pr.client_phone || '',
-      status: pr.status,
-      createdAt: pr.created_at,
-    }));
+    const preorders = preordersRes.results.map((pr) => {
+      const parsedEmailMeta =
+        typeof pr.client_email === 'string' &&
+        pr.client_email.trim().startsWith('{')
+          ? safeParseJson<Record<string, any> | null>(pr.client_email, null)
+          : null;
+      const contactVal =
+        pr.client_name ||
+        pr.client_phone ||
+        (parsedEmailMeta ? parsedEmailMeta.clientEmail : pr.client_email) ||
+        '';
+      return {
+        id: pr.id,
+        productId: pr.product_id || '',
+        productName: pr.product_name || '',
+        productImage: parsedEmailMeta?.productImage || '',
+        department:
+          parsedEmailMeta?.department === 'kids' ? 'kids' : 'women',
+        category: parsedEmailMeta?.category || '',
+        selectedSize: pr.size || '',
+        size: pr.size || '',
+        ...(pr.color_name
+          ? { selectedColor: pr.color_name, colorName: pr.color_name }
+          : {}),
+        customerContact: contactVal,
+        clientName: pr.client_name || contactVal,
+        clientEmail: parsedEmailMeta
+          ? parsedEmailMeta.clientEmail || ''
+          : pr.client_email || '',
+        clientPhone: pr.client_phone || '',
+        status: pr.status === 'notified' ? 'notified' : 'pending',
+        createdAt: pr.created_at,
+      };
+    });
 
     // Parse newsletter subscribers
     const newsletterSubscribers = newsletterRes.results.map((n) => ({
@@ -736,15 +915,26 @@ export async function upsertD1Preorder(pr: any): Promise<void> {
   ON CONFLICT(id) DO UPDATE SET
     status=excluded.status;`;
 
+  const resolvedSize = pr.selectedSize || pr.size || '';
+  const resolvedColor = pr.selectedColor || pr.colorName || null;
+  const resolvedContact = pr.customerContact || pr.clientName || '';
+  const metaEnvelope = JSON.stringify({
+    _samoPreMeta: 1,
+    productImage: pr.productImage || '',
+    department: pr.department === 'kids' ? 'kids' : 'women',
+    category: pr.category || '',
+    clientEmail: pr.clientEmail || '',
+  });
+
   const params = [
     pr.id,
     pr.productId || null,
     pr.productName || '',
-    pr.size || '',
-    pr.colorName || null,
-    pr.clientName || '',
-    pr.clientEmail || '',
-    pr.clientPhone || '',
+    resolvedSize,
+    resolvedColor,
+    resolvedContact,
+    metaEnvelope,
+    pr.clientPhone || resolvedContact,
     pr.status || 'pending',
     pr.createdAt || new Date().toISOString(),
   ];
@@ -883,6 +1073,28 @@ export async function writeD1CatalogPatch(
       if (pre && pre.id) {
         await upsertD1Preorder(pre);
       }
+    }
+  }
+
+  // 6B. Admins
+  if (Array.isArray(patch.admins)) {
+    for (const adm of patch.admins as any[]) {
+      const email =
+        typeof adm?.email === 'string' ? adm.email.trim().toLowerCase() : '';
+      if (!email || email === 'charbelkorab11123@gmail.com') continue;
+      await d1Query(
+        `INSERT INTO admins (email, role, added_at, added_by)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           role=excluded.role,
+           added_by=excluded.added_by;`,
+        [
+          email,
+          adm.role || 'admin',
+          adm.createdAt || adm.addedAt || new Date().toISOString(),
+          adm.addedBy || 'Super Admin',
+        ]
+      );
     }
   }
 

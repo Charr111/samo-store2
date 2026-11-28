@@ -99,6 +99,7 @@ import {
   db,
   doc,
   firebaseSignOut,
+  getAdminAuthHeaders,
   googleProvider,
   onAuthStateChanged,
   onSnapshot,
@@ -290,13 +291,19 @@ async function pushServerCatalogPatch(
   patch: Record<string, unknown>,
   options?: { skipSheetsPush?: boolean; forceSheetsPush?: boolean }
 ): Promise<void> {
+  if (!auth.currentUser) {
+    return;
+  }
   pendingLocalMutations += 1;
   localMutationSequence += 1;
   lastLocalMutationMs = Date.now();
   try {
+    const authHeaders = await getAdminAuthHeaders({
+      'Content-Type': 'application/json',
+    });
     await fetch('/api/catalog', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify(patch),
     });
     if (
@@ -316,7 +323,7 @@ async function pushServerCatalogPatch(
       if (quantityActuallyChanged) {
         fetch('/api/sheets-sync', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({
             action: 'push_to_sheet',
             products: patch.products,
@@ -1393,7 +1400,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Cloudflare D1 / R2 Catalog Sync (/api/catalog)
+  // Cloudflare D1 Catalog Sync (Public GET /api/catalog on storefront; Authenticated GET /api/admin/state on /admin)
   useEffect(() => {
     let active = true;
     let lastServerUpdatedAt = 0;
@@ -1407,8 +1414,31 @@ export default function App() {
       ) {
         return;
       }
+
+      const isAdminRoute = currentRoute === '/admin';
+      const isSignedInAdmin = Boolean(
+        currentUser && isAuthorizedAdminEmail(currentUser.email, admins)
+      );
+
+      // On /admin before the admin user signs in, do not poll public /api/catalog
+      // so public hidden-product filtering never overwrites admin state.
+      if (isAdminRoute && !isSignedInAdmin) {
+        return;
+      }
+
+      const useAdminStateEndpoint = isAdminRoute && isSignedInAdmin;
+
       try {
-        const res = await fetch('/api/catalog', { cache: 'no-store' });
+        const reqHeaders = useAdminStateEndpoint
+          ? await getAdminAuthHeaders()
+          : undefined;
+        const res = await fetch(
+          useAdminStateEndpoint ? '/api/admin/state' : '/api/catalog',
+          {
+            cache: 'no-store',
+            ...(reqHeaders ? { headers: reqHeaders } : {}),
+          }
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (
@@ -1423,8 +1453,12 @@ export default function App() {
           return;
         }
 
-        // If catalog state has not been seeded yet, push current catalog state
-        if (!data.updatedAt && (!Array.isArray(data.products) || data.products.length === 0)) {
+        // If catalog state has not been seeded yet and an authenticated admin is logged in, seed it
+        if (
+          useAdminStateEndpoint &&
+          !data.updatedAt &&
+          (!Array.isArray(data.products) || data.products.length === 0)
+        ) {
           pushServerCatalogPatch(
             {
               products,
@@ -1465,16 +1499,22 @@ export default function App() {
         const remoteDeletedIds: string[] = Array.isArray(data.deletedProductIds)
           ? data.deletedProductIds
           : [];
-        if (remoteDeletedIds.length > 0) {
+        if (useAdminStateEndpoint) {
+          setDeletedProductIds(remoteDeletedIds);
+        } else if (remoteDeletedIds.length > 0) {
           setDeletedProductIds((prev) =>
             Array.from(new Set([...prev, ...remoteDeletedIds]))
           );
         }
 
-        const remoteDeletedCatIds: string[] = Array.isArray(data.deletedCategoryIds)
+        const remoteDeletedCatIds: string[] = Array.isArray(
+          data.deletedCategoryIds
+        )
           ? data.deletedCategoryIds
           : [];
-        if (remoteDeletedCatIds.length > 0) {
+        if (useAdminStateEndpoint) {
+          setDeletedCategoryIds(remoteDeletedCatIds);
+        } else if (remoteDeletedCatIds.length > 0) {
           setDeletedCategoryIds((prev) =>
             Array.from(new Set([...prev, ...remoteDeletedCatIds]))
           );
@@ -1662,7 +1702,7 @@ export default function App() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [currentRoute, currentUser?.email]);
 
   // Scroll to top whenever route or selected category changes
   useEffect(() => {
@@ -2048,12 +2088,6 @@ export default function App() {
   const handleSubmitOrder = async (
     orderPayload: Omit<OrderItem, 'id' | 'createdAt' | 'status'>
   ): Promise<OrderItem> => {
-    const newId = `ord-${Date.now()}`;
-    const nowIso = new Date().toISOString();
-    // Customer checkout orders are always auto-accepted so item stock (1 -> 0 out-of-stock / pre-order)
-    // is deducted immediately and only restored if an admin clicks Reject.
-    const initialStatus: OrderStatus = 'accepted';
-
     const enrichedOrderedItems = Array.isArray(orderPayload.orderedItems)
       ? orderPayload.orderedItems.map((item) => {
           if (item.imageUrl && item.imageUrl.trim()) {
@@ -2074,28 +2108,32 @@ export default function App() {
         })
       : undefined;
 
-    const isWhishOrOmt =
-      orderPayload.paymentMethod === 'Whish/OMT Payment' ||
-      orderPayload.paymentMethod === 'Whish' ||
-      orderPayload.paymentMethod === 'OMT' ||
-      String(orderPayload.paymentMethod || '')
-        .toLowerCase()
-        .includes('whish') ||
-      String(orderPayload.paymentMethod || '')
-        .toLowerCase()
-        .includes('omt');
-
-    const newOrder: OrderItem = {
+    const requestPayload = {
       ...orderPayload,
       ...(enrichedOrderedItems ? { orderedItems: enrichedOrderedItems } : {}),
-      id: newId,
-      status: initialStatus,
-      paymentVerified: !isWhishOrOmt,
-      createdAt: nowIso,
     };
 
-    const nextOrders = [newOrder, ...orders];
-    setOrders(nextOrders);
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload),
+    });
+
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      order?: OrderItem;
+      products?: ProductItem[];
+      error?: string;
+    } | null;
+
+    if (!res.ok || !data?.ok || !data?.order) {
+      throw new Error(
+        data?.error || 'Unable to place your order right now. Please try again.'
+      );
+    }
+
+    const newOrder = data.order;
+    setOrders((prev) => [newOrder, ...prev.filter((o) => o.id !== newOrder.id)]);
     setCartItems([]);
 
     pushGtmEcommerceEvent('purchase', {
@@ -2115,70 +2153,28 @@ export default function App() {
       })),
     });
 
-    const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
+    const updatedCatalog =
+      newOrder.status === 'accepted'
+        ? decrementStockForAcceptedOrder(products, newOrder)
+        : products;
     setProducts(updatedCatalog);
     setActiveProductModal((prev) => {
       if (!prev) return null;
       return updatedCatalog.find((p) => p.id === prev.id) || prev;
     });
 
-    const catalogSyncPromise = pushServerCatalogPatch({
-      orders: nextOrders,
-      products: updatedCatalog,
-      autoAcceptOrders: true,
-    });
-
-    const emailDispatchPromise = (async () => {
-      try {
-        await fetch('/api/order-confirmation-email', {
-          method: 'POST',
-          keepalive: true,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            order: newOrder,
-            bannerUrl: siteBanners.orderEmailBannerUrl || '',
-            bannerLinkUrl:
-              siteBanners.orderEmailBannerLinkUrl ||
-              'https://samoweave.com/new-arrivals/women',
-            senderAddress:
-              siteBanners.orderEmailSenderAddress || 'orders@samoweave.com',
-            bccAddress:
-              siteBanners.orderEmailBccAddress !== undefined
-                ? siteBanners.orderEmailBccAddress
-                : 'orders@samoweave.com',
-            replyToAddress:
-              siteBanners.orderEmailReplyToAddress || 'info@samoweave.com',
-            promoGiftEnabled: Boolean(siteBanners.orderEmailPromoEnabled),
-            promoGiftCode: siteBanners.orderEmailPromoCode || 'SAMO10',
-            promoGiftDescription:
-              siteBanners.orderEmailPromoDescription !== undefined
-                ? siteBanners.orderEmailPromoDescription
-                : 'Enjoy 10% off your next order',
-            promoGiftBannerUrl: siteBanners.orderEmailPromoBannerUrl || '',
-            adminAlertOnly: isWhishOrOmt,
-          }),
-        });
-      } catch (emailErr) {
-        console.warn('[SAMO] Non-blocking order email trigger notice:', emailErr);
-      }
-    })();
-
-    await Promise.allSettled([catalogSyncPromise, emailDispatchPromise]);
-
     return newOrder;
   };
 
-  // Preorder / Back-in-Stock Request Handler (Persisted to Cloudflare R2 Catalog)
+  // Preorder / Back-in-Stock Request Handler (Persisted via public POST /api/preorders)
   const handleSubmitPreorder = async (payload: {
     product: ProductItem;
     selectedSize: string;
     selectedColor?: string;
     customerContact: string;
   }): Promise<void> => {
-    const newId = `pre-${Date.now()}`;
-    const nowIso = new Date().toISOString();
-    const newPreorder: PreorderItem = {
-      id: newId,
+    const fallbackPreorder: PreorderItem = {
+      id: `pre-${Date.now()}`,
       productId: payload.product.id,
       productName: payload.product.name,
       productImage: payload.product.imageUrl,
@@ -2188,14 +2184,39 @@ export default function App() {
       selectedColor: payload.selectedColor,
       customerContact: payload.customerContact,
       status: 'pending',
-      createdAt: nowIso,
+      createdAt: new Date().toISOString(),
     };
 
-    setPreorders((prev) => {
-      const next = [newPreorder, ...prev.filter((p) => Boolean(p.productName))];
-      pushServerCatalogPatch({ preorders: next });
-      return next;
-    });
+    try {
+      const res = await fetch('/api/preorders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: payload.product.id,
+          productName: payload.product.name,
+          productImage: payload.product.imageUrl,
+          department: payload.product.department,
+          category: payload.product.category,
+          selectedSize: payload.selectedSize,
+          selectedColor: payload.selectedColor,
+          customerContact: payload.customerContact,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        preorder?: PreorderItem;
+      } | null;
+      const savedPreorder = data?.preorder || fallbackPreorder;
+      setPreorders((prev) => [
+        savedPreorder,
+        ...prev.filter((p) => Boolean(p.productName)),
+      ]);
+    } catch {
+      setPreorders((prev) => [
+        fallbackPreorder,
+        ...prev.filter((p) => Boolean(p.productName)),
+      ]);
+    }
   };
 
   const handleUpdatePreorderStatus = async (
@@ -2849,10 +2870,13 @@ export default function App() {
 
     const emailDispatchPromise = (async () => {
       try {
+        const authHeaders = await getAdminAuthHeaders({
+          'Content-Type': 'application/json',
+        });
         await fetch('/api/order-confirmation-email', {
           method: 'POST',
           keepalive: true,
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({
             order: verifiedOrder,
             bannerUrl: siteBanners.orderEmailBannerUrl || '',
@@ -3115,7 +3139,7 @@ export default function App() {
       );
     }
 
-    // Ensure the configured 10% OFF promo code (e.g., SAMO10) is active in promoCodes
+    // Ensure the configured 10% OFF promo code (e.g., SAMO10) is active in local promoCodes state
     const codeUpper = (newsletterPopupConfig.promoCode || 'SAMO10')
       .trim()
       .toUpperCase();
@@ -3132,12 +3156,10 @@ export default function App() {
         active: true,
         createdAt: existing?.createdAt || new Date().toISOString(),
       };
-      const next = [
+      return [
         nextPromo,
         ...prev.filter((p) => p.code.trim().toUpperCase() !== codeUpper),
       ];
-      pushServerCatalogPatch({ promoCodes: next });
-      return next;
     });
 
     markUserPermanentlySubscribedToNewsletter();
@@ -3155,7 +3177,32 @@ export default function App() {
         JSON.stringify(merged)
       );
     } catch {}
-    await pushServerCatalogPatch({ newsletterPopupConfig: merged });
+
+    const codeUpper = (merged.promoCode || 'SAMO10').trim().toUpperCase();
+    let updatedPromosList: PromoCodeItem[] | undefined;
+    const existingPromo = promoCodes.find(
+      (p) => p.code.trim().toUpperCase() === codeUpper
+    );
+    if (!existingPromo || !existingPromo.active) {
+      const nextPromo: PromoCodeItem = {
+        id: existingPromo?.id || `promo-${createSafeSlug(codeUpper)}`,
+        code: codeUpper,
+        discountType: 'percentage',
+        discountValue: 10,
+        active: true,
+        createdAt: existingPromo?.createdAt || new Date().toISOString(),
+      };
+      updatedPromosList = [
+        nextPromo,
+        ...promoCodes.filter((p) => p.code.trim().toUpperCase() !== codeUpper),
+      ];
+      setPromoCodes(updatedPromosList);
+    }
+
+    await pushServerCatalogPatch({
+      newsletterPopupConfig: merged,
+      ...(updatedPromosList ? { promoCodes: updatedPromosList } : {}),
+    });
     try {
       await setDoc(
         doc(db, 'settings', 'store_config'),
@@ -3208,7 +3255,11 @@ export default function App() {
   const handleDeleteNewsletterSubscriber = async (id: string) => {
     setNewsletterSubscribers((prev) => prev.filter((s) => s.id !== id));
     try {
-      await fetch(`/api/newsletter/subscribers/${id}`, { method: 'DELETE' });
+      const authHeaders = await getAdminAuthHeaders();
+      await fetch(`/api/newsletter/subscribers/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
     } catch (err) {
       console.warn(
         '[SAMO Newsletter] Failed to delete subscriber from R2:',

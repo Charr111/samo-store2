@@ -13,15 +13,7 @@ import {
   readCatalogSnapshot,
   type Env,
 } from './catalog.ts';
-
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, X-Samo-Sheet-Secret',
-  'Cross-Origin-Resource-Policy': 'cross-origin',
-  'Cache-Control': 'no-store, no-cache, must-revalidate',
-};
+import { getCorsHeaders, verifyFirebaseAdminRequest } from './_auth';
 
 const WEBHOOK_TIMEOUT_MS = 8_000;
 
@@ -463,10 +455,12 @@ export async function executeGoogleSheetsSyncRequest(
   };
 }
 
-export const onRequestOptions = async (): Promise<Response> => {
+export const onRequestOptions = async (context: {
+  request?: Request;
+}): Promise<Response> => {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: getCorsHeaders(context?.request),
   });
 };
 
@@ -474,9 +468,39 @@ export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const payload =
       (await context.request.json()) as GoogleSheetsSyncRequestPayload;
+    const action = payload?.action || 'push_to_sheet';
+
+    if (action === 'push_to_sheet' || action === 'pull_from_sheet') {
+      const d1Binding = context.env.DB || context.env.SAMO_D1;
+      const currentSnapshot = await readCatalogSnapshot(context.env);
+      const extraAdmins = Array.isArray(currentSnapshot.admins)
+        ? (currentSnapshot.admins as Array<{ email?: string }>)
+        : [];
+
+      const authCheck = await verifyFirebaseAdminRequest({
+        authorizationHeader: context.request.headers.get('Authorization'),
+        d1Db: d1Binding,
+        extraAdminEmails: extraAdmins,
+      });
+
+      if (!authCheck.authorized) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: authCheck.error || 'Unauthorized admin access.',
+          }),
+          {
+            status: authCheck.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
     const headerSecret =
       context.request.headers.get('X-Samo-Sheet-Secret') || undefined;
 
@@ -493,7 +517,7 @@ export const onRequestPost = async (context: {
 
     return new Response(JSON.stringify(result.body), {
       status: result.status,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
     return new Response(
@@ -506,8 +530,9 @@ export const onRequestPost = async (context: {
       }),
       {
         status: 500,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
 };
+

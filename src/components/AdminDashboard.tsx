@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { getAdminAuthHeaders } from '../lib/firebase';
 import {
   Check,
   X,
@@ -1322,9 +1323,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       if (itemName.trim()) {
+        const authHeaders = await getAdminAuthHeaders({
+          'Content-Type': 'application/json',
+        });
         const res = await fetch('/api/ai/product-copy', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({
             name: itemName.trim(),
             department: itemDept,
@@ -7228,13 +7232,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     createdAt: new Date().toISOString(),
                                   };
 
+                              const authHeaders = await getAdminAuthHeaders({
+                                'Content-Type': 'application/json',
+                              });
                               const res = await fetch(
                                 '/api/order-confirmation-email',
                                 {
                                   method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                  },
+                                  headers: authHeaders,
                                   body: JSON.stringify({
                                     order: sampleOrder,
                                     bannerUrl:

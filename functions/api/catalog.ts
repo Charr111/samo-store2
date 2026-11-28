@@ -1,3 +1,8 @@
+import {
+  getCorsHeaders,
+  verifyFirebaseAdminRequest,
+} from './_auth';
+
 export interface R2BucketBinding {
   get(key: string): Promise<{
     text(): Promise<string>;
@@ -38,21 +43,11 @@ export interface Env {
   GOOGLE_SHEETS_SYNC_SECRET?: string;
 }
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Cross-Origin-Resource-Policy': 'cross-origin',
-  'Cache-Control': 'no-store, no-cache, must-revalidate',
-};
-
-const STATE_OBJECT_KEY = 'state/catalog.json';
-
-// Isolate-level in-memory cache (30s TTL) to cut D1 SQL row reads & R2 Class B reads by ~90%-95%
-// Instantly refreshed/invalidated whenever POST /api/catalog writes new data.
+// Isolate-level in-memory cache (30s TTL) to cut D1 SQL row reads by ~90%-95%
+// Instantly refreshed/invalidated whenever POST /api/catalog or public order/preorder writes new data.
 const ISOLATE_CACHE_TTL_MS = 30_000;
 let isolateCatalogCache: Record<string, unknown> | null = null;
-let isolateCatalogJson: string | null = null;
+let isolatePublicCatalogJson: string | null = null;
 let isolateCacheTimestamp = 0;
 let garmentCodeColumnMigrated = false;
 let hiddenFromStoreColumnMigrated = false;
@@ -390,18 +385,40 @@ async function readFromD1(
       };
     });
 
-    const preorders = (preordersRes.results || []).map((pr: any) => ({
-      id: pr.id,
-      productId: pr.product_id,
-      productName: pr.product_name,
-      size: pr.size || '',
-      colorName: pr.color_name || undefined,
-      clientName: pr.client_name,
-      clientEmail: pr.client_email || '',
-      clientPhone: pr.client_phone || '',
-      status: pr.status,
-      createdAt: pr.created_at,
-    }));
+    const preorders = (preordersRes.results || []).map((pr: any) => {
+      const parsedEmailMeta =
+        typeof pr.client_email === 'string' &&
+        pr.client_email.trim().startsWith('{')
+          ? safeJsonParse<Record<string, any> | null>(pr.client_email, null)
+          : null;
+      const contactVal =
+        pr.client_name ||
+        pr.client_phone ||
+        (parsedEmailMeta ? parsedEmailMeta.clientEmail : pr.client_email) ||
+        '';
+      return {
+        id: pr.id,
+        productId: pr.product_id || '',
+        productName: pr.product_name || '',
+        productImage: parsedEmailMeta?.productImage || '',
+        department:
+          parsedEmailMeta?.department === 'kids' ? 'kids' : 'women',
+        category: parsedEmailMeta?.category || '',
+        selectedSize: pr.size || '',
+        size: pr.size || '',
+        ...(pr.color_name
+          ? { selectedColor: pr.color_name, colorName: pr.color_name }
+          : {}),
+        customerContact: contactVal,
+        clientName: pr.client_name || contactVal,
+        clientEmail: parsedEmailMeta
+          ? parsedEmailMeta.clientEmail || ''
+          : pr.client_email || '',
+        clientPhone: pr.client_phone || '',
+        status: pr.status === 'notified' ? 'notified' : 'pending',
+        createdAt: pr.created_at,
+      };
+    });
 
     const newsletterSubscribers = (newsletterRes.results || []).map(
       (n: any) => ({
@@ -932,10 +949,22 @@ async function writeToD1(
         );
       }
     }
+    const incomingPreorderIds = new Set<string>();
     for (const pr of patch.preorders as any[]) {
       if (!pr || !pr.id) continue;
+      incomingPreorderIds.add(pr.id);
       const sig = JSON.stringify([pr.id, pr.status || 'pending']);
       if (existingPreorderSigById.get(pr.id) === sig) continue;
+      const resolvedSize = pr.selectedSize || pr.size || '';
+      const resolvedColor = pr.selectedColor || pr.colorName || null;
+      const resolvedContact = pr.customerContact || pr.clientName || '';
+      const metaEnvelope = JSON.stringify({
+        _samoPreMeta: 1,
+        productImage: pr.productImage || '',
+        department: pr.department === 'kids' ? 'kids' : 'women',
+        category: pr.category || '',
+        clientEmail: pr.clientEmail || '',
+      });
       statements.push(
         db
           .prepare(
@@ -949,15 +978,61 @@ async function writeToD1(
             pr.id,
             pr.productId || null,
             pr.productName || '',
-            pr.size || '',
-            pr.colorName || null,
-            pr.clientName || '',
-            pr.clientEmail || '',
-            pr.clientPhone || '',
+            resolvedSize,
+            resolvedColor,
+            resolvedContact,
+            metaEnvelope,
+            pr.clientPhone || resolvedContact,
             pr.status || 'pending',
             pr.createdAt || new Date().toISOString()
           )
       );
+    }
+    for (const ep of currentPreordersList) {
+      if (ep && ep.id && !incomingPreorderIds.has(ep.id)) {
+        statements.push(
+          db.prepare('DELETE FROM preorders WHERE id = ?;').bind(ep.id)
+        );
+      }
+    }
+  }
+
+  if (Array.isArray(patch.admins)) {
+    const currentAdminsList = Array.isArray(current.admins)
+      ? (current.admins as any[])
+      : [];
+    const incomingAdminEmails = new Set<string>();
+    for (const adm of patch.admins as any[]) {
+      const email = typeof adm?.email === 'string' ? adm.email.trim().toLowerCase() : '';
+      if (!email || email === 'charbelkorab11123@gmail.com') continue;
+      incomingAdminEmails.add(email);
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO admins (email, role, added_at, added_by)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(email) DO UPDATE SET
+               role=excluded.role,
+               added_by=excluded.added_by;`
+          )
+          .bind(
+            email,
+            adm.role || 'admin',
+            adm.createdAt || adm.addedAt || new Date().toISOString(),
+            adm.addedBy || 'Super Admin'
+          )
+      );
+    }
+    for (const oldAdm of currentAdminsList) {
+      const oldEmail =
+        typeof oldAdm?.email === 'string'
+          ? oldAdm.email.trim().toLowerCase()
+          : '';
+      if (oldEmail && !incomingAdminEmails.has(oldEmail)) {
+        statements.push(
+          db.prepare('DELETE FROM admins WHERE LOWER(email) = ?;').bind(oldEmail)
+        );
+      }
     }
   }
 
@@ -1129,10 +1204,12 @@ async function writeToD1(
   }
 }
 
-export const onRequestOptions = async (): Promise<Response> => {
+export const onRequestOptions = async (context: {
+  request?: Request;
+}): Promise<Response> => {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: getCorsHeaders(context?.request),
   });
 };
 
@@ -1168,18 +1245,110 @@ export function sanitizeCatalogStateForClient(
   };
 }
 
+/**
+ * Strictly PUBLIC storefront serializer for GET /api/catalog.
+ * Strips orders, preorders, newsletterSubscribers, admins, promoCodes, hiddenFromStore products,
+ * inactive categories, adminNotificationState, orderEmailBccAddress, and googleSheetsSync secrets.
+ */
+export function serializePublicCatalogState(
+  state: Record<string, unknown>
+): Record<string, unknown> {
+  if (!state || typeof state !== 'object') {
+    return { updatedAt: 0 };
+  }
+
+  const allProducts = Array.isArray(state.products)
+    ? (state.products as Array<Record<string, any>>)
+    : [];
+  const visibleProducts = allProducts.filter(
+    (p) => p && p.hiddenFromStore !== true
+  );
+  const hiddenProductIds = allProducts
+    .filter((p) => p && p.hiddenFromStore === true && typeof p.id === 'string')
+    .map((p) => p.id as string);
+
+  const allCategories = Array.isArray(state.categories)
+    ? (state.categories as Array<Record<string, any>>)
+    : [];
+  const activeCategories = allCategories.filter(
+    (c) => c && c.active !== false && !c.hiddenFromNav
+  );
+  const inactiveCategoryIds = allCategories
+    .filter(
+      (c) =>
+        c &&
+        (c.active === false || Boolean(c.hiddenFromNav)) &&
+        typeof c.id === 'string'
+    )
+    .map((c) => c.id as string);
+
+  const baseDeletedProductIds = Array.isArray(state.deletedProductIds)
+    ? (state.deletedProductIds as string[])
+    : [];
+  const baseDeletedCategoryIds = Array.isArray(state.deletedCategoryIds)
+    ? (state.deletedCategoryIds as string[])
+    : [];
+
+  let publicSiteBanners: Record<string, unknown> | undefined;
+  if (state.siteBanners && typeof state.siteBanners === 'object') {
+    const {
+      orderEmailBccAddress: _removedBcc,
+      googleSheetsSync: _removedSheets,
+      ...restBanners
+    } = state.siteBanners as Record<string, unknown>;
+    publicSiteBanners = {
+      ...restBanners,
+    };
+  }
+
+  return {
+    updatedAt: typeof state.updatedAt === 'number' ? state.updatedAt : 0,
+    products: visibleProducts,
+    categories: activeCategories,
+    deletedProductIds: Array.from(
+      new Set([...baseDeletedProductIds, ...hiddenProductIds])
+    ),
+    deletedCategoryIds: Array.from(
+      new Set([...baseDeletedCategoryIds, ...inactiveCategoryIds])
+    ),
+    ...(publicSiteBanners ? { siteBanners: publicSiteBanners } : {}),
+    ...(state.sizeGuideConfig && typeof state.sizeGuideConfig === 'object'
+      ? { sizeGuideConfig: state.sizeGuideConfig }
+      : {}),
+    ...(state.newsletterPopupConfig &&
+    typeof state.newsletterPopupConfig === 'object'
+      ? { newsletterPopupConfig: state.newsletterPopupConfig }
+      : {}),
+    ...(state.seoConfig && typeof state.seoConfig === 'object'
+      ? { seoConfig: state.seoConfig }
+      : {}),
+    showLowStockCount:
+      typeof state.showLowStockCount === 'boolean'
+        ? state.showLowStockCount
+        : false,
+    codEnabled:
+      typeof state.codEnabled === 'boolean' ? state.codEnabled : false,
+    autoAcceptOrders:
+      typeof state.autoAcceptOrders === 'boolean'
+        ? state.autoAcceptOrders
+        : true,
+  };
+}
+
 export const onRequestGet = async (context: {
+  request?: Request;
   env: Env;
 }): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
     const now = Date.now();
     if (
-      isolateCatalogJson &&
+      isolatePublicCatalogJson &&
       now - isolateCacheTimestamp < ISOLATE_CACHE_TTL_MS
     ) {
-      return new Response(isolateCatalogJson, {
+      return new Response(isolatePublicCatalogJson, {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -1192,49 +1361,19 @@ export const onRequestGet = async (context: {
         d1State.products.length > 0
       ) {
         isolateCatalogCache = d1State;
-        const sanitizedJson = JSON.stringify(
-          sanitizeCatalogStateForClient(d1State)
-        );
-        isolateCatalogJson = sanitizedJson;
+        const publicJson = JSON.stringify(serializePublicCatalogState(d1State));
+        isolatePublicCatalogJson = publicJson;
         isolateCacheTimestamp = Date.now();
-        return new Response(sanitizedJson, {
+        return new Response(publicJson, {
           status: 200,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    // Fallback: Cloudflare R2 bucket state/catalog.json
-    if (context.env.SAMO_R2_BUCKET) {
-      const obj = await context.env.SAMO_R2_BUCKET.get(STATE_OBJECT_KEY);
-      if (obj) {
-        const text = await obj.text();
-        const parsed = safeJsonParse<Record<string, unknown> | null>(
-          text,
-          null
-        );
-        if (parsed && typeof parsed === 'object') {
-          isolateCatalogCache = parsed;
-          const sanitizedJson = JSON.stringify(
-            sanitizeCatalogStateForClient(parsed)
-          );
-          isolateCatalogJson = sanitizedJson;
-          isolateCacheTimestamp = Date.now();
-          return new Response(sanitizedJson, {
-            status: 200,
-            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-          });
-        }
-        return new Response(text, {
-          status: 200,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
     }
 
     return new Response(JSON.stringify({ updatedAt: 0 }), {
       status: 200,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
     return new Response(
@@ -1244,7 +1383,7 @@ export const onRequestGet = async (context: {
       }),
       {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
@@ -1257,7 +1396,8 @@ export async function readCatalogSnapshot(
   if (
     isolateCatalogCache &&
     Array.isArray(isolateCatalogCache.products) &&
-    isolateCatalogCache.products.length > 0
+    isolateCatalogCache.products.length > 0 &&
+    Date.now() - isolateCacheTimestamp < ISOLATE_CACHE_TTL_MS
   ) {
     return isolateCatalogCache;
   }
@@ -1269,28 +1409,19 @@ export async function readCatalogSnapshot(
       fromD1.products.length > 0
     ) {
       isolateCatalogCache = fromD1;
-      isolateCatalogJson = JSON.stringify(
-        sanitizeCatalogStateForClient(fromD1)
+      isolatePublicCatalogJson = JSON.stringify(
+        serializePublicCatalogState(fromD1)
       );
       isolateCacheTimestamp = Date.now();
       return fromD1;
     }
   }
-  if (env.SAMO_R2_BUCKET) {
-    try {
-      const existing = await env.SAMO_R2_BUCKET.get(STATE_OBJECT_KEY);
-      if (existing) {
-        const parsed = await existing.json<Record<string, unknown>>();
-        if (parsed && typeof parsed === 'object') {
-          isolateCatalogCache = parsed;
-          isolateCatalogJson = JSON.stringify(
-            sanitizeCatalogStateForClient(parsed)
-          );
-          isolateCacheTimestamp = Date.now();
-          return parsed;
-        }
-      }
-    } catch {}
+  if (
+    isolateCatalogCache &&
+    Array.isArray(isolateCatalogCache.products) &&
+    isolateCatalogCache.products.length > 0
+  ) {
+    return isolateCatalogCache;
   }
   return { updatedAt: 0 };
 }
@@ -1302,7 +1433,7 @@ export async function applyCatalogPatch(
   const current = await readCatalogSnapshot(env);
   const d1Binding = env.DB || env.SAMO_D1;
 
-  // Scrub any previously saved webhookUrl/syncSecret out of D1/R2 siteBanners.googleSheetsSync so secrets live strictly in Cloudflare Environment Variables
+  // Scrub any previously saved webhookUrl/syncSecret out of D1 siteBanners.googleSheetsSync so secrets live strictly in Cloudflare Environment Variables
   let effectivePatch = patch;
   if (patch.siteBanners && typeof patch.siteBanners === 'object') {
     const incomingBanners = patch.siteBanners as Record<string, unknown>;
@@ -1318,7 +1449,7 @@ export async function applyCatalogPatch(
     const existingSheets =
       existingBanners.googleSheetsSync &&
       typeof existingBanners.googleSheetsSync === 'object'
-        ? (existingBanners.googleSheetsSync as Record<string, unknown>)
+      ? (existingBanners.googleSheetsSync as Record<string, unknown>)
         : {};
 
     effectivePatch = {
@@ -1415,7 +1546,7 @@ export async function applyCatalogPatch(
     );
   }
 
-  // 1. Write to Cloudflare D1 SQL if D1 binding is configured (Strict Delta-Only)
+  // Write to Cloudflare D1 SQL if D1 binding is configured (Strict Delta-Only; never writes state/catalog.json to public R2)
   if (d1Binding) {
     try {
       await writeToD1(
@@ -1492,22 +1623,10 @@ export async function applyCatalogPatch(
     updatedAt: Date.now(),
   };
 
-  // 2. Dual-write backup to Cloudflare R2 if bound
-  if (env.SAMO_R2_BUCKET) {
-    await env.SAMO_R2_BUCKET.put(
-      STATE_OBJECT_KEY,
-      JSON.stringify(nextState, null, 2),
-      {
-        httpMetadata: {
-          contentType: 'application/json',
-          cacheControl: 'no-store, no-cache, must-revalidate',
-        },
-      }
-    );
-  }
-
   isolateCatalogCache = nextState;
-  isolateCatalogJson = JSON.stringify(sanitizeCatalogStateForClient(nextState));
+  isolatePublicCatalogJson = JSON.stringify(
+    serializePublicCatalogState(nextState)
+  );
   isolateCacheTimestamp = Date.now();
 
   return nextState;
@@ -1517,14 +1636,37 @@ export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
+    const d1Binding = context.env.DB || context.env.SAMO_D1;
+    const currentSnapshot = await readCatalogSnapshot(context.env);
+    const extraAdmins = Array.isArray(currentSnapshot.admins)
+      ? (currentSnapshot.admins as Array<{ email?: string }>)
+      : [];
+
+    const authCheck = await verifyFirebaseAdminRequest({
+      authorizationHeader: context.request.headers.get('Authorization'),
+      d1Db: d1Binding,
+      extraAdminEmails: extraAdmins,
+    });
+
+    if (!authCheck.authorized) {
+      return new Response(
+        JSON.stringify({ error: authCheck.error || 'Unauthorized admin access.' }),
+        {
+          status: authCheck.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const patch = (await context.request.json()) as Record<string, unknown>;
     const nextState = await applyCatalogPatch(context.env, patch);
     return new Response(
       JSON.stringify(sanitizeCatalogStateForClient(nextState)),
       {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (err) {
@@ -1535,7 +1677,7 @@ export const onRequestPost = async (context: {
       }),
       {
         status: 500,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }

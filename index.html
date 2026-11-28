@@ -27,23 +27,45 @@
       fbq('track', 'PageView');
     </script>
     <script>
-      window.addEventListener(
-        'unhandledrejection',
-        function (event) {
-          var msg =
-            event && event.reason
-              ? String(event.reason.message || event.reason)
-              : '';
-          if (
-            msg.indexOf('WebSocket closed without opened') !== -1 ||
-            msg.indexOf('failed to connect to websocket') !== -1
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
+      (function () {
+        function isViteWsNoise(val) {
+          var s = val ? String(val.message || val) : '';
+          return (
+            s.indexOf('WebSocket closed without opened') !== -1 ||
+            s.indexOf('failed to connect to websocket') !== -1
+          );
+        }
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            if (event && isViteWsNoise(event.reason)) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (
+              event &&
+              (isViteWsNoise(event.error) || isViteWsNoise(event.message))
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          },
+          true
+        );
+        var origError = console.error;
+        console.error = function () {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteWsNoise(arguments[i])) return;
           }
-        },
-        true
-      );
+          return origError.apply(console, arguments);
+        };
+      })();
     </script>
     <title>Official Website | SAMO</title>
     <meta name="description" content="Architectural fashion storefront and protected Samo admin for SAMO Women &amp; Kids collections, featuring classic, sport chic, fine leather, suede, fur, bags, and belts." />

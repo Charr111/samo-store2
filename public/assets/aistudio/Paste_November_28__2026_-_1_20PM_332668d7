@@ -1,0 +1,224 @@
+# SAMO Store (`samo-store2`) — Read-Only Architecture & Wiring Audit
+
+> [!CAUTION]
+> **Urgent Live-Site Notice:** Although your storefront and admin UI look and feel clean on the surface, the **live Cloudflare backend APIs currently have zero server-side authentication** and **publicly leak all customer orders and subscriber data** to every visitor. Your earlier security audit appears to have hardened **`firestore.rules`**, but the live store actually reads and writes through **Cloudflare Pages Functions (`/api/*`) + D1 + R2**, which were left completely unprotected.
+
+No files in `Charr111/samo-store2` were modified during this audit.
+
+---
+
+## 1. How Your Webapp Actually Works (Architecture Map)
+
+Your app is a **Vite + React 19 TypeScript SPA** deployed on **Cloudflare Pages** (`samoweave.com`), with a separate local Express server ([server.ts](file:///home/antigravity/Charr111/samo-store2/server.ts)) used inside AI Studio / local dev. In practice, your data flows across **six overlapping storage layers**:
+
+```mermaid
+flowchart LR
+  Browser["Shopper or Admin Browser (React SPA + localStorage)"]
+
+  subgraph CF["Cloudflare Pages Functions (Production /api/*)"]
+    CatAPI["/api/catalog (GET & POST - NO AUTH)"]
+    R2API["/api/r2-upload & /api/r2-delete (NO AUTH)"]
+    EmailAPI["/api/order-confirmation-email (NO AUTH)"]
+    NLAPI["/api/newsletter/* (NO AUTH)"]
+    SheetsAPI["/api/sheets-sync (Push/Pull NO AUTH)"]
+    Feeds["/sitemap.xml & /merchant-feed.xml"]
+  end
+
+  subgraph Storage["Live Data & External Services"]
+    D1["Cloudflare D1 SQL (Primary DB)"]
+    R2["Cloudflare R2 Bucket (images.samoweave.com + state/catalog.json)"]
+    RAM["Worker Isolate RAM (30s Cache + Popup IP Map)"]
+    FS["Firebase Auth & Firestore (settings/store_config ONLY)"]
+    Resend["Resend Email API"]
+    GSheets["Google Apps Script (Sheets)"]
+  end
+
+  Browser -->|"Every 20s poll + Admin/Order writes"| CatAPI
+  Browser -->|"Image/Video Upload & Delete"| R2API
+  Browser -->|"Checkout & Payment Confirm"| EmailAPI
+  Browser -->|"Newsletter & Popup"| NLAPI
+  Browser -->|"Checkout & Stock Edits"| SheetsAPI
+  Browser -->|"Admin Google Login + 7 Settings"| FS
+
+  CatAPI --> RAM
+  CatAPI --> D1
+  CatAPI --> R2
+  R2API --> R2
+  EmailAPI --> Resend
+  EmailAPI --> D1
+  NLAPI --> D1
+  NLAPI --> RAM
+  SheetsAPI --> GSheets
+  SheetsAPI --> CatAPI
+  Feeds --> CatAPI
+```
+
+### Why It Looks Like It Works Perfectly When You Test It
+There are four architectural reasons why broken backend connections stay invisible during normal testing:
+1. **Everything writes to `localStorage` and React state first** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L708-L864)), so your browser immediately displays every edit even if the database rejected or ignored it.
+2. **`pushServerCatalogPatch` never checks `res.ok` and has an empty `catch {}`** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L289-L332)), and [`applyCatalogPatch`](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1419-L1432) catches D1 SQL errors while still returning HTTP `200` and updating in-memory cache + R2.
+3. **Cloudflare Worker isolate cache masks D1 failures for 30+ seconds** ([catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L53-L56)): deleting a promo code or adding an admin looks persisted while hitting the same warm Worker isolate, then silently reverts once a cold isolate reads D1 SQL.
+4. **AI Studio runs `server.ts` (Express), while `samoweave.com` runs `functions/` (Cloudflare Pages Functions)** — several endpoints behave differently or only exist in `server.ts` (such as the AI Product Copy Drafter).
+
+---
+
+## 2. End-to-End Wiring Scorecard
+
+| Area | Status | Summary |
+|---|---|---|
+| **API Security & Customer Privacy** | **CRITICAL** | Zero auth on `/api/catalog`, `/api/r2-upload`, `/api/r2-delete`, `/api/order-confirmation-email`, `/api/sheets-sync` (push/pull), `/api/newsletter/subscribers`. `GET /api/catalog` dumps all customer orders/PII to every shopper. |
+| **Products & Categories (D1 Sync)** | **Mostly Wired** | Products persist well (including merchandising flags & `hiddenFromStore`). Categories drop `slug` and `description` in D1; `sortOrder: 0` reads back as `undefined`. |
+| **Checkout, Cart & Stock Deduction** | **Fragile** | Happy-path works, but silent failure if `POST /api/catalog` fails, stale cart prices/stock never re-verified, Full Set quantity limit bypass (can bump 1-unit set to qty 5), concurrent checkout overselling race, and Showroom Pickup forces street/city address. |
+| **Orders & Whish/OMT Email Flow** | **Partial** | Order creation & Whish/OMT `paymentVerified` persist via D1 `order_notes`. However, `Auto-Accept Orders` toggle is completely ignored and self-resets to `true`; `accepted → pending → accepted` double-deducts stock. |
+| **Preorders (Notify Me)** | **BROKEN** | Complete D1 field-name mismatch blanks out customer contact, size, color, and image on D1 reload; deleted preorders resurrect. |
+| **Promo Codes** | **BROKEN** | Creation works, but **deleting a promo code never runs `DELETE` in D1** (resurrects on cold read). Popup signup can silently re-enable a disabled `SAMO10` code and wipe `maxUsesPerEmail`. |
+| **Admin Directory** | **BROKEN** | Adding/removing admins in the Admin UI **never writes to D1 or Firestore**; reverts across devices/reloads. Revoked email `charbelkorab11123@gmail.com` is blocked in `App.tsx` but still hardcoded as admin in `firestore.rules`. |
+| **Site Banners & Hero** | **Partial** | Hero, Middle, Bottom, and Showroom images/videos persist, but `homeMiddleSubtitle`, `homeHeroKicker`, `homeMiddleKicker`, and category banner `kicker`/`title` are never rendered. Hero video error fallback is dead code. |
+| **Size Guides** | **BROKEN** | Toggles (`masterEnabled`, `topsGuideEnabled`, `trousersGuideEnabled`) are ignored by the FAQ section; turning off `topsGuideEnabled` while `masterEnabled` is ON locks desktop backdrop-close on the product modal. |
+| **Newsletter & Frequency Cap** | **Partial** | Subscribers save to D1, but `POST /api/newsletter/subscribe` leaks the **entire subscriber list** back to every new subscriber. IP daily cap lives only in volatile Worker RAM (resets across PoPs/restarts); delay `0` becomes `10s`. |
+| **AI Product Copy Drafter** | **BROKEN IN PROD** | Calls `POST /api/ai/product-copy`, which only exists in local `server.ts`—returns 404 on Cloudflare Pages and silently falls back to a static template. |
+| **Storefront Routing & Direct Links** | **BROKEN** | Direct product links (Google Shopping, Meta ads, shared URLs) fail to open non-seed products for first-time visitors. Clicking nav CTAs ("Shop Women", drawer categories) corrupts the browser URL via stale `currentRoute`. |
+| **SEO, Sitemap & Merchant Feed** | **Partial** | Dynamic feeds work on `GET`, but `HEAD` requests fall through to frozen `public/*.xml` files; `/faq` in sitemap is a dead route; Merchant Feed defaults free shipping to `\$80` while store defaults to `\$100`; disabled-category products still appear in feeds. |
+
+---
+
+## 3. Critical Security & Data-Loss Findings (Fix Immediately)
+
+### 3.1 Zero Authentication on All Live Cloudflare APIs
+Admin login ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L1027-L1028), [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3515-L3522)) is **UI-only**. No Firebase ID token is ever sent to or verified by any Cloudflare Function, and every function sets `Access-Control-Allow-Origin: *`. Any anonymous user on the internet can currently:
+- **Overwrite your entire store** via `POST /api/catalog` ([catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1516-L1542)): change prices, wipe products, inject fake promo codes, or alter email/shipping settings.
+- **Delete every product photo and hero banner** via `POST /api/r2-delete` ([r2-delete.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/r2-delete.ts#L23-L74)) by passing `{"keys": ["products/...", "banners/..."]}`.
+- **Overwrite existing images or upload Stored XSS** via `POST /api/r2-upload` ([r2-upload.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/r2-upload.ts#L33-L193)): accepts caller-supplied `fileName` without a unique prefix (overwriting live product photos) and accepts `contentType: "image/svg+xml"` (stored XSS on `images.samoweave.com`).
+- **Send phishing/spam from `orders@samoweave.com`** via `POST /api/order-confirmation-email` ([order-confirmation-email.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/order-confirmation-email.ts#L684-L897)): trusts caller-supplied `customerEmail`, `senderAddress`, `bccAddress` (can be cleared to `""` to hide abuse), and unvalidated `bannerLinkUrl`, using your live `RESEND_API_KEY`.
+- **Overwrite your Google Sheet & catalog stock** via `POST /api/sheets-sync` ([sheets-sync.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/sheets-sync.ts#L211-L455)): only `inbound_sheet_edit` checks `GOOGLE_SHEETS_SYNC_SECRET`; both `push_to_sheet` and `pull_from_sheet` have **zero auth** and accept attacker-supplied `payload.products` (which `pull_from_sheet` writes back to D1!).
+- **Read or delete all newsletter subscribers** via `GET`/`DELETE /api/newsletter/subscribers` ([subscribers/[[id]].ts](file:///home/antigravity/Charr111/samo-store2/functions/api/newsletter/subscribers/%5B%5Bid%5D%5D.ts#L23-L126)).
+
+### 3.2 Public Exposure of Customer Orders, Addresses, Emails & Phones
+1. **`GET /api/catalog`** ([catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L459-L497), [L1171-L1205](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1171-L1205)) returns the entire store snapshot to every visitor every 20 seconds, including **`orders`** (customer full names, emails, phone numbers, home shipping addresses), **`newsletterSubscribers`** (emails & phone numbers), **`preorders`**, **`admins`**, **`promoCodes`**, **`hiddenFromStore` products**, and **`adminNotificationState`**. (`sanitizeCatalogStateForClient` only strips Google Sheets credentials.)
+2. **Public R2 Backup (`state/catalog.json`)**: [`applyCatalogPatch`](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L49) writes the entire `nextState` (including all customer orders and PII) to `state/catalog.json` inside `SAMO_R2_BUCKET`—the exact same public bucket serving `https://images.samoweave.com`. Anyone visiting `https://images.samoweave.com/state/catalog.json` may download the full snapshot directly.
+3. **Newsletter Subscribe Leaks All Subscribers**: [`POST /api/newsletter/subscribe`](file:///home/antigravity/Charr111/samo-store2/functions/api/newsletter/subscribe.ts#L88-L107) returns `subscribers: allSubscribers` in the JSON response to every anonymous user who subscribes.
+
+### 3.3 Revoked Admin Still Allowed in Firestore Rules
+- [`sanitizeAuthorizedAdmins`](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L224-L240) explicitly strips `charbelkorab11123@gmail.com`.
+- However, [`firestore.rules`](file:///home/antigravity/Charr111/samo-store2/firestore.rules#L30-L38) **still hardcodes `charbelkorab11123@gmail.com` inside `isAdmin()`**, giving that account full read/write/delete access to Firestore (including `settings/store_config`).
+- Also, [`firebase.json`](file:///home/antigravity/Charr111/samo-store2/firebase.json#L2-L4) does not specify the named database (`ai-studio-516f891a-8996-49dc-99d8-9ac87a51fe3d` from [firebase-applet-config.json](file:///home/antigravity/Charr111/samo-store2/firebase-applet-config.json#L6)), so deploying rules without targeting that DB updates `(default)` instead.
+
+### 3.4 Transient Backend Error Can Overwrite Your Live Catalog With Seed Data
+- When `GET /api/catalog` catches any error, it returns **HTTP `200`** with `{ updatedAt: 0, error: "..." }` ([catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1239-L1249)).
+- On the storefront, [`pullServerCatalog`](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L1411-L1451) sees `res.ok === true` and `!data.updatedAt`, assumes the database has never been seeded, and **immediately POSTs the visitor's `localStorage` / `INITIAL_PRODUCTS` seed state to `POST /api/catalog`**, risking overwriting your real ~100-item catalog.
+
+---
+
+## 4. Broken Persistence & Sync Issues (D1 / R2 / Firestore)
+
+1. **Preorders Completely Broken in D1 (Field Mismatch + No Delete)** — [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2180-L2218), [catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L393-L404), [L935-L962](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L935-L962), [d1.ts](file:///home/antigravity/Charr111/samo-store2/server/d1.ts#L440-L451):
+   - Frontend saves `{ selectedSize, selectedColor, customerContact, productImage, department, category }`.
+   - D1 write binds `pr.size`, `pr.colorName`, `pr.clientName`, `pr.clientEmail`, `pr.clientPhone` — all `undefined`, inserting empty strings/nulls! On reload, preorders lose customer contact, size, and image.
+   - Deleting a preorder never executes `DELETE FROM preorders` in D1, so deleted preorders reappear.
+2. **Promo Codes Never Delete in D1** — [catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L964-L1036), [d1.ts](file:///home/antigravity/Charr111/samo-store2/server/d1.ts#L890-L920):
+   - Only `INSERT ... ON CONFLICT(code) DO UPDATE` exists; no `DELETE FROM promo_codes`. Deleted codes come back after cache expiry.
+   - Also D1 defaults `discount_type` to `'percent'` ([catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1027)) while checkout checks `'percentage'` ([catalogLogic.ts](file:///home/antigravity/Charr111/samo-store2/src/utils/catalogLogic.ts#L1739)).
+3. **Authorized Admins Never Persist to D1 or Firestore** — [catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L431-L436), [L584-L1060](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L584-L1060), [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3037-L3061):
+   - `readFromD1` queries the `admins` table, but `writeToD1` has zero `INSERT`/`DELETE` logic for `admins`, and `App.tsx` never writes to Firestore `/admins/{email}`. New admins only live in `localStorage`/R2 cache and cannot pass `firestore.rules`.
+4. **Stale-Forever Isolate Cache on Writes (`readCatalogSnapshot`)** — [catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L1253-L1263):
+   - Unlike `GET /api/catalog` (which enforces a 30s TTL), `readCatalogSnapshot` returns `isolateCatalogCache` **forever without checking TTL**. Because `POST /api/catalog`, `sheets-sync`, `sitemap.xml`, and `merchant-feed.xml` all call `readCatalogSnapshot`, warm Cloudflare isolates diff and merge writes against stale state—risking dropped concurrent orders, resurrected deletions, and stale stock in Google Sheets / XML feeds.
+5. **Firestore vs. D1 Settings Split-Brain** — [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L1330-L1394) vs [L2941-L3245](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2941-L3245):
+   - 7 settings are dual-written to both Cloudflare D1 and Firestore `settings/store_config` and read from both without timestamp comparison. `sizeGuideConfig` is written to Firestore ([L3236](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3236)) but never read in `onSnapshot`. If a non-super-admin (or anyone offline from Firestore) changes a setting, Firestore silently rejects the write (`catch {}`) and then overwrites the setting back on every visitor's screen.
+6. **Categories Lose `description` & `slug` in D1** — [catalog.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L322-L335), [L788-L806](file:///home/antigravity/Charr111/samo-store2/functions/api/catalog.ts#L788-L806):
+   - D1 `categories` table lacks `slug` and `description` columns, and `display_order = 0` deserializes as `sortOrder: undefined`.
+7. **Worker OOM Risk on Large Video Uploads** — [r2-upload.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/r2-upload.ts#L68-L92):
+   - Accepts up to 35 MB videos as JSON base64 (~47 MB string) and decodes via `atob` + JS loop; peak RAM can exceed Cloudflare Workers' 128 MB isolate limit.
+8. **Silent Write Failures & Unawaited State-Setter Patches** — [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L289-L332), [L2390-L2403](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2390-L2403), [L2705-L2764](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2705-L2764), [imageCompression.ts](file:///home/antigravity/Charr111/samo-store2/src/utils/imageCompression.ts#L675-L689):
+   - Failed orders or admin saves still show success because `pushServerCatalogPatch` ignores `!res.ok` and swallows errors; `deleteMediaFromR2` returns `{ deletedKeys }` even on HTTP 500.
+
+---
+
+## 5. Disconnected Controls, Storefront Bugs & Admin Traps
+
+### A. Storefront Customer-Facing Bugs
+1. **Direct Product Links Fail for First-Time Visitors** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L503-L514), [L1270-L1319](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L1270-L1319)):
+   - On initial load, the URL parser runs immediately against `INITIAL_PRODUCTS` (seed data) and sets `directUrlInitializedRef.current = true`. When real D1 products finish loading moments later, it skips URL resolution—so **shared links, Google Shopping clicks, and Meta ads pointing to Admin-added products never open the product modal** for new visitors.
+2. **Broken URL Bar & Double Back-Clicks on Navigation** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L1675-L1708), [HeroVideoSection.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/HeroVideoSection.tsx#L299-L310), [Navbar.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/Navbar.tsx#L89-L94)):
+   - Buttons call `onNavigate(newRoute)` immediately followed by `onSelectCategory(cat)`. `handleSelectCategory` reads the stale pre-render `currentRoute` and pushes the **old URL** right back onto the address bar (e.g., clicking **Shop Women** on `/home` renders Women while resetting the URL bar to `/home`).
+3. **Cart Stale Snapshots & Full-Set Stock Bypass** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L624-L626), [L2007-L2029](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2007-L2029), [CartCheckoutDrawer.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/CartCheckoutDrawer.tsx#L300-L326)):
+   - Cart items saved in `localStorage` never re-sync with live prices, discounts, stock, or `hiddenFromStore` before checkout.
+   - Incrementing a **Full Set** in the bag calls `getSizeQuantity` with a composite label (e.g., `"Black (M) / Ivory (38)"`), triggering its fallback of `5` and letting shoppers order 5 units of a 1-unit Full Set.
+   - Quick-adding a Full Set from `"Complete the Look"` upsells omits `selectedSetSizes`.
+4. **Concurrent Checkout Overselling Race** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2118-L2129)):
+   - Checkout decrements stock in the browser and POSTs the full `products` array. Two shoppers buying near the same time overwrite each other's stock updates and can oversell last-unit items.
+5. **Showroom Pickup Requires Street & City Address** ([CartCheckoutDrawer.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/CartCheckoutDrawer.tsx#L378-L379), [L835-L860](file:///home/antigravity/Charr111/samo-store2/src/components/CartCheckoutDrawer.tsx#L835-L860)):
+   - Street address and city remain `required` even when `SAMO Showroom Pickup` is chosen.
+6. **Dead Hero Video Error Fallback & Inert `"FILTERS"` Label**:
+   - [`HeroVideoSection.tsx`](file:///home/antigravity/Charr111/samo-store2/src/components/HeroVideoSection.tsx#L46-L47), [L241-L246](file:///home/antigravity/Charr111/samo-store2/src/components/HeroVideoSection.tsx#L241-L246): `setVideoFailed(true)` is never called, and `onError` only triggers if `effectiveVideoUrl` is empty—so a broken custom video URL leaves a blank hero instead of falling back to the hero image.
+   - [`App.tsx`](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L4301): `<span>FILTERS</span>` in the catalog bar is static text with no click action.
+   - Search bar ([Navbar.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/Navbar.tsx#L373-L402)) is hidden on `/home`, and on a subcategory page it only searches inside that single subcategory ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3318-L3323)).
+   - Price sorting (`price-asc` / `price-desc`) sorts on raw `price`, ignoring active discounts ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3342-L3347)).
+
+### B. Admin Dashboard Controls That Are Disconnected or Buggy
+1. **`Auto-Accept Incoming Orders` Toggle Is Ignored & Self-Reverting** ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L4886-L4936) vs [App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2055), [L2128](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2128)):
+   - Checkout hardcodes `status = 'accepted'` and sends `autoAcceptOrders: true` on every order, flipping the toggle back ON automatically.
+2. **Size Guide Toggles Ignored in FAQ & Modal Lockup** ([FaqSection.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/FaqSection.tsx#L43-L150), [ProductModal.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/ProductModal.tsx#L628), [L1159](file:///home/antigravity/Charr111/samo-store2/src/components/ProductModal.tsx#L1159)):
+   - FAQ always displays both size guides regardless of Admin switches.
+   - Disabling `topsGuideEnabled` while `masterEnabled` is ON leaves the "Size Guide" button visible on tops; clicking it sets `isSizeGuideOpen = true` while rendering `null`, permanently breaking clicking outside the modal to close it.
+3. **AI Copy Drafter Missing on Cloudflare Pages** ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L1325) vs [server.ts](file:///home/antigravity/Charr111/samo-store2/server.ts#L927)):
+   - `/api/ai/product-copy` only exists in `server.ts`, not `functions/api/`. In production it 404s and falls back to static copy.
+4. **Banner & Popup Fields Never Rendered or Hardcoded**:
+   - `homeMiddleSubtitle`, `homeHeroKicker`, `homeMiddleKicker`, category banner `kicker`/`title`, and popup `kicker` are saved in Admin but never rendered on the storefront.
+   - `"10% OFF"` is hardcoded in [`NewsletterPopupModal.tsx`](file:///home/antigravity/Charr111/samo-store2/src/components/NewsletterPopupModal.tsx#L135) and [`order-confirmation-email.ts`](file:///home/antigravity/Charr111/samo-store2/functions/api/order-confirmation-email.ts#L456) even if you change the promo code's discount; setting popup delay to `0` becomes `10s` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L908)); popup signup automatically re-activates disabled `SAMO10` and strips `maxUsesPerEmail` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3119-L3141)).
+   - Popup IP frequency cap uses ephemeral Worker RAM ([_memory.ts](file:///home/antigravity/Charr111/samo-store2/functions/api/newsletter/_memory.ts#L11-L16)), which resets across Cloudflare edge PoPs/restarts.
+5. **Inventory & Media Cleanup Bugs**:
+   - `handleUpdateOrderStatus` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2766-L2811)): transitioning `accepted → pending → accepted` decrements stock twice; reads stale `products` closure instead of `productsRef.current`.
+   - `handleDeleteProduct` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2689-L2717)) deletes R2 image URLs without checking if another product or Full Set shares them, and doesn't update `productsRef.current`.
+   - Replacing bottom/showroom/video banners or canceling Add Product after uploading leaks orphaned R2 files.
+   - `handleUpdateProductColorVariants` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L2497-L2541)) omits `syncFullSetsWithCatalog` (though currently unreachable in Admin UI).
+6. **Admin Editor Bugs**:
+   - **Quick Categories Edit pencil** ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L5453-L5461)) doesn't reset `editCatOrderInput`, accidentally overwriting a category's sort order with the previous category's order number.
+   - **Add Product** initializes `newProdCategory` to `'Jacket'` instead of `'Jackets'` ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L724)), saving a mismatched category if untouched.
+   - **Banner & Size Guide inputs** fire `POST /api/catalog` on every single keystroke ([AdminDashboard.tsx](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L5977-L7098), [L11162-L11333](file:///home/antigravity/Charr111/samo-store2/src/components/AdminDashboard.tsx#L11162-L11333)).
+   - **Newsletter subscriber deletion** ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L3208-L3218)) doesn't invalidate `catalog.ts`'s 30s isolate cache or encode `id`, causing deleted subscribers to reappear for up to 30s.
+
+### C. SEO, Feeds & Analytics Polish
+- **Static XML Collision**: `public/sitemap.xml` and `public/merchant-feed.xml` coexist with `functions/sitemap.xml.ts` and `functions/merchant-feed.xml.ts`. Because the functions only export `onRequestGet` (no `onRequestHead`), `HEAD` checks from Googlebot/Merchant Center hit the frozen `public/*.xml` files.
+- **Merchant Feed Mismatches**: [`merchant-feed.xml.ts`](file:///home/antigravity/Charr111/samo-store2/functions/merchant-feed.xml.ts#L64) defaults `freeShippingThreshold` to `\$80` while the storefront defaults to `\$100` ([App.tsx](file:///home/antigravity/Charr111/samo-store2/src/App.tsx#L4577)); products in disabled (`active: false`) categories still appear in both `sitemap.xml` and `merchant-feed.xml`.
+- **SEO Defects**: [`index.html`](file:///home/antigravity/Charr111/samo-store2/index.html#L49-L51) mentions `"and protected Samo admin"` in the public `<meta name="description">`; [`sitemap.xml.ts`](file:///home/antigravity/Charr111/samo-store2/functions/sitemap.xml.ts#L76) lists `/faq` (not a valid route); [`seoLogic.ts`](file:///home/antigravity/Charr111/samo-store2/src/utils/seoLogic.ts#L340) uses a 404 fallback OG image (`/assets/aistudio/...png`); SPA route transitions never send GA4 `page_view` or Meta `PageView` events.
+
+---
+
+## 6. Copy-Paste Fix Prompts for Google AI Studio
+
+Apply these **one at a time** in AI Studio, testing the storefront and `/admin` after each prompt.
+
+### Prompt 1 — URGENT: Lock Down APIs, Stop PII Leaks & Remove Revoked Admin
+> **Security Hardening (Backend + Auth + PII Isolation):**
+> 1. Split catalog API access so `GET /api/catalog` is strictly **public storefront data only** (visible `products` where `hiddenFromStore !== true`, active `categories`, public `siteBanners`, `sizeGuideConfig`, `newsletterPopupConfig`, `seoConfig`, `showLowStockCount`, `codEnabled`, `autoAcceptOrders` — **NEVER** return `orders`, `preorders`, `newsletterSubscribers`, `admins`, `promoCodes`, `hiddenFromStore` products, or `adminNotificationState`).
+> 2. Create an authenticated `GET /api/admin/state` (and protect `POST /api/catalog`, `POST /api/r2-upload`, `POST /api/r2-delete`, `GET/DELETE /api/newsletter/subscribers`, and `POST /api/sheets-sync` `push_to_sheet`/`pull_from_sheet`) by verifying the admin's **Firebase ID Token** (`Authorization: Bearer <idToken>`) against Firebase public JWKS (`samo-store-ac7dd`) and checking that the verified email is an authorized admin. Update the frontend to attach `await currentUser.getIdToken()` on all admin API requests.
+> 3. Stop writing `state/catalog.json` containing customer orders/PII into the public `SAMO_R2_BUCKET` (or move backups to a private R2 bucket).
+> 4. Create dedicated public endpoints for storefront actions: `POST /api/orders` (validates prices, active promo codes, per-email promo limits, and stock **server-side** in D1, deducts stock atomically, and triggers Resend confirmation email server-side instead of exposing `/api/order-confirmation-email` publicly) and `POST /api/preorders`.
+> 5. In `POST /api/newsletter/subscribe`, return only `{ success: true, subscriber }` — **never** return the full `subscribers` list.
+> 6. In `functions/api/r2-upload.ts`, reject `image/svg+xml`, allowlist safe image/video MIME types only, and always prefix keys with a timestamp/UUID so existing product images cannot be overwritten.
+> 7. Remove `charbelkorab11123@gmail.com` from `firestore.rules` `isAdmin()`, and restrict CORS `Access-Control-Allow-Origin` to `https://samoweave.com` (plus localhost in dev).
+
+### Prompt 2 — Fix D1 Persistence, Stale Cache & Auto-Overwrite Bug
+> **Database Reliability & Sync Fixes (`functions/api/catalog.ts`, `server/d1.ts`, `src/App.tsx`):**
+> 1. In `functions/api/catalog.ts`, never return HTTP `200` with `{ updatedAt: 0 }` on `GET` errors—return HTTP `503`. In `src/App.tsx`, **remove** the automatic client-side `pushServerCatalogPatch` seeding logic when `GET /api/catalog` returns empty/0 so a visitor can never overwrite the live database.
+> 2. Fix `readCatalogSnapshot` in `functions/api/catalog.ts` so it checks `ISOLATE_CACHE_TTL_MS` (and for `applyCatalogPatch` / `sheets-sync`, always reads fresh state directly from D1 before diffing/writing).
+> 3. Fix D1 `preorders` schema & mapping to store and read `selectedSize`, `selectedColor`, `customerContact`, `productImage`, `department`, and `category`, and implement `DELETE FROM preorders` when removed.
+> 4. Implement `DELETE FROM promo_codes` when a promo code is deleted, normalize default `discount_type` to `'percentage'`, and implement `INSERT`/`DELETE` for the D1 `admins` table (and sync to Firestore `/admins/{email}` if Firestore is kept).
+> 5. Add `slug` and `description` columns to D1 `categories`, preserve `sortOrder = 0`, invalidate catalog cache after newsletter delete, and eliminate Firestore `settings/store_config` split-brain by using D1 as the single source of truth for all settings (including `sizeGuideConfig`).
+> 6. Make `pushServerCatalogPatch` check `res.ok`, throw on error, and show a real error toast in Admin/Checkout instead of faking success; move `pushServerCatalogPatch` calls out of React `setState` updaters.
+
+### Prompt 3 — Fix Storefront Links, Navigation, Cart & Toggles
+> **Storefront & Admin Wiring Fixes:**
+> 1. Fix direct product & custom-category URL loading in `src/App.tsx` so `directUrlInitializedRef` does not lock on seed data—re-resolve the URL once `/api/catalog` finishes its first real D1 hydration so shared product links and ad links open the Product Modal for first-time visitors.
+> 2. Fix `handleNavigate` + `handleSelectCategory` in `src/App.tsx`, `Navbar.tsx`, and `HeroVideoSection.tsx` so navigating to a route + category happens in a single call (`onNavigate(route, category)`) without pushing a stale URL onto `window.history`.
+> 3. Reconcile `localStorage` `cartItems` against live `products` on catalog load/checkout, fix Full Set quantity limits in `handleUpdateCartQuantity` using `getMaxAvailableForCartSelection`, pass `selectedSetSizes` (or open modal) for Full Set upsells, and stop requiring street/city address when `SAMO Showroom Pickup` is selected.
+> 4. Make `autoAcceptOrders` actually control incoming order status (`'accepted'` vs `'pending'`) instead of hardcoding `'accepted'` and overwriting `autoAcceptOrders: true` on every checkout. Prevent double stock deduction on `accepted → pending → accepted`.
+> 5. Fix `FaqSection.tsx` and `ProductModal.tsx` to respect `sizeGuideConfig.masterEnabled`, `topsGuideEnabled`, and `trousersGuideEnabled` (never render a Size Guide button when 0 guides are enabled for that product).
+> 6. Fix `HeroVideoSection.tsx` `onError` to call `setVideoFailed(true)` so broken video URLs fall back cleanly to the hero image; remove or wire up the static `FILTERS` text in `App.tsx`; sort discounted items by `effectivePrice`.
+> 7. Fix Admin editor traps: reset `editCatOrderInput` when opening Quick Categories Edit, initialize `newProdCategory` from the first real category (`'Jackets'`), debounce Site Banner & Size Guide text inputs before saving, fix popup `delaySeconds = 0` (`?? 10` instead of `|| 10`), stop popup signup from re-enabling a disabled promo code, check shared image references before `deleteMediaFromR2`, and add `functions/api/ai/product-copy.ts` (protected by admin auth) if you want AI Copy Drafter working on `samoweave.com`.
+
+### Prompt 4 — Fix Sitemap, Google Merchant Feed & Public SEO
+> **SEO & Feed Fixes:**
+> 1. Delete the static `public/sitemap.xml` and `public/merchant-feed.xml` files (and add `onRequestHead` to `functions/sitemap.xml.ts` and `functions/merchant-feed.xml.ts`) so `GET` and `HEAD` always serve fresh live XML.
+> 2. Remove `/faq` from `functions/sitemap.xml.ts`, filter out products belonging to disabled (`active === false`) categories in both `sitemap.xml.ts` and `merchant-feed.xml.ts`, and align default `freeShippingThreshold` to `100` everywhere.
+> 3. Remove `"and protected Samo admin"` from `index.html` `<meta name="description">` and `og:description`, replace the 404 fallback OG image in `seoLogic.ts` with a real `images.samoweave.com` URL, and fire GA4 `page_view` / Meta `PageView` on SPA route changes.

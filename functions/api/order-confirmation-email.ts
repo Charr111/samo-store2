@@ -1,11 +1,5 @@
-export interface D1PreparedStatement {
-  bind(...values: unknown[]): D1PreparedStatement;
-  first<T = unknown>(colName?: string): Promise<T | null>;
-}
-
-export interface D1DatabaseBinding {
-  prepare(query: string): D1PreparedStatement;
-}
+import { getCorsHeaders, verifyFirebaseAdminRequest } from './_auth';
+import { readCatalogSnapshot, type D1DatabaseBinding } from './catalog';
 
 export interface Env {
   RESEND_API_KEY?: string;
@@ -674,10 +668,194 @@ export function buildResendEmailPayload(config: OrderEmailPayloadInput) {
   return payload;
 }
 
-export const onRequestOptions = async (): Promise<Response> => {
+export async function sendOrderConfirmationEmailInternal(
+  env: Env,
+  body: {
+    order?: OrderEmailPayloadInput['order'];
+    bannerUrl?: string;
+    bannerLinkUrl?: string;
+    senderAddress?: string;
+    bccAddress?: string;
+    replyToAddress?: string;
+    promoGiftEnabled?: boolean;
+    promoGiftCode?: string;
+    promoGiftDescription?: string;
+    promoGiftBannerUrl?: string;
+    adminAlertOnly?: boolean;
+  }
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const apiKey = (env.RESEND_API_KEY || '').trim();
+  if (!apiKey) {
+    return {
+      status: 200,
+      body: {
+        ok: false,
+        skipped: true,
+        error:
+          'RESEND_API_KEY is not configured in Cloudflare environment secrets.',
+      },
+    };
+  }
+
+  const order = body?.order;
+  if (!order || typeof order !== 'object') {
+    return {
+      status: 400,
+      body: { ok: false, error: 'Missing order payload.' },
+    };
+  }
+
+  let storedBanners: Record<string, any> = {};
+  const db = env.DB || env.SAMO_D1;
+  if (db) {
+    try {
+      const row = await db
+        .prepare('SELECT value FROM settings WHERE key = ?1;')
+        .bind('siteBanners')
+        .first<{ value?: string }>();
+      if (row?.value) {
+        const parsed = JSON.parse(row.value);
+        if (parsed && typeof parsed === 'object') {
+          storedBanners = parsed;
+        }
+      }
+    } catch (d1Err) {
+      console.warn('[SAMO] D1 siteBanners lookup notice:', d1Err);
+    }
+
+    // Enrich orderedItems with product/color variant images from D1 if any item lacks imageUrl
+    if (
+      Array.isArray(order.orderedItems) &&
+      order.orderedItems.some((item) => !item.imageUrl)
+    ) {
+      for (const item of order.orderedItems) {
+        if (item.imageUrl || !item.productId) continue;
+        try {
+          const prodRow = await db
+            .prepare(
+              'SELECT image_url, color_variants FROM products WHERE id = ?1;'
+            )
+            .bind(item.productId)
+            .first<{ image_url?: string; color_variants?: string }>();
+          if (prodRow) {
+            let resolvedImg = prodRow.image_url || '';
+            if (item.selectedColor && prodRow.color_variants) {
+              try {
+                const variants = JSON.parse(prodRow.color_variants) as Array<{
+                  colorName?: string;
+                  imageUrl?: string;
+                }>;
+                const matchedVar = variants.find(
+                  (v) =>
+                    (v.colorName || '').trim().toLowerCase() ===
+                    item.selectedColor!.trim().toLowerCase()
+                );
+                if (matchedVar?.imageUrl) {
+                  resolvedImg = matchedVar.imageUrl;
+                }
+              } catch {}
+            }
+            if (resolvedImg) {
+              item.imageUrl = resolvedImg;
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+
+  const emailPayload = buildResendEmailPayload({
+    order,
+    bannerUrl:
+      body.bannerUrl && body.bannerUrl.trim()
+        ? body.bannerUrl.trim()
+        : storedBanners.orderEmailBannerUrl || '',
+    bannerLinkUrl:
+      body.bannerLinkUrl ||
+      storedBanners.orderEmailBannerLinkUrl ||
+      'https://samoweave.com/new-arrivals/women',
+    senderAddress:
+      body.senderAddress ||
+      storedBanners.orderEmailSenderAddress ||
+      'orders@samoweave.com',
+    bccAddress:
+      body.bccAddress !== undefined
+        ? body.bccAddress
+        : storedBanners.orderEmailBccAddress !== undefined
+        ? storedBanners.orderEmailBccAddress
+        : 'orders@samoweave.com',
+    replyToAddress:
+      body.replyToAddress ||
+      storedBanners.orderEmailReplyToAddress ||
+      'info@samoweave.com',
+    promoGiftEnabled:
+      typeof body.promoGiftEnabled === 'boolean'
+        ? body.promoGiftEnabled
+        : Boolean(storedBanners.orderEmailPromoEnabled),
+    promoGiftCode:
+      body.promoGiftCode !== undefined
+        ? body.promoGiftCode
+        : storedBanners.orderEmailPromoCode || 'SAMO10',
+    promoGiftDescription:
+      body.promoGiftDescription !== undefined
+        ? String(body.promoGiftDescription)
+        : storedBanners.orderEmailPromoDescription !== undefined
+        ? String(storedBanners.orderEmailPromoDescription)
+        : 'Enjoy 10% off your next order',
+    promoGiftBannerUrl:
+      body.promoGiftBannerUrl !== undefined
+        ? String(body.promoGiftBannerUrl).trim()
+        : storedBanners.orderEmailPromoBannerUrl || '',
+    adminAlertOnly: Boolean(body.adminAlertOnly),
+  });
+
+  const resendResponse = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(emailPayload),
+  });
+
+  const resendData = (await resendResponse.json().catch(() => ({}))) as {
+    id?: string;
+    message?: string;
+    name?: string;
+  };
+
+  if (!resendResponse.ok) {
+    const errMsg =
+      resendData?.message ||
+      `Resend API returned HTTP ${resendResponse.status}`;
+    console.warn('[SAMO] Resend API error:', errMsg);
+    return {
+      status: 200,
+      body: {
+        ok: false,
+        error: errMsg,
+        status: resendResponse.status,
+      },
+    };
+  }
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      id: resendData.id || null,
+      to: emailPayload.to,
+      bcc: emailPayload.bcc || [],
+    },
+  };
+}
+
+export const onRequestOptions = async (context: {
+  request?: Request;
+}): Promise<Response> => {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: getCorsHeaders(context?.request),
   });
 };
 
@@ -686,197 +864,42 @@ export const onRequestPost = async (context: {
   env: Env;
   waitUntil?: (promise: Promise<unknown>) => void;
 }): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
-    const apiKey = (context.env.RESEND_API_KEY || '').trim();
-    if (!apiKey) {
+    const d1Binding = context.env.DB || context.env.SAMO_D1;
+    const currentSnapshot = await readCatalogSnapshot(context.env);
+    const extraAdmins = Array.isArray(currentSnapshot.admins)
+      ? (currentSnapshot.admins as Array<{ email?: string }>)
+      : [];
+
+    const authCheck = await verifyFirebaseAdminRequest({
+      authorizationHeader: context.request.headers.get('Authorization'),
+      d1Db: d1Binding,
+      extraAdminEmails: extraAdmins,
+    });
+
+    if (!authCheck.authorized) {
       return new Response(
         JSON.stringify({
           ok: false,
-          skipped: true,
-          error:
-            'RESEND_API_KEY is not configured in Cloudflare environment secrets.',
+          error: authCheck.error || 'Unauthorized admin access.',
         }),
         {
-          status: 200,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          status: authCheck.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    const body = (await context.request.json()) as {
-      order?: OrderEmailPayloadInput['order'];
-      bannerUrl?: string;
-      bannerLinkUrl?: string;
-      senderAddress?: string;
-      bccAddress?: string;
-      replyToAddress?: string;
-      promoGiftEnabled?: boolean;
-      promoGiftCode?: string;
-      promoGiftDescription?: string;
-      promoGiftBannerUrl?: string;
-      adminAlertOnly?: boolean;
-    };
+    const body = (await context.request.json()) as Parameters<
+      typeof sendOrderConfirmationEmailInternal
+    >[1];
+    const result = await sendOrderConfirmationEmailInternal(context.env, body);
 
-    const order = body?.order;
-    if (!order || typeof order !== 'object') {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Missing order payload.' }),
-        {
-          status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    let storedBanners: Record<string, any> = {};
-    const db = context.env.DB || context.env.SAMO_D1;
-    if (db) {
-      try {
-        const row = await db
-          .prepare('SELECT value FROM settings WHERE key = ?1;')
-          .bind('siteBanners')
-          .first<{ value?: string }>();
-        if (row?.value) {
-          const parsed = JSON.parse(row.value);
-          if (parsed && typeof parsed === 'object') {
-            storedBanners = parsed;
-          }
-        }
-      } catch (d1Err) {
-        console.warn('[SAMO] D1 siteBanners lookup notice:', d1Err);
-      }
-
-      // Enrich orderedItems with product/color variant images from D1 if any item lacks imageUrl
-      if (
-        Array.isArray(order.orderedItems) &&
-        order.orderedItems.some((item) => !item.imageUrl)
-      ) {
-        for (const item of order.orderedItems) {
-          if (item.imageUrl || !item.productId) continue;
-          try {
-            const prodRow = await db
-              .prepare(
-                'SELECT image_url, color_variants FROM products WHERE id = ?1;'
-              )
-              .bind(item.productId)
-              .first<{ image_url?: string; color_variants?: string }>();
-            if (prodRow) {
-              let resolvedImg = prodRow.image_url || '';
-              if (item.selectedColor && prodRow.color_variants) {
-                try {
-                  const variants = JSON.parse(prodRow.color_variants) as Array<{
-                    colorName?: string;
-                    imageUrl?: string;
-                  }>;
-                  const matchedVar = variants.find(
-                    (v) =>
-                      (v.colorName || '').trim().toLowerCase() ===
-                      item.selectedColor!.trim().toLowerCase()
-                  );
-                  if (matchedVar?.imageUrl) {
-                    resolvedImg = matchedVar.imageUrl;
-                  }
-                } catch {}
-              }
-              if (resolvedImg) {
-                item.imageUrl = resolvedImg;
-              }
-            }
-          } catch {}
-        }
-      }
-    }
-
-    const emailPayload = buildResendEmailPayload({
-      order,
-      bannerUrl:
-        body.bannerUrl && body.bannerUrl.trim()
-          ? body.bannerUrl.trim()
-          : storedBanners.orderEmailBannerUrl || '',
-      bannerLinkUrl:
-        body.bannerLinkUrl ||
-        storedBanners.orderEmailBannerLinkUrl ||
-        'https://samoweave.com/new-arrivals/women',
-      senderAddress:
-        body.senderAddress ||
-        storedBanners.orderEmailSenderAddress ||
-        'orders@samoweave.com',
-      bccAddress:
-        body.bccAddress !== undefined
-          ? body.bccAddress
-          : storedBanners.orderEmailBccAddress !== undefined
-          ? storedBanners.orderEmailBccAddress
-          : 'orders@samoweave.com',
-      replyToAddress:
-        body.replyToAddress ||
-        storedBanners.orderEmailReplyToAddress ||
-        'info@samoweave.com',
-      promoGiftEnabled:
-        typeof body.promoGiftEnabled === 'boolean'
-          ? body.promoGiftEnabled
-          : Boolean(storedBanners.orderEmailPromoEnabled),
-      promoGiftCode:
-        body.promoGiftCode !== undefined
-          ? body.promoGiftCode
-          : storedBanners.orderEmailPromoCode || 'SAMO10',
-      promoGiftDescription:
-        body.promoGiftDescription !== undefined
-          ? String(body.promoGiftDescription)
-          : storedBanners.orderEmailPromoDescription !== undefined
-          ? String(storedBanners.orderEmailPromoDescription)
-          : 'Enjoy 10% off your next order',
-      promoGiftBannerUrl:
-        body.promoGiftBannerUrl !== undefined
-          ? String(body.promoGiftBannerUrl).trim()
-          : storedBanners.orderEmailPromoBannerUrl || '',
-      adminAlertOnly: Boolean(body.adminAlertOnly),
+    return new Response(JSON.stringify(result.body), {
+      status: result.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(emailPayload),
-    });
-
-    const resendData = (await resendResponse.json().catch(() => ({}))) as {
-      id?: string;
-      message?: string;
-      name?: string;
-    };
-
-    if (!resendResponse.ok) {
-      const errMsg =
-        resendData?.message ||
-        `Resend API returned HTTP ${resendResponse.status}`;
-      console.warn('[SAMO] Resend API error:', errMsg);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: errMsg,
-          status: resendResponse.status,
-        }),
-        {
-          status: 200,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        id: resendData.id || null,
-        to: emailPayload.to,
-        bcc: emailPayload.bcc || [],
-      }),
-      {
-        status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      }
-    );
   } catch (err) {
     const message =
       err instanceof Error
@@ -890,8 +913,9 @@ export const onRequestPost = async (context: {
       }),
       {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
 };
+

@@ -1,3 +1,10 @@
+import {
+  getCorsHeaders,
+  validateAndBuildR2UploadObjectKey,
+  verifyFirebaseAdminRequest,
+} from './_auth';
+import { readCatalogSnapshot, type D1DatabaseBinding } from './catalog';
+
 export interface R2BucketBinding {
   put(
     key: string,
@@ -14,19 +21,16 @@ export interface R2BucketBinding {
 export interface Env {
   SAMO_R2_BUCKET?: R2BucketBinding;
   R2_PUBLIC_BASE_URL?: string;
+  DB?: D1DatabaseBinding;
+  SAMO_D1?: D1DatabaseBinding;
 }
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Cross-Origin-Resource-Policy': 'cross-origin',
-};
-
-export const onRequestOptions = async (): Promise<Response> => {
+export const onRequestOptions = async (context: {
+  request?: Request;
+}): Promise<Response> => {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: getCorsHeaders(context?.request),
   });
 };
 
@@ -34,20 +38,65 @@ export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(context.request);
   try {
+    const d1Binding = context.env.DB || context.env.SAMO_D1;
+    const currentSnapshot = await readCatalogSnapshot({
+      DB: context.env.DB,
+      SAMO_D1: context.env.SAMO_D1,
+    });
+    const extraAdmins = Array.isArray(currentSnapshot.admins)
+      ? (currentSnapshot.admins as Array<{ email?: string }>)
+      : [];
+
+    const authCheck = await verifyFirebaseAdminRequest({
+      authorizationHeader: context.request.headers.get('Authorization'),
+      d1Db: d1Binding,
+      extraAdminEmails: extraAdmins,
+    });
+
+    if (!authCheck.authorized) {
+      return new Response(
+        JSON.stringify({
+          error: authCheck.error || 'Unauthorized admin access.',
+        }),
+        {
+          status: authCheck.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const body = (await context.request.json()) as {
       fileName?: string;
       contentType?: string;
       base64Data?: string;
+      folder?: string;
     };
 
-    const { fileName, contentType, base64Data } = body || {};
+    const { fileName, contentType, base64Data, folder } = body || {};
     if (!base64Data || typeof base64Data !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Missing base64Data payload.' }),
         {
           status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const validatedKey = validateAndBuildR2UploadObjectKey({
+      fileName,
+      contentType,
+      folder,
+    });
+
+    if (!validatedKey.ok) {
+      return new Response(
+        JSON.stringify({ error: validatedKey.error }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
@@ -60,7 +109,7 @@ export const onRequestPost = async (context: {
         }),
         {
           status: 500,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
@@ -79,14 +128,12 @@ export const onRequestPost = async (context: {
         JSON.stringify({ error: 'Decoded media buffer is empty.' }),
         {
           status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    const isVideo =
-      (typeof contentType === 'string' && contentType.startsWith('video/')) ||
-      (typeof fileName === 'string' && /\.(mp4|webm|mov|hevc|m4v)$/i.test(fileName));
+    const { isVideo, mimeType, objectKey } = validatedKey;
     const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 25 * 1024 * 1024;
 
     if (bytes.byteLength > maxAllowedBytes) {
@@ -98,63 +145,10 @@ export const onRequestPost = async (context: {
         }),
         {
           status: 413,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
-
-    let mimeType =
-      typeof contentType === 'string' &&
-      (contentType.startsWith('image/') || contentType.startsWith('video/'))
-        ? contentType
-        : 'image/webp';
-
-    const rawExtMatch = typeof fileName === 'string' ? fileName.match(/\.([a-z0-9]+)$/i) : null;
-    const rawExt = rawExtMatch ? rawExtMatch[1].toLowerCase() : '';
-
-    if (rawExt === 'mov') {
-      mimeType = 'video/quicktime';
-    } else if (rawExt === 'hevc' || rawExt === 'm4v') {
-      mimeType = 'video/mp4';
-    } else if (rawExt === 'webm') {
-      mimeType = 'video/webm';
-    } else if (rawExt === 'mp4') {
-      mimeType = 'video/mp4';
-    }
-
-    const defaultExt = isVideo
-      ? rawExt
-        ? `.${rawExt}`
-        : mimeType.includes('webm')
-        ? '.webm'
-        : mimeType.includes('quicktime')
-        ? '.mov'
-        : '.mp4'
-      : mimeType === 'image/jpeg'
-      ? '.jpg'
-      : '.webp';
-
-    const safeFileName =
-      typeof fileName === 'string' && fileName.trim()
-        ? fileName
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9._-]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-        : `${Date.now()}-samo-item${defaultExt}`;
-
-    const isRecognizedExt =
-      /\.(webp|jpg|jpeg|png|gif|mp4|webm|mov|hevc|m4v)$/i.test(safeFileName);
-    const finalFileName = isRecognizedExt
-      ? safeFileName
-      : `${safeFileName.replace(/\.[^/.]+$/, '')}${defaultExt}`;
-    const isBannerAsset =
-      isVideo ||
-      (body as Record<string, unknown>)?.folder === 'banners' ||
-      finalFileName.startsWith('order-email-banner-');
-    const objectKey = isBannerAsset
-      ? `banners/${finalFileName}`
-      : `products/${finalFileName}`;
 
     await context.env.SAMO_R2_BUCKET.put(objectKey, bytes.buffer, {
       httpMetadata: {
@@ -177,7 +171,7 @@ export const onRequestPost = async (context: {
       }),
       {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
@@ -187,7 +181,7 @@ export const onRequestPost = async (context: {
         : 'Failed to upload image to Cloudflare R2.';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 };

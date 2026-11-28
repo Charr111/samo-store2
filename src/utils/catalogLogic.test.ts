@@ -2626,3 +2626,306 @@ test('Homepage merchandising defaults pre-populate existing items, enforce 1-per
   assert.equal(homeBags[0].homeBagsOrder, 1);
 });
 
+import {
+  isAllowedCorsOrigin,
+  isEmailInAdminAllowlist,
+  validateAndBuildR2UploadObjectKey,
+} from '../../functions/api/_auth';
+import { serializePublicCatalogState } from '../../functions/api/catalog';
+import { executePromoValidation } from '../../functions/api/promo/validate';
+import { executeCreateOrder } from '../../functions/api/orders';
+import { executeCreatePreorder } from '../../functions/api/preorders';
+
+test('serializePublicCatalogState strips all PII, orders, preorders, subscribers, admins, promoCodes, hidden products, inactive categories, and webhook secrets', () => {
+  const fullState = {
+    products: [
+      { ...INITIAL_PRODUCTS[0], id: 'pub-1', hiddenFromStore: false },
+      { ...INITIAL_PRODUCTS[1], id: 'hid-1', hiddenFromStore: true },
+    ],
+    categories: [
+      { ...INITIAL_CATEGORIES[0], id: 'cat-active', active: true },
+      { ...INITIAL_CATEGORIES[1], id: 'cat-inactive', active: false },
+    ],
+    orders: [
+      {
+        id: 'ord-secret-1',
+        customerName: 'Secret Buyer',
+        customerEmail: 'buyer@secret.com',
+        customerPhone: '70111222',
+      },
+    ],
+    preorders: [
+      {
+        id: 'pre-secret-1',
+        customerContact: '70999888',
+      },
+    ],
+    newsletterSubscribers: [
+      {
+        id: 'sub-secret-1',
+        email: 'vip@secret.com',
+        phone: '+96170123456',
+      },
+    ],
+    admins: [{ id: 'adm-1', email: 'apolokor@gmail.com', role: 'superadmin' }],
+    promoCodes: [
+      {
+        id: 'prm-1',
+        code: 'SECRET50',
+        discountType: 'percentage',
+        discountValue: 50,
+        active: true,
+      },
+    ],
+    siteBanners: {
+      ...buildDefaultSiteBanners(INITIAL_CATEGORIES),
+      orderEmailBccAddress: 'private-bcc@samoweave.com',
+      googleSheetsSync: {
+        enabled: true,
+        webhookUrl: 'https://script.google.com/macros/s/secret-webhook/exec',
+        syncSecret: 'top-secret-token-123',
+      },
+    },
+    sizeGuideConfig: { enabled: true },
+    newsletterPopupConfig: { enabled: true, delaySeconds: 4 },
+    seoConfig: { siteTitle: 'Official Website | SAMO' },
+    adminNotificationState: { lastSeenOrdersCount: 5, lastSeenPreordersCount: 2 },
+    showLowStockCount: false,
+    codEnabled: true,
+    autoAcceptOrders: true,
+    updatedAt: '2026-11-28T10:00:00.000Z',
+  };
+
+  const publicPayload = serializePublicCatalogState(fullState) as Record<string, unknown>;
+
+  // Only visible products and active categories are returned
+  const pubProducts = publicPayload.products as Array<{ id: string }>;
+  assert.equal(pubProducts.length, 1);
+  assert.equal(pubProducts[0].id, 'pub-1');
+
+  const pubCategories = publicPayload.categories as Array<{ id: string }>;
+  assert.equal(pubCategories.length, 1);
+  assert.equal(pubCategories[0].id, 'cat-active');
+
+  // Sensitive collections must not exist at all on the public payload
+  assert.equal('orders' in publicPayload, false);
+  assert.equal('preorders' in publicPayload, false);
+  assert.equal('newsletterSubscribers' in publicPayload, false);
+  assert.equal('admins' in publicPayload, false);
+  assert.equal('promoCodes' in publicPayload, false);
+  assert.equal('adminNotificationState' in publicPayload, false);
+
+  // siteBanners must not expose orderEmailBccAddress or googleSheetsSync secrets
+  const pubBanners = publicPayload.siteBanners as Record<string, unknown>;
+  assert.ok(pubBanners);
+  assert.equal('orderEmailBccAddress' in pubBanners, false);
+  assert.equal('googleSheetsSync' in pubBanners, false);
+
+  // Public storefront flags remain intact
+  assert.equal(publicPayload.showLowStockCount, false);
+  assert.equal(publicPayload.codEnabled, true);
+  assert.equal(publicPayload.autoAcceptOrders, true);
+});
+
+test('isEmailInAdminAllowlist, isAllowedCorsOrigin, and validateAndBuildR2UploadObjectKey enforce strict security policies', () => {
+  // Super-admins allowed, charbelkorab11123@gmail.com strictly blocked even if passed in dynamic list
+  const dynamicAdmins = [
+    { email: 'staff@samoweave.com' },
+    { email: 'charbelkorab11123@gmail.com' },
+  ];
+  assert.equal(isEmailInAdminAllowlist('apolokor@gmail.com', dynamicAdmins), true);
+  assert.equal(isEmailInAdminAllowlist('joeykorab88@gmail.com', dynamicAdmins), true);
+  assert.equal(isEmailInAdminAllowlist('samobougharios@gmail.com', dynamicAdmins), true);
+  assert.equal(isEmailInAdminAllowlist('staff@samoweave.com', dynamicAdmins), true);
+  assert.equal(isEmailInAdminAllowlist('charbelkorab11123@gmail.com', dynamicAdmins), false);
+  assert.equal(isEmailInAdminAllowlist('hacker@example.com', dynamicAdmins), false);
+
+  // CORS origin allowlist
+  assert.equal(isAllowedCorsOrigin('https://samoweave.com'), true);
+  assert.equal(isAllowedCorsOrigin('https://www.samoweave.com'), true);
+  assert.equal(isAllowedCorsOrigin('https://samo-store.pages.dev'), true);
+  assert.equal(isAllowedCorsOrigin('https://ais-dev-12345.us-central1.run.app'), true);
+  assert.equal(isAllowedCorsOrigin('http://localhost:3000'), true);
+  assert.equal(isAllowedCorsOrigin('https://evil-attacker.com'), false);
+  assert.equal(isAllowedCorsOrigin('https://samoweave.com.evil.com'), false);
+
+  // R2 upload validation rejects SVG & HTML and generates unique prefixed keys inside products/ or banners/
+  const svgAttempt = validateAndBuildR2UploadObjectKey({
+    fileName: 'xss.svg',
+    folder: 'products',
+    contentType: 'image/svg+xml',
+  });
+  assert.equal(svgAttempt.ok, false);
+
+  const validProductImg = validateAndBuildR2UploadObjectKey({
+    fileName: 'Black Cashmere Coat.webp',
+    folder: 'products',
+    contentType: 'image/webp',
+  });
+  assert.equal(validProductImg.ok, true);
+  if (validProductImg.ok) {
+    assert.ok(validProductImg.objectKey.startsWith('products/'));
+    assert.ok(validProductImg.objectKey.endsWith('-black-cashmere-coat.webp'));
+  }
+
+  const validBannerVideo = validateAndBuildR2UploadObjectKey({
+    fileName: 'hero.mp4',
+    folder: 'banners',
+    contentType: 'video/mp4',
+  });
+  assert.equal(validBannerVideo.ok, true);
+  if (validBannerVideo.ok) {
+    assert.ok(validBannerVideo.objectKey.startsWith('banners/'));
+    assert.ok(validBannerVideo.objectKey.endsWith('-hero.mp4'));
+  }
+});
+
+test('executePromoValidation, executeCreateOrder, and executeCreatePreorder validate prices, promo limits, and stock server-side', async () => {
+  const testProduct: ProductItem = {
+    id: 'prod-coat-1',
+    name: 'BLACK CASHMERE COAT',
+    department: 'women',
+    category: 'Jackets',
+    style: 'Classic',
+    price: 100,
+    discountType: 'fixed',
+    discountValue: 15, // effective price = $85
+    quantity: 3,
+    sizeQuantities: { S: 1, M: 2 },
+    isNewArrival: true,
+    imageUrl: 'https://images.samoweave.com/products/coat.webp',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Cashmere'],
+    description: 'Cashmere coat',
+    inStock: true,
+    featured: true,
+  };
+
+  let mutableState: Record<string, unknown> = {
+    products: [testProduct],
+    categories: INITIAL_CATEGORIES,
+    orders: [] as OrderItem[],
+    preorders: [],
+    promoCodes: [
+      {
+        id: 'promo-10',
+        code: 'SAMO10',
+        discountType: 'percentage' as const,
+        discountValue: 10,
+        active: true,
+        usageCount: 0,
+        maxUsesPerEmail: 1,
+        createdAt: '2026-11-28T00:00:00Z',
+      },
+    ],
+    autoAcceptOrders: true,
+    codEnabled: true,
+  };
+
+  const memoryAdapter = {
+    readState: async () => mutableState,
+    writeState: async (patch: Record<string, unknown>) => {
+      mutableState = { ...mutableState, ...patch };
+      return mutableState;
+    },
+  };
+
+  // 1. Validate promo code before usage
+  const promoCheck1 = executePromoValidation(
+    {
+      code: 'samo10',
+      email: 'client@samoweave.com',
+    },
+    mutableState
+  );
+  assert.equal(promoCheck1.valid, true);
+
+  // 2. Create order with SAMO10 promo code (even if client tries to spoof price, server recalculates $85 - 10% = $76.50 + $4 delivery = $80.50)
+  const orderRes = await executeCreateOrder(
+    {
+      customerName: 'Maya',
+      customerEmail: 'client@samoweave.com',
+      customerPhone: '+961 70 111 222',
+      shippingLocation: 'Beirut, Achrafieh',
+      deliveryMethod: 'Cash on Delivery ($4 Delivery)',
+      promoCode: 'SAMO10',
+      orderedItems: [
+        {
+          productId: 'prod-coat-1',
+          productName: 'BLACK CASHMERE COAT',
+          selectedSize: 'S',
+          quantity: 1,
+        },
+      ],
+    },
+    memoryAdapter
+  );
+
+  assert.equal(orderRes.status, 200);
+  assert.equal(orderRes.body.ok, true);
+  const createdOrder = orderRes.body.order as OrderItem;
+  assert.equal(createdOrder.subtotal, 85);
+  assert.equal(createdOrder.discountAmount, 9);
+  assert.equal(createdOrder.deliveryFee, 6);
+  assert.equal(createdOrder.totalPrice, 82);
+  assert.equal(createdOrder.status, 'accepted');
+
+  // Stock for size S was 1 -> now 0
+  const updatedProducts = mutableState.products as ProductItem[];
+  assert.equal(updatedProducts[0].sizeQuantities.S, 0);
+  assert.equal(updatedProducts[0].quantity, 2);
+
+  // 3. Re-validating SAMO10 with the same email now fails because maxUsesPerEmail === 1
+  const promoCheck2 = executePromoValidation(
+    {
+      code: 'SAMO10',
+      email: 'client@samoweave.com',
+    },
+    mutableState
+  );
+  assert.equal(promoCheck2.valid, false);
+
+  // 4. Attempting to buy size S again fails out-of-stock check server-side
+  const outOfStockOrder = await executeCreateOrder(
+    {
+      customerName: 'Maya',
+      customerEmail: 'other@samoweave.com',
+      customerPhone: '+961 70 111 222',
+      shippingLocation: 'Beirut',
+      deliveryMethod: 'Cash on Delivery ($4 Delivery)',
+      orderedItems: [
+        {
+          productId: 'prod-coat-1',
+          productName: 'BLACK CASHMERE COAT',
+          selectedSize: 'S',
+          quantity: 1,
+        },
+      ],
+    },
+    memoryAdapter
+  );
+  assert.equal(outOfStockOrder.status, 400);
+  assert.equal(outOfStockOrder.body.ok, false);
+
+  // 5. Server-side preorder validation and creation
+  const preorderRes = await executeCreatePreorder(
+    {
+      productId: 'prod-coat-1',
+      productName: 'BLACK CASHMERE COAT',
+      selectedSize: 'S',
+      customerContact: '+961 70 555 666',
+    },
+    memoryAdapter
+  );
+  assert.equal(preorderRes.status, 200);
+  assert.equal(preorderRes.body.ok, true);
+  const createdPreorder = preorderRes.body.preorder as { productId: string; selectedSize: string };
+  assert.equal(createdPreorder.productId, 'prod-coat-1');
+  assert.equal(createdPreorder.selectedSize, 'S');
+  assert.equal((mutableState.preorders as unknown[]).length, 1);
+});
+
+
+
